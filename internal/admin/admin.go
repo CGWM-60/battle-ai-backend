@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -129,23 +130,51 @@ func (s *Server) login(c *gin.Context) {
 	username := strings.TrimSpace(c.PostForm("username"))
 	password := c.PostForm("password")
 
+	adminAuthLog(
+		"login attempt ip=%s host=%s tls=%t user_agent=%q username=%q expected_username=%q",
+		c.ClientIP(),
+		c.Request.Host,
+		c.Request.TLS != nil,
+		c.Request.UserAgent(),
+		username,
+		adminUsername(),
+	)
+	adminAuthLog(
+		"env status gin_mode=%q admin_password_set=%t admin_password_bcrypt_set=%t admin_session_secret_set=%t jwt_secret_set=%t",
+		env("GIN_MODE", "debug"),
+		os.Getenv("ADMIN_PASSWORD") != "",
+		os.Getenv("ADMIN_PASSWORD_BCRYPT") != "",
+		os.Getenv("ADMIN_SESSION_SECRET") != "",
+		os.Getenv("JWT_SECRET") != "",
+	)
+
 	if !adminPasswordConfigured() {
+		adminAuthLog("login blocked: no admin password configured")
 		s.render(c, "login", gin.H{
 			"Error": "ADMIN_PASSWORD ou ADMIN_PASSWORD_BCRYPT doit etre configure pour activer l'admin.",
 		})
 		return
 	}
 
-	if username != adminUsername() || !checkAdminPassword(password) {
+	if username != adminUsername() {
+		adminAuthLog("login rejected: username mismatch input=%q expected=%q", username, adminUsername())
+		s.render(c, "login", gin.H{"Error": "Identifiants invalides."})
+		return
+	}
+
+	if !checkAdminPassword(password) {
+		adminAuthLog("login rejected: password validation failed for username=%q", username)
 		s.render(c, "login", gin.H{"Error": "Identifiants invalides."})
 		return
 	}
 
 	token, err := makeAdminSession(username)
 	if err != nil {
+		adminAuthLog("login failed: cannot create admin session token: %v", err)
 		s.render(c, "login", gin.H{"Error": "Impossible de creer la session admin."})
 		return
 	}
+	adminAuthLog("login success: session created for username=%q", username)
 
 	http.SetCookie(c.Writer, &http.Cookie{
 		Name:     adminCookieName,
@@ -420,11 +449,21 @@ func (s *Server) dashboardData(c *gin.Context) dashboardData {
 func (s *Server) requireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		cookie, err := c.Cookie(adminCookieName)
-		if err != nil || !verifyAdminSession(cookie) {
+		if err != nil {
+			adminAuthLog("requireAdmin: missing/invalid cookie ip=%s path=%s err=%v", c.ClientIP(), c.Request.URL.Path, err)
 			c.Redirect(http.StatusSeeOther, "/admin/login")
 			c.Abort()
 			return
 		}
+
+		ok, reason := verifyAdminSession(cookie)
+		if !ok {
+			adminAuthLog("requireAdmin: session rejected ip=%s path=%s reason=%s", c.ClientIP(), c.Request.URL.Path, reason)
+			c.Redirect(http.StatusSeeOther, "/admin/login")
+			c.Abort()
+			return
+		}
+		adminAuthLog("requireAdmin: session accepted ip=%s path=%s", c.ClientIP(), c.Request.URL.Path)
 		c.Next()
 	}
 }
@@ -486,23 +525,33 @@ func callAdminProvider(ctx context.Context, url string, apiKey string, model str
 
 func checkAdminPassword(password string) bool {
 	if hash := os.Getenv("ADMIN_PASSWORD_BCRYPT"); hash != "" {
+		adminAuthLog("checkAdminPassword: ADMIN_PASSWORD_BCRYPT detected (len=%d)", len(hash))
 		err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
 		if err == nil {
+			adminAuthLog("checkAdminPassword: bcrypt validation success")
 			return true
 		}
-		if !errors.Is(err, bcrypt.ErrHashTooShort) && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			// Invalid or malformed hash: continue with ADMIN_PASSWORD fallback.
-		}
 		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			adminAuthLog("checkAdminPassword: bcrypt hash present but password mismatch")
 			return false
+		}
+		if errors.Is(err, bcrypt.ErrHashTooShort) {
+			adminAuthLog("checkAdminPassword: bcrypt hash too short, trying ADMIN_PASSWORD fallback")
+		} else {
+			adminAuthLog("checkAdminPassword: bcrypt validation error (%v), trying ADMIN_PASSWORD fallback", err)
 		}
 	}
 	if plain := os.Getenv("ADMIN_PASSWORD"); plain != "" {
-		return subtleEqual(plain, password)
+		ok := subtleEqual(plain, password)
+		adminAuthLog("checkAdminPassword: ADMIN_PASSWORD fallback used result=%t", ok)
+		return ok
 	}
 	if env("GIN_MODE", "debug") != "release" {
-		return subtleEqual("admin", password)
+		ok := subtleEqual("admin", password)
+		adminAuthLog("checkAdminPassword: debug fallback used result=%t", ok)
+		return ok
 	}
+	adminAuthLog("checkAdminPassword: no validation method available")
 	return false
 }
 
@@ -520,23 +569,26 @@ func makeAdminSession(username string) (string, error) {
 	return payload + "|" + sign(payload), nil
 }
 
-func verifyAdminSession(token string) bool {
+func verifyAdminSession(token string) (bool, string) {
 	parts := strings.Split(token, "|")
 	if len(parts) != 4 {
-		return false
+		return false, fmt.Sprintf("invalid token format: expected 4 parts got %d", len(parts))
 	}
 	payload := strings.Join(parts[:3], "|")
 	if !subtleEqual(sign(payload), parts[3]) {
-		return false
+		return false, "signature mismatch"
 	}
 	if parts[0] != adminUsername() {
-		return false
+		return false, fmt.Sprintf("username mismatch in token: token=%q expected=%q", parts[0], adminUsername())
 	}
 	expires, err := strconv.ParseInt(parts[1], 10, 64)
 	if err != nil {
-		return false
+		return false, fmt.Sprintf("invalid expiry: %v", err)
 	}
-	return time.Now().Unix() < expires
+	if time.Now().Unix() >= expires {
+		return false, fmt.Sprintf("session expired at unix=%d", expires)
+	}
+	return true, "ok"
 }
 
 func sign(payload string) string {
@@ -628,4 +680,8 @@ func env(key string, fallback string) string {
 func urlQueryEscape(value string) string {
 	replacer := strings.NewReplacer(" ", "+", "\n", "+", "&", "%26", "?", "%3F", "=", "%3D")
 	return replacer.Replace(value)
+}
+
+func adminAuthLog(format string, args ...any) {
+	log.Printf("[admin-auth] "+format, args...)
 }
