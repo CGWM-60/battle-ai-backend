@@ -17,6 +17,12 @@ Ce projet est prêt pour Dokploy avec `compose.prod.yml`.
   - `DB_PASSWORD`
   - `MARIADB_ROOT_PASSWORD`
 
+### Admin login: piège courant
+- Si vous utilisez `ADMIN_PASSWORD` en clair, évitez les caractères comme `#` dans la valeur brute.
+- Selon la manière dont Dokploy ou un parser dotenv injecte les variables, `#` peut être interprété comme un commentaire et tronquer la valeur.
+- Pour un test simple, utilisez temporairement une valeur comme `Admin2026Secure`.
+- En production, préférez `ADMIN_PASSWORD_BCRYPT` et laissez `ADMIN_PASSWORD` vide.
+
 ## 3) Réseau / domaine
 - Exposer le service `app` sur le port `8080`
 - Configurer le domaine Dokploy vers ce service
