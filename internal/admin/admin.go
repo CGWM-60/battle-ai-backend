@@ -543,8 +543,23 @@ func checkAdminPassword(password string) bool {
 	}
 	if plain := os.Getenv("ADMIN_PASSWORD"); plain != "" {
 		ok := subtleEqual(plain, password)
-		adminAuthLog("checkAdminPassword: ADMIN_PASSWORD fallback used result=%t", ok)
-		return ok
+		if ok {
+			adminAuthLog("checkAdminPassword: ADMIN_PASSWORD exact match success (plain_len=%d input_len=%d)", len(plain), len(password))
+			return true
+		}
+
+		trimmedPlain := strings.TrimSpace(plain)
+		trimmedInput := strings.TrimSpace(password)
+		trimmedOK := subtleEqual(trimmedPlain, trimmedInput)
+		adminAuthLog(
+			"checkAdminPassword: ADMIN_PASSWORD mismatch exact=false trimmed_match=%t plain_len=%d input_len=%d trimmed_plain_len=%d trimmed_input_len=%d",
+			trimmedOK,
+			len(plain),
+			len(password),
+			len(trimmedPlain),
+			len(trimmedInput),
+		)
+		return trimmedOK
 	}
 	if env("GIN_MODE", "debug") != "release" {
 		ok := subtleEqual("admin", password)
