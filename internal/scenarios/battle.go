@@ -622,6 +622,7 @@ func RunBattleScenarioSingleRoundStreamWithDurationContext(
 
 	deadline := time.Now().Add(roundDuration)
 	turnIndex := 1
+	completedCycles := 0
 	for {
 		for _, ia := range ias {
 			if err := runTurn(turnIndex, "debat", PromptDebateRound, ia); err != nil {
@@ -629,13 +630,35 @@ func RunBattleScenarioSingleRoundStreamWithDurationContext(
 			}
 			turnIndex++
 		}
+		completedCycles++
 
-		if time.Now().After(deadline) {
+		// Le timer sert a decider si on lance un nouveau cycle complet.
+		// Un cycle commence toujours par IA1 puis IA2; on ne coupe jamais entre
+		// les deux, sinon Flutter peut rester avec un round ou une seule IA a parle.
+		if time.Now().After(deadline) || completedCycles >= maxDebateCycles(roundDuration) {
 			break
 		}
 	}
 
 	return nil
+}
+
+func maxDebateCycles(roundDuration time.Duration) int {
+	if roundDuration <= 0 {
+		return 1
+	}
+
+	// Le round doit rester court et controlable par Flutter. Le temps fourni par
+	// l'app donne une estimation, mais les providers peuvent streamer lentement:
+	// ce plafond evite une boucle interminable tout en gardant un dialogue.
+	cycles := int(roundDuration / (20 * time.Second))
+	if cycles < 1 {
+		return 1
+	}
+	if cycles > 3 {
+		return 3
+	}
+	return cycles
 }
 
 func singleRoundExecutionTimeout(roundDuration time.Duration) time.Duration {
