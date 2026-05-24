@@ -486,7 +486,16 @@ func callAdminProvider(ctx context.Context, url string, apiKey string, model str
 
 func checkAdminPassword(password string) bool {
 	if hash := os.Getenv("ADMIN_PASSWORD_BCRYPT"); hash != "" {
-		return bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)) == nil
+		err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+		if err == nil {
+			return true
+		}
+		if !errors.Is(err, bcrypt.ErrHashTooShort) && !errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			// Invalid or malformed hash: continue with ADMIN_PASSWORD fallback.
+		}
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return false
+		}
 	}
 	if plain := os.Getenv("ADMIN_PASSWORD"); plain != "" {
 		return subtleEqual(plain, password)
