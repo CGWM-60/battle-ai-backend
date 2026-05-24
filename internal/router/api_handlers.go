@@ -299,6 +299,13 @@ func generateAIProviderText() gin.HandlerFunc {
 		latency := time.Since(startedAt)
 
 		if err != nil {
+			log.Printf(
+				"[aiProviderGenerate] provider call failed provider=%s model=%s latency_ms=%d err=%v",
+				providerName,
+				modelName,
+				latency.Milliseconds(),
+				err,
+			)
 			c.JSON(http.StatusBadGateway, gin.H{
 				"ok":           false,
 				"providerName": providerName,
