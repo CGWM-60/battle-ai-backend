@@ -722,16 +722,102 @@ Body :
 
 ## Sessions RolePlay
 
-Routes actuellement disponibles :
+### Lancer une quete RP
 
-```text
-GET /api/v1/roleplay/sessions
-GET /api/v1/roleplay/sessions/:id
+```http
+POST /api/v1/roleplay/quests/:id/start
+Authorization: Bearer <token>
+Content-Type: application/json
 ```
 
-Ces routes lisent les sessions RP deja creees en base pour l'utilisateur connecte.
+Body minimal, sans appel IA au lancement :
 
-Important : il n'y a pas encore de route `POST /api/v1/roleplay/sessions` dans le code actuel. Donc le frontend peut afficher les sessions existantes, mais pas encore lancer une nouvelle session RP via API.
+```json
+{
+  "mode": "solo"
+}
+```
+
+Body avec IA au lancement, compatible Mistral / OpenRouter :
+
+```json
+{
+  "mode": "solo",
+  "providerName": "openrouter",
+  "modelName": "openai/gpt-4o-mini",
+  "apiKey": "cle-api-openrouter"
+}
+```
+
+`provider` et `model` sont aussi acceptes comme alias de `providerName` et `modelName`.
+La cle API sert seulement a generer la premiere narration et n'est jamais stockee. Le backend stocke seulement `providerName` et `modelName` dans `Snapshot`.
+
+Retour :
+
+```json
+{
+  "session": {
+    "Id": 12,
+    "OwnerID": 1,
+    "Mode": "solo",
+    "Title": "La cite sous la pluie noire",
+    "Status": "live",
+    "ScenarioPrompt": "...",
+    "CurrentScene": "Texte narrateur genere...",
+    "CurrentTurn": 1,
+    "Snapshot": {
+      "providerName": "openrouter",
+      "modelName": "openai/gpt-4o-mini"
+    }
+  },
+  "turns": [
+    {
+      "Id": 1,
+      "SessionID": 12,
+      "Turn": 1,
+      "AuthorType": "narrateur",
+      "AuthorName": "Narrateur",
+      "Content": "Texte narrateur genere...",
+      "Payload": {
+        "providerName": "openrouter",
+        "modelName": "openai/gpt-4o-mini",
+        "phase": "opening"
+      },
+      "Sequence": 1
+    }
+  ]
+}
+```
+
+### Creer une session RP libre
+
+```http
+POST /api/v1/roleplay/sessions
+Authorization: Bearer <token>
+Content-Type: application/json
+```
+
+```json
+{
+  "title": "Campagne libre",
+  "mode": "solo",
+  "scenarioPrompt": "Le joueur se reveille dans une station spatiale vide...",
+  "providerName": "mistral",
+  "modelName": "mistral-large-latest",
+  "apiKey": "cle-api-mistral"
+}
+```
+
+### Lister / recuperer / jouer
+
+```text
+GET  /api/v1/roleplay/sessions
+GET  /api/v1/roleplay/sessions/:id
+GET  /api/v1/roleplay/sessions/:id/turns
+POST /api/v1/roleplay/sessions/:id/action
+POST /api/v1/roleplay/sessions/:id/resume
+POST /api/v1/roleplay/sessions/:id/end
+```
 
 ## Arenas
 

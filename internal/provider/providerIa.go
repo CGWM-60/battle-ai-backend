@@ -113,6 +113,9 @@ func (p *Provider) ChatStream(
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "text/event-stream")
 	req.Header.Set("Authorization", "Bearer "+apiKey)
+	if strings.Contains(p.url, "openrouter.ai") {
+		req.Header.Set("X-Title", "go-battle-ia")
+	}
 
 	client := &http.Client{}
 
@@ -124,12 +127,13 @@ func (p *Provider) ChatStream(
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("mistral error: status=%s body=%s", resp.Status, string(body))
+		return "", fmt.Errorf("provider error: status=%s body=%s", resp.Status, string(body))
 	}
 
 	var fullResponse strings.Builder
 
 	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()

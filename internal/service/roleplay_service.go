@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
+	"cgwm/battle/internal/provider"
 	"cgwm/battle/internal/repository"
 
 	"gorm.io/datatypes"
@@ -19,6 +21,9 @@ type RolePlaySessionInput struct {
 	Mode           string
 	ScenarioPrompt string
 	Snapshot       map[string]any
+	ProviderName   string
+	ModelName      string
+	APIKey         string
 }
 
 type RolePlayActionInput struct {
@@ -40,6 +45,24 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 	now := time.Now()
 	title := input.Title
 	prompt := input.ScenarioPrompt
+	providerName := strings.TrimSpace(input.ProviderName)
+	modelName := strings.TrimSpace(input.ModelName)
+	apiKey := strings.TrimSpace(input.APIKey)
+	if providerName != "" || modelName != "" || apiKey != "" {
+		if providerName == "" || modelName == "" || apiKey == "" {
+			return nil, fmt.Errorf("providerName, modelName and apiKey are required to launch roleplay with IA")
+		}
+		if _, err := ProviderURL(providerName); err != nil {
+			return nil, fmt.Errorf("providerName invalide")
+		}
+	}
+	if input.Snapshot == nil {
+		input.Snapshot = map[string]any{}
+	}
+	if providerName != "" {
+		input.Snapshot["providerName"] = providerName
+		input.Snapshot["modelName"] = modelName
+	}
 	snapshotBytes, _ := json.Marshal(input.Snapshot)
 	if len(snapshotBytes) == 0 || string(snapshotBytes) == "null" {
 		snapshotBytes = []byte("{}")
@@ -88,7 +111,86 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 		}
 		_ = s.roleplay.CreateQuestRun(ctx, run)
 	}
+	if providerName != "" {
+		if err := s.appendInitialNarration(ctx, session, providerName, modelName, apiKey); err != nil {
+			failedAt := time.Now()
+			_ = s.roleplay.UpdateSessionFields(ctx, session.Id, ownerID, map[string]any{
+				"status":           constants.RolePlayStatusFailed,
+				"finished_at":      &failedAt,
+				"last_activity_at": &failedAt,
+			})
+			return nil, err
+		}
+	}
 	return session, nil
+}
+
+func (s *RolePlayService) appendInitialNarration(ctx context.Context, session *models.RolePlaySession, providerName string, modelName string, apiKey string) error {
+	url, err := ProviderURL(providerName)
+	if err != nil {
+		return fmt.Errorf("providerName invalide")
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+
+	ai := provider.NewsProvider(apiKey, url, modelName)
+	response, err := ai.Chat(callCtx, []provider.ProviderMessage{
+		{
+			Role: "system",
+			Content: `Tu es le maitre du jeu d'une quete roleplay IA.
+Tu dois lancer la scene d'ouverture pour le joueur.
+Ecris en francais, sois immersif, concret et jouable.
+Ne termine pas la quete. Termine par une situation qui appelle une action du joueur.`,
+		},
+		{
+			Role: "user",
+			Content: fmt.Sprintf(`Titre: %s
+
+Scenario:
+%s
+
+Lance maintenant la premiere scene.`, session.Title, session.ScenarioPrompt),
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("cannot launch roleplay provider: %w", err)
+	}
+
+	sequence, err := s.roleplay.NextTurnSequence(ctx, session.Id)
+	if err != nil {
+		return err
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"providerName": providerName,
+		"modelName":    modelName,
+		"phase":        "opening",
+	})
+	turn := &models.RolePlaySessionTurn{
+		SessionID:  session.Id,
+		Turn:       sequence,
+		AuthorType: "narrateur",
+		AuthorName: "Narrateur",
+		Content:    response,
+		Payload:    datatypes.JSON(payload),
+		Sequence:   sequence,
+	}
+	if err := s.roleplay.AppendTurn(ctx, turn); err != nil {
+		return err
+	}
+
+	now := time.Now()
+	_ = s.roleplay.UpdateSessionFields(ctx, session.Id, session.OwnerID, map[string]any{
+		"current_turn":     sequence,
+		"current_scene":    response,
+		"last_activity_at": &now,
+	})
+	session.CurrentTurn = sequence
+	session.CurrentScene = response
+	session.LastActivityAt = &now
+
+	return nil
 }
 
 func (s *RolePlayService) ListSessions(ctx context.Context, ownerID uint, limit int) ([]models.RolePlaySession, error) {

@@ -141,6 +141,11 @@ type rolePlaySessionRequest struct {
 	Mode           string         `form:"mode" json:"mode"`
 	ScenarioPrompt string         `form:"scenarioPrompt" json:"scenarioPrompt"`
 	Snapshot       map[string]any `form:"-" json:"snapshot"`
+	ProviderName   string         `form:"providerName" json:"providerName"`
+	Provider       string         `form:"provider" json:"provider"`
+	ModelName      string         `form:"modelName" json:"modelName"`
+	Model          string         `form:"model" json:"model"`
+	APIKey         string         `form:"apiKey" json:"apiKey"`
 }
 
 type rolePlayActionRequest struct {
@@ -936,12 +941,16 @@ func startRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
 			Mode:           req.Mode,
 			ScenarioPrompt: req.ScenarioPrompt,
 			Snapshot:       req.Snapshot,
+			ProviderName:   defaultString(req.ProviderName, req.Provider),
+			ModelName:      defaultString(req.ModelName, req.Model),
+			APIKey:         req.APIKey,
 		})
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusCreated, gin.H{"session": session})
+		turns, _ := newRolePlayService(database).Turns(c.Request.Context(), session.Id, currentUserID(c))
+		c.JSON(http.StatusCreated, gin.H{"session": session, "turns": turns})
 	}
 }
 
@@ -958,12 +967,16 @@ func createRolePlaySession(database *gorm.DB) gin.HandlerFunc {
 			Mode:           req.Mode,
 			ScenarioPrompt: req.ScenarioPrompt,
 			Snapshot:       req.Snapshot,
+			ProviderName:   defaultString(req.ProviderName, req.Provider),
+			ModelName:      defaultString(req.ModelName, req.Model),
+			APIKey:         req.APIKey,
 		})
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusCreated, gin.H{"session": session})
+		turns, _ := newRolePlayService(database).Turns(c.Request.Context(), session.Id, currentUserID(c))
+		c.JSON(http.StatusCreated, gin.H{"session": session, "turns": turns})
 	}
 }
 
