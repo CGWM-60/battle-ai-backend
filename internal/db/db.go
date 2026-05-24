@@ -28,12 +28,12 @@ func DbConnect() *gorm.DB {
 	)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		panic("failed to connect database")
+		panic(fmt.Sprintf("failed to connect database: %v", err))
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		panic("failed to get database pool")
+		panic(fmt.Sprintf("failed to get database pool: %v", err))
 	}
 	sqlDB.SetMaxOpenConns(getEnvInt("DB_MAX_OPEN_CONNS", 25))
 	sqlDB.SetMaxIdleConns(getEnvInt("DB_MAX_IDLE_CONNS", 10))
