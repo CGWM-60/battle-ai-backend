@@ -1,0 +1,79 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: go-battle-ia-dev
+    working_dir: /app
+    command: go run .
+    environment:
+      APP_HOST: 0.0.0.0
+      APP_PORT: 8080
+      GIN_MODE: debug
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-dev-admin-session-secret}
+      ADMIN_API_SECRET: ${ADMIN_API_SECRET:-dev-admin-api-secret}
+      AI_PROVIDER_TEST_TIMEOUT_SECONDS: ${AI_PROVIDER_TEST_TIMEOUT_SECONDS:-20}
+      APP_MAX_CONCURRENT_REQUESTS: ${APP_MAX_CONCURRENT_REQUESTS:-8}
+      APP_QUEUE_TIMEOUT_SECONDS: ${APP_QUEUE_TIMEOUT_SECONDS:-10}
+      APP_MAX_BODY_BYTES: ${APP_MAX_BODY_BYTES:-1048576}
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${MARIADB_DATABASE:-battleia}
+      DB_USER: ${MARIADB_USER:-battleia}
+      DB_PASSWORD: ${MARIADB_PASSWORD:-battleia}
+      DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-25}
+      DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}
+      DB_CONN_MAX_LIFETIME_MINUTES: ${DB_CONN_MAX_LIFETIME_MINUTES:-30}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    volumes:
+      - .:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mariadb:
+    image: mariadb:11
+    container_name: go-battle-ia-db
+    environment:
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-battleia}
+      MARIADB_USER: ${MARIADB_USER:-battleia}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-battleia}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root}
+    ports:
+      - "${MARIADB_PORT:-3306}:3306"
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MARIADB_ROOT_PASSWORD || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: go-battle-ia-phpmyadmin
+    environment:
+      PMA_HOST: mariadb
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root}
+    ports:
+      - "${PHPMYADMIN_PORT:-8081}:80"
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  go-mod-cache:
+  go-build-cache:
+  mariadb-data:

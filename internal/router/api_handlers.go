@@ -1,0 +1,2426 @@
+package router
+
+import (
+	"cgwm/battle/internal/app/constants"
+	"cgwm/battle/internal/models"
+	"cgwm/battle/internal/provider"
+	"cgwm/battle/internal/repository"
+	"cgwm/battle/internal/scenarios"
+	"cgwm/battle/internal/service"
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/gorilla/websocket"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/datatypes"
+	"gorm.io/gorm"
+)
+
+type battleRequest struct {
+	Provider1            string `form:"provider1" json:"provider1"`
+	Provider2            string `form:"provider2" json:"provider2"`
+	IAKey1               string `form:"iaKey1" json:"iaKey1"`
+	IAKey2               string `form:"iaKey2" json:"iaKey2"`
+	IAModels             string `form:"iaModels" json:"iaModels"`
+	IAModels2            string `form:"iaModels2" json:"iaModels2"`
+	IA1ProfileID         uint   `form:"ia1ProfileId" json:"ia1ProfileId"`
+	IA2ProfileID         uint   `form:"ia2ProfileId" json:"ia2ProfileId"`
+	IA1Name              string `form:"ia1Name" json:"ia1Name"`
+	IA1Personality       string `form:"ia1Personality" json:"ia1Personality"`
+	IA1Mindset           string `form:"ia1Mindset" json:"ia1Mindset"`
+	IA1Style             string `form:"ia1Style" json:"ia1Style"`
+	IA1Goal              string `form:"ia1Goal" json:"ia1Goal"`
+	IA1Weakness          string `form:"ia1Weakness" json:"ia1Weakness"`
+	IA2Name              string `form:"ia2Name" json:"ia2Name"`
+	IA2Personality       string `form:"ia2Personality" json:"ia2Personality"`
+	IA2Mindset           string `form:"ia2Mindset" json:"ia2Mindset"`
+	IA2Style             string `form:"ia2Style" json:"ia2Style"`
+	IA2Goal              string `form:"ia2Goal" json:"ia2Goal"`
+	IA2Weakness          string `form:"ia2Weakness" json:"ia2Weakness"`
+	Question             string `form:"question" json:"question"`
+	QuestID              uint   `form:"questId" json:"questId"`
+	Title                string `form:"title" json:"title"`
+	Visibility           string `form:"visibility" json:"visibility"`
+	TotalRounds          int    `form:"totalRounds" json:"totalRounds"`
+	RoundDurationSeconds int    `form:"roundDurationSeconds" json:"roundDurationSeconds"`
+	PublicVote           bool   `form:"publicVote" json:"publicVote"`
+}
+
+type iaProfileRequest struct {
+	Name         string `form:"name" json:"name"`
+	ProviderName string `form:"providerName" json:"providerName"`
+	ModelName    string `form:"modelName" json:"modelName"`
+	Personality  string `form:"personality" json:"personality"`
+	Mindset      string `form:"mindset" json:"mindset"`
+	Style        string `form:"style" json:"style"`
+	Goal         string `form:"goal" json:"goal"`
+	Weakness     string `form:"weakness" json:"weakness"`
+}
+
+type aiProviderTestRequest struct {
+	ProviderName string `form:"providerName" json:"providerName"`
+	Provider     string `form:"provider" json:"provider"`
+	ModelName    string `form:"modelName" json:"modelName"`
+	Model        string `form:"model" json:"model"`
+	APIKey       string `form:"apiKey" json:"apiKey"`
+	Prompt       string `form:"prompt" json:"prompt"`
+}
+
+type aiProviderGenerateRequest struct {
+	ProviderName string `form:"providerName" json:"providerName"`
+	Provider     string `form:"provider" json:"provider"`
+	ModelName    string `form:"modelName" json:"modelName"`
+	Model        string `form:"model" json:"model"`
+	APIKey       string `form:"apiKey" json:"apiKey"`
+	SystemPrompt string `form:"systemPrompt" json:"systemPrompt"`
+	Prompt       string `form:"prompt" json:"prompt"`
+	MaxChars     int    `form:"maxChars" json:"maxChars"`
+}
+
+type battleQuestRequest struct {
+	Slug     string         `form:"slug" json:"slug"`
+	Title    string         `form:"title" json:"title"`
+	Content  string         `form:"content" json:"content"`
+	Level    string         `form:"level" json:"level"`
+	Point    int            `form:"point" json:"point"`
+	Theme    string         `form:"theme" json:"theme"`
+	Xp       int            `form:"xp" json:"xp"`
+	Coin     int            `form:"coin" json:"coin"`
+	Mode     string         `form:"mode" json:"mode"`
+	Source   string         `form:"source" json:"source"`
+	Status   string         `form:"status" json:"status"`
+	Metadata map[string]any `form:"-" json:"metadata"`
+}
+
+type rolePlayQuestRequest struct {
+	Slug     string         `form:"slug" json:"slug"`
+	Title    string         `form:"title" json:"title"`
+	Summary  string         `form:"summary" json:"summary"`
+	Prompt   string         `form:"prompt" json:"prompt"`
+	Theme    string         `form:"theme" json:"theme"`
+	Level    string         `form:"level" json:"level"`
+	Xp       int            `form:"xp" json:"xp"`
+	Coin     int            `form:"coin" json:"coin"`
+	Source   string         `form:"source" json:"source"`
+	Status   string         `form:"status" json:"status"`
+	Metadata map[string]any `form:"-" json:"metadata"`
+}
+
+type liveSessionRequest struct {
+	ChannelKey        string `form:"channelKey" json:"channelKey"`
+	Mode              string `form:"mode" json:"mode"`
+	Status            string `form:"status" json:"status"`
+	BattleSaveID      *uint  `form:"battleSaveId" json:"battleSaveId"`
+	RolePlaySessionID *uint  `form:"rolePlaySessionId" json:"rolePlaySessionId"`
+	ArenaID           *uint  `form:"arenaId" json:"arenaId"`
+	CoopPartyID       *uint  `form:"coopPartyId" json:"coopPartyId"`
+	AllowReplay       bool   `form:"allowReplay" json:"allowReplay"`
+}
+
+type arenaRequest struct {
+	Name            string `form:"name" json:"name"`
+	BattleSaveID    uint   `form:"battleSaveId" json:"battleSaveId"`
+	MaxPlayers      int    `form:"maxPlayers" json:"maxPlayers"`
+	AllowSpectators bool   `form:"allowSpectators" json:"allowSpectators"`
+	Spectator       bool   `form:"spectator" json:"spectator"`
+}
+
+type rolePlaySessionRequest struct {
+	TemplateID     uint           `form:"templateId" json:"templateId"`
+	Title          string         `form:"title" json:"title"`
+	Mode           string         `form:"mode" json:"mode"`
+	ScenarioPrompt string         `form:"scenarioPrompt" json:"scenarioPrompt"`
+	Snapshot       map[string]any `form:"-" json:"snapshot"`
+}
+
+type rolePlayActionRequest struct {
+	AuthorName string         `form:"authorName" json:"authorName"`
+	Content    string         `form:"content" json:"content"`
+	Payload    map[string]any `form:"-" json:"payload"`
+}
+
+type coopPartyRequest struct {
+	Mode              string         `form:"mode" json:"mode"`
+	BattleSaveID      *uint          `form:"battleSaveId" json:"battleSaveId"`
+	RolePlaySessionID *uint          `form:"rolePlaySessionId" json:"rolePlaySessionId"`
+	MaxMembers        int            `form:"maxMembers" json:"maxMembers"`
+	SharedState       map[string]any `form:"-" json:"sharedState"`
+}
+
+type updateUserRequest struct {
+	Email           *string `form:"email" json:"email"`
+	Pseudo          *string `form:"pseudo" json:"pseudo"`
+	BirthdayDate    *string `form:"birthdayDate" json:"birthdayDate"`
+	Avatar          *string `form:"avatar" json:"avatar"`
+	CurrentPassword *string `form:"currentPassword" json:"currentPassword"`
+	NewPassword     *string `form:"newPassword" json:"newPassword"`
+}
+
+type progressionRequest struct {
+	XP        *int   `form:"xp" json:"xp"`
+	Coin      *int   `form:"coin" json:"coin"`
+	XPDelta   *int   `form:"xpDelta" json:"xpDelta"`
+	CoinDelta *int   `form:"coinDelta" json:"coinDelta"`
+	Reason    string `form:"reason" json:"reason"`
+}
+
+func listAIProviders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		providers := service.SupportedAIProviders()
+		names := make([]string, 0, len(providers))
+		for _, providerInfo := range providers {
+			names = append(names, providerInfo.Name)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"providers": providers,
+			"names":     names,
+		})
+	}
+}
+
+func testAIProvider() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req aiProviderTestRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ai provider test payload"})
+			return
+		}
+
+		providerName := defaultString(req.ProviderName, req.Provider)
+		modelName := defaultString(req.ModelName, req.Model)
+		apiKey := strings.TrimSpace(req.APIKey)
+
+		if strings.TrimSpace(providerName) == "" || strings.TrimSpace(modelName) == "" || apiKey == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "providerName, modelName and apiKey are required"})
+			return
+		}
+
+		url, err := providerURL(providerName)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "providerName invalide"})
+			return
+		}
+
+		prompt := strings.TrimSpace(req.Prompt)
+		if prompt == "" {
+			prompt = "Reponds uniquement par OK si tu recois ce message."
+		}
+
+		startedAt := time.Now()
+		ctx, cancel := context.WithTimeout(c.Request.Context(), aiProviderTestTimeout())
+		defer cancel()
+
+		client := provider.NewsProvider(apiKey, url, modelName)
+		response, err := client.Chat(ctx, []provider.ProviderMessage{
+			{Role: "system", Content: "Tu es un endpoint de verification technique. Reponds tres court."},
+			{Role: "user", Content: prompt},
+		})
+		latency := time.Since(startedAt)
+
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"ok":           false,
+				"providerName": providerName,
+				"modelName":    modelName,
+				"latencyMs":    latency.Milliseconds(),
+				"error":        err.Error(),
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"ok":           true,
+			"providerName": providerName,
+			"modelName":    modelName,
+			"latencyMs":    latency.Milliseconds(),
+			"response":     truncateString(strings.TrimSpace(response), 500),
+		})
+	}
+}
+
+func generateAIProviderText() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req aiProviderGenerateRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ai provider generate payload"})
+			return
+		}
+
+		providerName := defaultString(req.ProviderName, req.Provider)
+		modelName := defaultString(req.ModelName, req.Model)
+		apiKey := strings.TrimSpace(req.APIKey)
+		prompt := strings.TrimSpace(req.Prompt)
+
+		if strings.TrimSpace(providerName) == "" || strings.TrimSpace(modelName) == "" || apiKey == "" || prompt == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "providerName, modelName, apiKey and prompt are required"})
+			return
+		}
+
+		url, err := providerURL(providerName)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "providerName invalide"})
+			return
+		}
+
+		messages := make([]provider.ProviderMessage, 0, 2)
+		if systemPrompt := strings.TrimSpace(req.SystemPrompt); systemPrompt != "" {
+			messages = append(messages, provider.ProviderMessage{
+				Role:    "system",
+				Content: systemPrompt,
+			})
+		}
+		messages = append(messages, provider.ProviderMessage{
+			Role:    "user",
+			Content: prompt,
+		})
+
+		startedAt := time.Now()
+		ctx, cancel := context.WithTimeout(c.Request.Context(), aiProviderGenerationTimeout())
+		defer cancel()
+
+		client := provider.NewsProvider(apiKey, url, modelName)
+		response, err := client.Chat(ctx, messages)
+		latency := time.Since(startedAt)
+
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"ok":           false,
+				"providerName": providerName,
+				"modelName":    modelName,
+				"latencyMs":    latency.Milliseconds(),
+				"error":        err.Error(),
+			})
+			return
+		}
+
+		generated := strings.TrimSpace(response)
+		if req.MaxChars > 0 {
+			generated = truncateString(generated, req.MaxChars)
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"ok":           true,
+			"providerName": providerName,
+			"modelName":    modelName,
+			"latencyMs":    latency.Milliseconds(),
+			"response":     generated,
+		})
+	}
+}
+
+func startBattle(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req battleRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid battle payload"})
+			return
+		}
+
+		battleService := newBattleService(database)
+		run, err := battleService.Create(c.Request.Context(), currentUserID(c), toServiceBattleRequest(req))
+		if err != nil {
+			log.Printf("[startBattle] Create error: %v", err)
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.Writer.Header().Set("Content-Type", "application/x-ndjson")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+		flusher, ok := c.Writer.(http.Flusher)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming non supporte"})
+			return
+		}
+
+		writeNDJSON(c, flusher, gin.H{
+			"type":      "battle_created",
+			"battle_id": run.Battle.Id,
+			"done":      true,
+		})
+
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[startBattle] PANIC recovered: %v", r)
+				writeNDJSON(c, flusher, scenarios.BattleStreamEvent{
+					Type:  "error",
+					Error: fmt.Sprintf("internal server error: %v", r),
+					Done:  true,
+				})
+			}
+		}()
+
+		if err := battleService.RunNextRound(c.Request.Context(), run, nil, func(event scenarios.BattleStreamEvent) {
+			writeNDJSON(c, flusher, event)
+		}); err != nil {
+			log.Printf("[startBattle] RunNextRound error: %v", err)
+		}
+	}
+}
+
+func nextBattleRound(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req battleRequest
+		if c.Request.ContentLength != 0 {
+			if err := bindPayload(c, &req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid battle round payload"})
+				return
+			}
+		}
+
+		battleID, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid battle id"})
+			return
+		}
+
+		battleService := newBattleService(database)
+		run, turns, err := battleService.Resume(c.Request.Context(), currentUserID(c), battleID, toServiceBattleRequest(req))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.Writer.Header().Set("Content-Type", "application/x-ndjson")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+		flusher, ok := c.Writer.(http.Flusher)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming non supporte"})
+			return
+		}
+
+		writeNDJSON(c, flusher, gin.H{
+			"type":           "round_started",
+			"battle_id":      run.Battle.Id,
+			"existing_turns": len(turns),
+			"done":           true,
+		})
+
+		if err := battleService.RunNextRound(c.Request.Context(), run, turns, func(event scenarios.BattleStreamEvent) {
+			writeNDJSON(c, flusher, event)
+		}); err != nil {
+			log.Printf("[nextBattleRound] RunNextRound error: %v", err)
+		}
+	}
+}
+
+func resumeBattle(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req battleRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid battle resume payload"})
+			return
+		}
+
+		battleID, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid battle id"})
+			return
+		}
+
+		battleService := newBattleService(database)
+		run, turns, err := battleService.Resume(c.Request.Context(), currentUserID(c), battleID, toServiceBattleRequest(req))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.Writer.Header().Set("Content-Type", "application/x-ndjson")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+		flusher, ok := c.Writer.(http.Flusher)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming non supporte"})
+			return
+		}
+
+		writeNDJSON(c, flusher, gin.H{
+			"type":           "battle_resumed",
+			"battle_id":      run.Battle.Id,
+			"existing_turns": len(turns),
+			"done":           true,
+		})
+
+		_ = battleService.Run(c.Request.Context(), run, turns, func(event scenarios.BattleStreamEvent) {
+			writeNDJSON(c, flusher, event)
+		})
+	}
+}
+
+func listBattles(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var battles []models.BattleSave
+		err := database.WithContext(c.Request.Context()).
+			Where("owner_id = ?", currentUserID(c)).
+			Order("updated_at DESC").
+			Limit(limitFromQuery(c)).
+			Find(&battles).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list battles"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"battles": battles})
+	}
+}
+
+func getBattle(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		battle, ok := findOwnedBattle(c, database)
+		if !ok {
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"battle": battle})
+	}
+}
+
+func getBattleTurns(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		battle, ok := findOwnedBattle(c, database)
+		if !ok {
+			return
+		}
+
+		var turns []models.BattleSaveTurn
+		err := database.WithContext(c.Request.Context()).
+			Where("battle_save_id = ?", battle.Id).
+			Order("sequence ASC").
+			Find(&turns).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list battle turns"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"turns": turns})
+	}
+}
+
+func listPublicBattles(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var battles []models.BattleSave
+		err := publicBattleScope(database.WithContext(c.Request.Context()).Model(&models.BattleSave{})).
+			Order("updated_at DESC").
+			Limit(limitFromQuery(c)).
+			Find(&battles).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list public battles"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"battles": battles})
+	}
+}
+
+func getPublicBattle(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		battle, ok := findPublicBattle(c, database)
+		if !ok {
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"battle": battle})
+	}
+}
+
+func getPublicBattleTurns(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		battle, ok := findPublicBattle(c, database)
+		if !ok {
+			return
+		}
+
+		var turns []models.BattleSaveTurn
+		err := database.WithContext(c.Request.Context()).
+			Where("battle_save_id = ?", battle.Id).
+			Order("sequence ASC").
+			Find(&turns).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list public battle turns"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"turns": turns})
+	}
+}
+
+func cancelBattle(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		battle, ok := findOwnedBattle(c, database)
+		if !ok {
+			return
+		}
+
+		now := time.Now()
+		err := database.WithContext(c.Request.Context()).
+			Model(&battle).
+			Updates(map[string]any{
+				"status":           constants.BattleStatusAbandoned,
+				"finished_at":      &now,
+				"last_activity_at": &now,
+			}).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot cancel battle"})
+			return
+		}
+		_ = newLiveService(database).EndSessionsByBattle(c.Request.Context(), battle.Id)
+
+		c.JSON(http.StatusOK, gin.H{"battle": battle})
+	}
+}
+
+func listBattleQuests(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		quests, err := newQuestService(database).ListBattle(c.Request.Context(), c.Query("status"), c.Query("theme"), c.Query("level"), limitFromQuery(c))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list battle quests"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"quests": quests})
+	}
+}
+
+func getBattleQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, parseErr := parseUintParam(c, "id")
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		quest, err := newQuestService(database).GetBattle(c.Request.Context(), id)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "battle quest not found"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get battle quest"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"quest": quest})
+	}
+}
+
+func createBattleQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req battleQuestRequest
+		if err := bindPayload(c, &req); err != nil || req.Title == "" || req.Content == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "title and content are required"})
+			return
+		}
+
+		quest, err := newQuestService(database).CreateBattle(c.Request.Context(), toBattleQuestInput(req))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create battle quest"})
+			return
+		}
+
+		c.JSON(http.StatusCreated, gin.H{"quest": quest})
+	}
+}
+
+func updateBattleQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		var req battleQuestRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid battle quest payload"})
+			return
+		}
+		if err := newQuestService(database).UpdateBattle(c.Request.Context(), id, toBattleQuestInput(req)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot update battle quest"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"updated": true})
+	}
+}
+
+func deleteBattleQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		if err := newQuestService(database).DeleteBattle(c.Request.Context(), id); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot delete battle quest"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"deleted": true})
+	}
+}
+
+func publishBattleQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		if err := newQuestService(database).PublishBattle(c.Request.Context(), id); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot publish battle quest"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": constants.QuestStatusPublished})
+	}
+}
+
+func archiveBattleQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		if err := newQuestService(database).ArchiveBattle(c.Request.Context(), id); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot archive battle quest"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": constants.QuestStatusArchived})
+	}
+}
+
+func randomBattleQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		quest, err := newQuestService(database).RandomBattle(c.Request.Context(), c.Query("theme"), c.Query("level"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "battle quest not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"quest": quest})
+	}
+}
+
+func listIAProfiles(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var profiles []models.IAProfile
+		err := database.WithContext(c.Request.Context()).
+			Where("owner_id = ?", currentUserID(c)).
+			Order("updated_at DESC").
+			Limit(limitFromQuery(c)).
+			Find(&profiles).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list ia profiles"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"profiles": profiles})
+	}
+}
+
+func createIAProfile(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req iaProfileRequest
+		if err := bindPayload(c, &req); err != nil || req.Name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+			return
+		}
+
+		if _, err := providerURL(req.ProviderName); req.ProviderName != "" && err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "providerName invalide"})
+			return
+		}
+
+		profile := models.IAProfile{
+			OwnerID:      currentUserID(c),
+			Name:         req.Name,
+			ProviderName: req.ProviderName,
+			ModelName:    req.ModelName,
+			Personality:  req.Personality,
+			Mindset:      req.Mindset,
+			Style:        req.Style,
+			Goal:         req.Goal,
+			Weakness:     req.Weakness,
+		}
+		if err := database.WithContext(c.Request.Context()).Create(&profile).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create ia profile"})
+			return
+		}
+
+		c.JSON(http.StatusCreated, gin.H{"profile": profile})
+	}
+}
+
+func getIAProfile(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		profile, ok := findOwnedIAProfile(c, database)
+		if !ok {
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"profile": profile})
+	}
+}
+
+func updateIAProfile(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		profile, ok := findOwnedIAProfile(c, database)
+		if !ok {
+			return
+		}
+
+		var req iaProfileRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ia profile payload"})
+			return
+		}
+		if req.ProviderName != "" {
+			if _, err := providerURL(req.ProviderName); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "providerName invalide"})
+				return
+			}
+		}
+
+		updates := map[string]any{
+			"name":          defaultString(req.Name, profile.Name),
+			"provider_name": defaultString(req.ProviderName, profile.ProviderName),
+			"model_name":    defaultString(req.ModelName, profile.ModelName),
+			"personality":   defaultString(req.Personality, profile.Personality),
+			"mindset":       defaultString(req.Mindset, profile.Mindset),
+			"style":         defaultString(req.Style, profile.Style),
+			"goal":          defaultString(req.Goal, profile.Goal),
+			"weakness":      defaultString(req.Weakness, profile.Weakness),
+		}
+		if err := database.WithContext(c.Request.Context()).Model(&profile).Updates(updates).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot update ia profile"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"profile": profile})
+	}
+}
+
+func deleteIAProfile(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		profile, ok := findOwnedIAProfile(c, database)
+		if !ok {
+			return
+		}
+
+		if err := database.WithContext(c.Request.Context()).Delete(&profile).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot delete ia profile"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"deleted": true})
+	}
+}
+
+func listRolePlayQuests(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		quests, err := newQuestService(database).ListRolePlay(c.Request.Context(), c.Query("status"), c.Query("theme"), c.Query("level"), limitFromQuery(c))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list roleplay quests"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"quests": quests})
+	}
+}
+
+func getRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, parseErr := parseUintParam(c, "id")
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		quest, err := newQuestService(database).GetRolePlay(c.Request.Context(), id)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "roleplay quest not found"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get roleplay quest"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"quest": quest})
+	}
+}
+
+func createRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req rolePlayQuestRequest
+		if err := bindPayload(c, &req); err != nil || req.Title == "" || req.Prompt == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "title and prompt are required"})
+			return
+		}
+
+		quest, err := newQuestService(database).CreateRolePlay(c.Request.Context(), toRolePlayQuestInput(req))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create roleplay quest"})
+			return
+		}
+
+		c.JSON(http.StatusCreated, gin.H{"quest": quest})
+	}
+}
+
+func updateRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		var req rolePlayQuestRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay quest payload"})
+			return
+		}
+		if err := newQuestService(database).UpdateRolePlay(c.Request.Context(), id, toRolePlayQuestInput(req)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot update roleplay quest"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"updated": true})
+	}
+}
+
+func deleteRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		if err := newQuestService(database).DeleteRolePlay(c.Request.Context(), id); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot delete roleplay quest"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"deleted": true})
+	}
+}
+
+func startRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req rolePlaySessionRequest
+		if c.Request.ContentLength != 0 {
+			if err := bindPayload(c, &req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay start payload"})
+				return
+			}
+		}
+
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+			return
+		}
+		session, err := newRolePlayService(database).CreateSession(c.Request.Context(), currentUserID(c), service.RolePlaySessionInput{
+			TemplateID:     id,
+			Title:          req.Title,
+			Mode:           req.Mode,
+			ScenarioPrompt: req.ScenarioPrompt,
+			Snapshot:       req.Snapshot,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"session": session})
+	}
+}
+
+func createRolePlaySession(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req rolePlaySessionRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay session payload"})
+			return
+		}
+		session, err := newRolePlayService(database).CreateSession(c.Request.Context(), currentUserID(c), service.RolePlaySessionInput{
+			TemplateID:     req.TemplateID,
+			Title:          req.Title,
+			Mode:           req.Mode,
+			ScenarioPrompt: req.ScenarioPrompt,
+			Snapshot:       req.Snapshot,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"session": session})
+	}
+}
+
+func listRolePlaySessions(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		sessions, err := newRolePlayService(database).ListSessions(c.Request.Context(), currentUserID(c), limitFromQuery(c))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list roleplay sessions"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"sessions": sessions})
+	}
+}
+
+func getRolePlaySession(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, parseErr := parseUintParam(c, "id")
+		if parseErr != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session id"})
+			return
+		}
+		session, err := newRolePlayService(database).GetSession(c.Request.Context(), id, currentUserID(c))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "roleplay session not found"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get roleplay session"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"session": session})
+	}
+}
+
+func getRolePlaySessionTurns(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session id"})
+			return
+		}
+		turns, err := newRolePlayService(database).Turns(c.Request.Context(), id, currentUserID(c))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "roleplay session not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"turns": turns})
+	}
+}
+
+func resumeRolePlaySession(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session id"})
+			return
+		}
+		session, turns, err := newRolePlayService(database).Resume(c.Request.Context(), id, currentUserID(c))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "roleplay session not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"session": session, "turns": turns})
+	}
+}
+
+func appendRolePlayAction(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session id"})
+			return
+		}
+		var req rolePlayActionRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action payload"})
+			return
+		}
+		turn, err := newRolePlayService(database).AppendAction(c.Request.Context(), id, currentUserID(c), service.RolePlayActionInput{
+			AuthorName: req.AuthorName,
+			Content:    req.Content,
+			Payload:    req.Payload,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"turn": turn})
+	}
+}
+
+func endRolePlaySession(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session id"})
+			return
+		}
+		if err := newRolePlayService(database).End(c.Request.Context(), id, currentUserID(c)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot end roleplay session"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ended": true})
+	}
+}
+
+func listArenas(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		arenas, err := newArenaService(database).List(c.Request.Context(), limitFromQuery(c))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list arenas"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"arenas": arenas})
+	}
+}
+
+func listPublicArenas(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var arenas []models.BattleArena
+		err := publicArenaScope(database.WithContext(c.Request.Context()).Model(&models.BattleArena{})).
+			Order("updated_at DESC").
+			Limit(limitFromQuery(c)).
+			Find(&arenas).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list public arenas"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"arenas": arenas})
+	}
+}
+
+func createArena(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req arenaRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid arena payload"})
+			return
+		}
+		arena, err := newArenaService(database).Create(c.Request.Context(), currentUserID(c), service.ArenaInput{
+			Name:            req.Name,
+			BattleSaveID:    req.BattleSaveID,
+			MaxPlayers:      req.MaxPlayers,
+			AllowSpectators: req.AllowSpectators,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"arena": arena})
+	}
+}
+
+func getArena(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		arena, err := newArenaService(database).Get(c.Request.Context(), c.Param("code"))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "arena not found"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get arena"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"arena": arena})
+	}
+}
+
+func getPublicArena(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		arena, ok := findPublicArena(c, database)
+		if !ok {
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"arena": arena})
+	}
+}
+
+func joinArena(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req arenaRequest
+		_ = bindPayload(c, &req)
+		arena, err := newArenaService(database).Join(c.Request.Context(), c.Param("code"), currentUserID(c), req.Spectator)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"arena": arena, "joined": true})
+	}
+}
+
+func leaveArena(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := newArenaService(database).Leave(c.Request.Context(), c.Param("code"), currentUserID(c)); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"left": true})
+	}
+}
+
+func listArenaMembers(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		members, err := newArenaService(database).Members(c.Request.Context(), c.Param("code"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "arena not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"members": members})
+	}
+}
+
+func listCoopParties(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		parties, err := newCoopService(database).ListByHost(c.Request.Context(), currentUserID(c), limitFromQuery(c))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list coop parties"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"parties": parties})
+	}
+}
+
+func createCoopParty(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req coopPartyRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid coop payload"})
+			return
+		}
+		party, err := newCoopService(database).Create(c.Request.Context(), currentUserID(c), service.CoopPartyInput{
+			Mode:              req.Mode,
+			BattleSaveID:      req.BattleSaveID,
+			RolePlaySessionID: req.RolePlaySessionID,
+			MaxMembers:        req.MaxMembers,
+			SharedState:       req.SharedState,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		_ = createCoopLiveSession(c.Request.Context(), database, currentUserID(c), party)
+		c.JSON(http.StatusCreated, gin.H{"party": party})
+	}
+}
+
+func getCoopParty(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		party, err := newCoopService(database).Get(c.Request.Context(), c.Param("code"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "coop party not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"party": party})
+	}
+}
+
+func joinCoopParty(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		party, err := newCoopService(database).Join(c.Request.Context(), c.Param("code"), currentUserID(c))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"party": party, "joined": true})
+	}
+}
+
+func leaveCoopParty(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := newCoopService(database).Leave(c.Request.Context(), c.Param("code"), currentUserID(c)); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"left": true})
+	}
+}
+
+func readyCoopParty(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := newCoopService(database).Ready(c.Request.Context(), c.Param("code"), currentUserID(c)); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"ready": true})
+	}
+}
+
+func listCoopMembers(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		members, err := newCoopService(database).Members(c.Request.Context(), c.Param("code"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "coop party not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"members": members})
+	}
+}
+
+func updateCoopState(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req coopPartyRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid coop state payload"})
+			return
+		}
+		if err := newCoopService(database).UpdateState(c.Request.Context(), c.Param("code"), currentUserID(c), req.SharedState); err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only host can update coop state"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"updated": true})
+	}
+}
+
+func listLiveSessions(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+
+		var sessions []models.LiveSession
+		err := database.WithContext(c.Request.Context()).
+			Where("owner_id = ?", currentUserID(c)).
+			Order("updated_at DESC").
+			Limit(limitFromQuery(c)).
+			Find(&sessions).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list live sessions"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"sessions": sessions})
+	}
+}
+
+func listPublicLiveSessions(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("Cache-Control", "no-store")
+
+		var sessions []models.LiveSession
+		err := publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{})).
+			Order("updated_at DESC").
+			Limit(limitFromQuery(c)).
+			Find(&sessions).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list public live sessions"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"sessions": sessions})
+	}
+}
+
+func createLiveSession(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req liveSessionRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid live session payload"})
+			return
+		}
+
+		userID := currentUserID(c)
+		if err := validateLiveAttachments(c, database, userID, req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		channelKey := req.ChannelKey
+		if channelKey == "" {
+			channelKey = "live-" + randomHex(12)
+		}
+
+		now := time.Now()
+		live := models.LiveSession{
+			OwnerID:           userID,
+			ChannelKey:        channelKey,
+			Mode:              defaultString(req.Mode, "battle_ia"),
+			Status:            defaultString(req.Status, "streaming"),
+			BattleSaveID:      req.BattleSaveID,
+			RolePlaySessionID: req.RolePlaySessionID,
+			ArenaID:           req.ArenaID,
+			CoopPartyID:       req.CoopPartyID,
+			ViewerCount:       0,
+			LastEventAt:       &now,
+			StartedAt:         &now,
+			AllowReplay:       req.AllowReplay,
+		}
+
+		err := database.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			if err := tx.Create(&live).Error; err != nil {
+				return err
+			}
+
+			payload, _ := json.Marshal(gin.H{
+				"status":  live.Status,
+				"channel": live.ChannelKey,
+				"message": "live session created",
+			})
+			event := models.LiveEvent{
+				LiveSessionID: live.Id,
+				Sequence:      1,
+				EventType:     "status",
+				AuthorType:    "system",
+				AuthorName:    "system",
+				Payload:       datatypes.JSON(payload),
+			}
+			return tx.Create(&event).Error
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create live session"})
+			return
+		}
+
+		c.JSON(http.StatusCreated, gin.H{"session": live})
+	}
+}
+
+func createCoopLiveSession(ctx context.Context, database *gorm.DB, ownerID uint, party *models.CoopParty) error {
+	if party == nil {
+		return nil
+	}
+
+	coopPartyID := party.Id
+	now := time.Now()
+	live := models.LiveSession{
+		OwnerID:     ownerID,
+		ChannelKey:  "live-" + randomHex(12),
+		Mode:        constants.ModeCoop,
+		Status:      constants.LiveStatusStreaming,
+		CoopPartyID: &coopPartyID,
+		ViewerCount: 0,
+		LastEventAt: &now,
+		StartedAt:   &now,
+		AllowReplay: true,
+	}
+
+	return database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&live).Error; err != nil {
+			return err
+		}
+
+		payload, _ := json.Marshal(gin.H{
+			"status":   live.Status,
+			"channel":  live.ChannelKey,
+			"message":  "coop live session created",
+			"coopCode": party.Code,
+		})
+		event := models.LiveEvent{
+			LiveSessionID: live.Id,
+			Sequence:      1,
+			EventType:     constants.LiveEventTypeStatus,
+			AuthorType:    constants.AuthorTypeSystem,
+			AuthorName:    constants.AuthorTypeSystem,
+			Payload:       datatypes.JSON(payload),
+		}
+		return tx.Create(&event).Error
+	})
+}
+
+func getLiveSession(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session, ok := findOwnedLiveSessionByID(c, database)
+		if !ok {
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"session": session})
+	}
+}
+
+func getPublicLiveSession(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session, ok := findPublicLiveSessionByID(c, database)
+		if !ok {
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"session": session})
+	}
+}
+
+func getLiveSessionEvents(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session, ok := findOwnedLiveSessionByID(c, database)
+		if !ok {
+			return
+		}
+
+		after, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
+		var events []models.LiveEvent
+		err := database.WithContext(c.Request.Context()).
+			Where("live_session_id = ? AND sequence > ?", session.Id, after).
+			Order("sequence ASC").
+			Limit(limitFromQuery(c)).
+			Find(&events).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list live events"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"events": events})
+	}
+}
+
+func getPublicLiveSessionEvents(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session, ok := findPublicLiveSessionByID(c, database)
+		if !ok {
+			return
+		}
+
+		after, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
+		var events []models.LiveEvent
+		err := database.WithContext(c.Request.Context()).
+			Where("live_session_id = ? AND sequence > ?", session.Id, after).
+			Order("sequence ASC").
+			Limit(limitFromQuery(c)).
+			Find(&events).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list public live events"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"events": events})
+	}
+}
+
+func getLiveHistory(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		after, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
+		session, events, err := newLiveService(database).HistoryByChannel(c.Request.Context(), c.Param("channel"), currentUserID(c), after, limitFromQuery(c))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"session": session, "events": events})
+	}
+}
+
+func getPublicLiveHistory(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session, ok := findPublicLiveSessionByChannel(c, database)
+		if !ok {
+			return
+		}
+
+		after, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
+		events, err := liveEventsAfter(c, database, session.Id, after, limitFromQuery(c))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot read public live history"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"session": session, "events": events})
+	}
+}
+
+func streamLiveChannel(database *gorm.DB) gin.HandlerFunc {
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	return func(c *gin.Context) {
+		session, ok := findOwnedLiveSessionByChannel(c, database)
+		if !ok {
+			return
+		}
+
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		database.WithContext(c.Request.Context()).
+			Model(&models.LiveSession{}).
+			Where("id = ?", session.Id).
+			UpdateColumn("viewer_count", gorm.Expr("viewer_count + ?", 1))
+		defer database.WithContext(c.Request.Context()).
+			Model(&models.LiveSession{}).
+			Where("id = ? AND viewer_count > 0", session.Id).
+			UpdateColumn("viewer_count", gorm.Expr("viewer_count - ?", 1))
+
+		lastSequence, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
+		if err := writeWebSocketJSON(conn, gin.H{
+			"type":    "live_connected",
+			"session": session,
+		}); err != nil {
+			return
+		}
+
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			events, err := liveEventsAfter(c, database, session.Id, lastSequence, 100)
+			if err != nil {
+				_ = writeWebSocketJSON(conn, gin.H{"type": "error", "error": "cannot read live events"})
+				return
+			}
+
+			for _, event := range events {
+				if err := writeWebSocketJSON(conn, gin.H{
+					"type":  "live_event",
+					"event": event,
+				}); err != nil {
+					return
+				}
+				lastSequence = event.Sequence
+			}
+
+			var refreshed models.LiveSession
+			err = database.WithContext(c.Request.Context()).
+				Where("id = ? AND owner_id = ?", session.Id, currentUserID(c)).
+				First(&refreshed).Error
+			if err != nil {
+				return
+			}
+			if refreshed.Status == "ended" {
+				_ = writeWebSocketJSON(conn, gin.H{
+					"type":    "live_ended",
+					"session": refreshed,
+				})
+				return
+			}
+
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second)); err != nil {
+					return
+				}
+			case <-c.Request.Context().Done():
+				return
+			}
+		}
+	}
+}
+
+func streamPublicLiveChannel(database *gorm.DB) gin.HandlerFunc {
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	return func(c *gin.Context) {
+		session, ok := findPublicLiveSessionByChannel(c, database)
+		if !ok {
+			return
+		}
+
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		database.WithContext(c.Request.Context()).
+			Model(&models.LiveSession{}).
+			Where("id = ?", session.Id).
+			UpdateColumn("viewer_count", gorm.Expr("viewer_count + ?", 1))
+		defer database.WithContext(c.Request.Context()).
+			Model(&models.LiveSession{}).
+			Where("id = ? AND viewer_count > 0", session.Id).
+			UpdateColumn("viewer_count", gorm.Expr("viewer_count - ?", 1))
+
+		lastSequence, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
+		if err := writeWebSocketJSON(conn, gin.H{
+			"type":    "live_connected",
+			"session": session,
+		}); err != nil {
+			return
+		}
+
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			events, err := liveEventsAfter(c, database, session.Id, lastSequence, 100)
+			if err != nil {
+				_ = writeWebSocketJSON(conn, gin.H{"type": "error", "error": "cannot read live events"})
+				return
+			}
+
+			for _, event := range events {
+				if err := writeWebSocketJSON(conn, gin.H{
+					"type":  "live_event",
+					"event": event,
+				}); err != nil {
+					return
+				}
+				lastSequence = event.Sequence
+			}
+
+			var refreshed models.LiveSession
+			err = database.WithContext(c.Request.Context()).
+				Where("id = ?", session.Id).
+				First(&refreshed).Error
+			if err != nil {
+				return
+			}
+			if refreshed.Status == constants.LiveStatusEnded {
+				_ = writeWebSocketJSON(conn, gin.H{
+					"type":    "live_ended",
+					"session": refreshed,
+				})
+				return
+			}
+
+			select {
+			case <-ticker.C:
+				if err := conn.WriteControl(websocket.PingMessage, []byte("ping"), time.Now().Add(5*time.Second)); err != nil {
+					return
+				}
+			case <-c.Request.Context().Done():
+				return
+			}
+		}
+	}
+}
+
+func endLiveSession(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		session, ok := findOwnedLiveSessionByID(c, database)
+		if !ok {
+			return
+		}
+
+		now := time.Now()
+		err := database.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			var lastEvent models.LiveEvent
+			lastSequence := 0
+			if err := tx.
+				Where("live_session_id = ?", session.Id).
+				Order("sequence DESC").
+				First(&lastEvent).Error; err == nil {
+				lastSequence = lastEvent.Sequence
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+
+			payload, _ := json.Marshal(gin.H{
+				"status":  "ended",
+				"channel": session.ChannelKey,
+				"message": "live session ended",
+			})
+			event := models.LiveEvent{
+				LiveSessionID: session.Id,
+				Sequence:      lastSequence + 1,
+				EventType:     "status",
+				AuthorType:    "system",
+				AuthorName:    "system",
+				Payload:       datatypes.JSON(payload),
+			}
+			if err := tx.Create(&event).Error; err != nil {
+				return err
+			}
+
+			return tx.Model(&models.LiveSession{}).
+				Where("id = ? AND owner_id = ?", session.Id, currentUserID(c)).
+				Updates(map[string]any{
+					"status":        "ended",
+					"ended_at":      &now,
+					"last_event_at": &now,
+				}).Error
+		})
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot end live session"})
+			return
+		}
+
+		session.Status = "ended"
+		session.EndedAt = &now
+		session.LastEventAt = &now
+		c.JSON(http.StatusOK, gin.H{"session": session})
+	}
+}
+
+func me(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var user models.Users
+		err := database.WithContext(c.Request.Context()).
+			Where("id = ?", currentUserID(c)).
+			First(&user).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get user"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"user": userResponse(&user)})
+	}
+}
+
+func updateMe(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req updateUserRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user payload"})
+			return
+		}
+
+		users := repository.NewUserRepository(database)
+		user, err := users.GetByID(c.Request.Context(), currentUserID(c))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get user"})
+			return
+		}
+
+		fields := make(map[string]any)
+
+		if req.Email != nil {
+			email := strings.TrimSpace(*req.Email)
+			if email == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+				return
+			}
+			if email != user.Email {
+				existingUser, err := users.GetByEmail(c.Request.Context(), email)
+				if err == nil && existingUser != nil && existingUser.Id != user.Id {
+					c.JSON(http.StatusConflict, gin.H{"error": "email already exists"})
+					return
+				}
+				if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot check email"})
+					return
+				}
+			}
+			fields["email"] = email
+		}
+
+		if req.Pseudo != nil {
+			pseudo := strings.TrimSpace(*req.Pseudo)
+			if pseudo == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "pseudo is required"})
+				return
+			}
+			fields["pseudo"] = pseudo
+		}
+
+		if req.BirthdayDate != nil {
+			fields["birthday_date"] = strings.TrimSpace(*req.BirthdayDate)
+		}
+
+		if req.Avatar != nil {
+			fields["avatar"] = strings.TrimSpace(*req.Avatar)
+		}
+
+		if req.NewPassword != nil {
+			newPassword := *req.NewPassword
+			currentPassword := ""
+			if req.CurrentPassword != nil {
+				currentPassword = *req.CurrentPassword
+			}
+			if strings.TrimSpace(newPassword) == "" || strings.TrimSpace(currentPassword) == "" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "currentPassword and newPassword are required"})
+				return
+			}
+			if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(currentPassword)); err != nil {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid current password"})
+				return
+			}
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot hash password"})
+				return
+			}
+			fields["password"] = string(hashedPassword)
+		}
+
+		if len(fields) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "no user fields to update"})
+			return
+		}
+
+		if err := users.UpdateFields(c.Request.Context(), user.Id, fields); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot update user"})
+			return
+		}
+
+		updatedUser, err := users.GetByID(c.Request.Context(), user.Id)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot reload user"})
+			return
+		}
+
+		token, err := makeJWT(updatedUser)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot create token"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"updated":    true,
+			"token":      token,
+			"expires_in": int64((24 * time.Hour).Seconds()),
+			"user":       userResponse(updatedUser),
+		})
+	}
+}
+
+func updateUserProgression(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+			return
+		}
+
+		var req progressionRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid progression payload"})
+			return
+		}
+		if req.XP == nil && req.Coin == nil && req.XPDelta == nil && req.CoinDelta == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "xp, coin, xpDelta or coinDelta is required"})
+			return
+		}
+
+		users := repository.NewUserRepository(database)
+		updatedUser, err := users.UpdateProgression(c.Request.Context(), id, req.XP, req.Coin, req.XPDelta, req.CoinDelta)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"updated": true,
+			"reason":  req.Reason,
+			"user":    userResponse(updatedUser),
+		})
+	}
+}
+
+func hydrateBattleProfiles(c *gin.Context, database *gorm.DB, userID uint, req *battleRequest) error {
+	if req.IA1ProfileID != 0 {
+		var profile models.IAProfile
+		err := database.WithContext(c.Request.Context()).
+			Where("id = ? AND owner_id = ?", req.IA1ProfileID, userID).
+			First(&profile).Error
+		if err != nil {
+			return fmt.Errorf("ia1 profile not found")
+		}
+		applyProfileToBattleRequest(&profile, req, 1)
+	}
+
+	if req.IA2ProfileID != 0 {
+		var profile models.IAProfile
+		err := database.WithContext(c.Request.Context()).
+			Where("id = ? AND owner_id = ?", req.IA2ProfileID, userID).
+			First(&profile).Error
+		if err != nil {
+			return fmt.Errorf("ia2 profile not found")
+		}
+		applyProfileToBattleRequest(&profile, req, 2)
+	}
+
+	return nil
+}
+
+func applyProfileToBattleRequest(profile *models.IAProfile, req *battleRequest, slot int) {
+	if slot == 1 {
+		req.Provider1 = defaultString(req.Provider1, profile.ProviderName)
+		req.IAModels = defaultString(req.IAModels, profile.ModelName)
+		req.IA1Name = defaultString(req.IA1Name, profile.Name)
+		req.IA1Personality = defaultString(req.IA1Personality, profile.Personality)
+		req.IA1Mindset = defaultString(req.IA1Mindset, profile.Mindset)
+		req.IA1Style = defaultString(req.IA1Style, profile.Style)
+		req.IA1Goal = defaultString(req.IA1Goal, profile.Goal)
+		req.IA1Weakness = defaultString(req.IA1Weakness, profile.Weakness)
+		return
+	}
+
+	req.Provider2 = defaultString(req.Provider2, profile.ProviderName)
+	req.IAModels2 = defaultString(req.IAModels2, profile.ModelName)
+	req.IA2Name = defaultString(req.IA2Name, profile.Name)
+	req.IA2Personality = defaultString(req.IA2Personality, profile.Personality)
+	req.IA2Mindset = defaultString(req.IA2Mindset, profile.Mindset)
+	req.IA2Style = defaultString(req.IA2Style, profile.Style)
+	req.IA2Goal = defaultString(req.IA2Goal, profile.Goal)
+	req.IA2Weakness = defaultString(req.IA2Weakness, profile.Weakness)
+}
+
+func findOwnedBattle(c *gin.Context, database *gorm.DB) (models.BattleSave, bool) {
+	var battle models.BattleSave
+	err := database.WithContext(c.Request.Context()).
+		Where("id = ? AND owner_id = ?", c.Param("id"), currentUserID(c)).
+		First(&battle).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "battle not found"})
+		return battle, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get battle"})
+		return battle, false
+	}
+
+	return battle, true
+}
+
+func findPublicBattle(c *gin.Context, database *gorm.DB) (models.BattleSave, bool) {
+	var battle models.BattleSave
+	err := publicBattleScope(database.WithContext(c.Request.Context()).Model(&models.BattleSave{})).
+		Where("battle_saves.id = ?", c.Param("id")).
+		First(&battle).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "public battle not found"})
+		return battle, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get public battle"})
+		return battle, false
+	}
+
+	return battle, true
+}
+
+func findOwnedIAProfile(c *gin.Context, database *gorm.DB) (models.IAProfile, bool) {
+	var profile models.IAProfile
+	err := database.WithContext(c.Request.Context()).
+		Where("id = ? AND owner_id = ?", c.Param("id"), currentUserID(c)).
+		First(&profile).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "ia profile not found"})
+		return profile, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get ia profile"})
+		return profile, false
+	}
+
+	return profile, true
+}
+
+func newBattleService(database *gorm.DB) *service.BattleService {
+	return service.NewBattleService(
+		repository.NewBattleRepository(database),
+		repository.NewQuestRepository(database),
+		repository.NewIAProfileRepository(database),
+		service.NewLiveService(repository.NewLiveRepository(database)),
+	)
+}
+
+func newQuestService(database *gorm.DB) *service.QuestService {
+	return service.NewQuestService(repository.NewQuestRepository(database))
+}
+
+func newArenaService(database *gorm.DB) *service.ArenaService {
+	return service.NewArenaService(
+		repository.NewArenaRepository(database),
+		repository.NewBattleRepository(database),
+	)
+}
+
+func newRolePlayService(database *gorm.DB) *service.RolePlayService {
+	return service.NewRolePlayService(
+		repository.NewRolePlayRepository(database),
+		repository.NewQuestRepository(database),
+	)
+}
+
+func newCoopService(database *gorm.DB) *service.CoopService {
+	return service.NewCoopService(repository.NewCoopRepository(database))
+}
+
+func newLiveService(database *gorm.DB) *service.LiveService {
+	return service.NewLiveService(repository.NewLiveRepository(database))
+}
+
+func toServiceBattleRequest(req battleRequest) service.BattleRequest {
+	return service.BattleRequest{
+		Provider1:            req.Provider1,
+		Provider2:            req.Provider2,
+		IAKey1:               req.IAKey1,
+		IAKey2:               req.IAKey2,
+		IAModels:             req.IAModels,
+		IAModels2:            req.IAModels2,
+		IA1ProfileID:         req.IA1ProfileID,
+		IA2ProfileID:         req.IA2ProfileID,
+		IA1Name:              req.IA1Name,
+		IA1Personality:       req.IA1Personality,
+		IA1Mindset:           req.IA1Mindset,
+		IA1Style:             req.IA1Style,
+		IA1Goal:              req.IA1Goal,
+		IA1Weakness:          req.IA1Weakness,
+		IA2Name:              req.IA2Name,
+		IA2Personality:       req.IA2Personality,
+		IA2Mindset:           req.IA2Mindset,
+		IA2Style:             req.IA2Style,
+		IA2Goal:              req.IA2Goal,
+		IA2Weakness:          req.IA2Weakness,
+		Question:             req.Question,
+		QuestID:              req.QuestID,
+		Title:                req.Title,
+		Visibility:           req.Visibility,
+		TotalRounds:          req.TotalRounds,
+		RoundDurationSeconds: req.RoundDurationSeconds,
+		PublicVote:           req.PublicVote,
+	}
+}
+
+func toBattleQuestInput(req battleQuestRequest) service.BattleQuestInput {
+	return service.BattleQuestInput{
+		Slug:     req.Slug,
+		Title:    req.Title,
+		Content:  req.Content,
+		Level:    req.Level,
+		Point:    req.Point,
+		Theme:    req.Theme,
+		Xp:       req.Xp,
+		Coin:     req.Coin,
+		Mode:     req.Mode,
+		Source:   req.Source,
+		Status:   req.Status,
+		Metadata: req.Metadata,
+	}
+}
+
+func toRolePlayQuestInput(req rolePlayQuestRequest) service.RolePlayQuestInput {
+	return service.RolePlayQuestInput{
+		Slug:     req.Slug,
+		Title:    req.Title,
+		Summary:  req.Summary,
+		Prompt:   req.Prompt,
+		Theme:    req.Theme,
+		Level:    req.Level,
+		Xp:       req.Xp,
+		Coin:     req.Coin,
+		Source:   req.Source,
+		Status:   req.Status,
+		Metadata: req.Metadata,
+	}
+}
+
+func parseUintParam(c *gin.Context, name string) (uint, error) {
+	value, err := strconv.ParseUint(c.Param(name), 10, 64)
+	if err != nil || value == 0 {
+		return 0, fmt.Errorf("invalid %s", name)
+	}
+
+	return uint(value), nil
+}
+
+func findOwnedLiveSessionByID(c *gin.Context, database *gorm.DB) (models.LiveSession, bool) {
+	var session models.LiveSession
+	err := database.WithContext(c.Request.Context()).
+		Where("id = ? AND owner_id = ?", c.Param("id"), currentUserID(c)).
+		First(&session).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "live session not found"})
+		return session, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get live session"})
+		return session, false
+	}
+
+	return session, true
+}
+
+func findPublicLiveSessionByID(c *gin.Context, database *gorm.DB) (models.LiveSession, bool) {
+	var session models.LiveSession
+	err := publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{})).
+		Where("live_sessions.id = ?", c.Param("id")).
+		First(&session).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "public live session not found"})
+		return session, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get public live session"})
+		return session, false
+	}
+
+	return session, true
+}
+
+func findOwnedLiveSessionByChannel(c *gin.Context, database *gorm.DB) (models.LiveSession, bool) {
+	var session models.LiveSession
+	err := database.WithContext(c.Request.Context()).
+		Where("channel_key = ? AND owner_id = ?", c.Param("channel"), currentUserID(c)).
+		First(&session).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "live channel not found"})
+		return session, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get live channel"})
+		return session, false
+	}
+
+	return session, true
+}
+
+func findPublicLiveSessionByChannel(c *gin.Context, database *gorm.DB) (models.LiveSession, bool) {
+	var session models.LiveSession
+	err := publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{})).
+		Where("live_sessions.channel_key = ?", c.Param("channel")).
+		First(&session).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "public live channel not found"})
+		return session, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get public live channel"})
+		return session, false
+	}
+
+	return session, true
+}
+
+func findPublicArena(c *gin.Context, database *gorm.DB) (models.BattleArena, bool) {
+	var arena models.BattleArena
+	err := publicArenaScope(database.WithContext(c.Request.Context()).Model(&models.BattleArena{})).
+		Where("battle_arenas.code = ?", c.Param("code")).
+		First(&arena).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "public arena not found"})
+		return arena, false
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get public arena"})
+		return arena, false
+	}
+
+	return arena, true
+}
+
+func publicBattleScope(tx *gorm.DB) *gorm.DB {
+	return tx.Where(`battle_saves.visibility = ?
+		OR EXISTS (
+			SELECT 1
+			FROM battle_arenas
+			WHERE battle_arenas.battle_save_id = battle_saves.id
+				AND battle_arenas.deleted_at IS NULL
+				AND battle_arenas.allow_spectators = ?
+		)
+		OR EXISTS (
+			SELECT 1
+			FROM live_sessions
+			WHERE live_sessions.battle_save_id = battle_saves.id
+				AND live_sessions.deleted_at IS NULL
+				AND (live_sessions.status <> ? OR live_sessions.allow_replay = ?)
+		)`, constants.VisibilityPublic, true, constants.LiveStatusEnded, true)
+}
+
+func publicArenaScope(tx *gorm.DB) *gorm.DB {
+	return tx.Where("battle_arenas.allow_spectators = ?", true).
+		Where("battle_arenas.status NOT IN ?", []string{constants.ArenaStatusFinished, constants.ArenaStatusClosed})
+}
+
+func publicLiveSessionScope(tx *gorm.DB) *gorm.DB {
+	return tx.Where("(live_sessions.status <> ? OR live_sessions.allow_replay = ?)", constants.LiveStatusEnded, true).
+		Where("(live_sessions.battle_save_id IS NOT NULL OR live_sessions.arena_id IS NOT NULL OR live_sessions.role_play_session_id IS NOT NULL OR live_sessions.coop_party_id IS NOT NULL)")
+}
+
+func validateLiveAttachments(c *gin.Context, database *gorm.DB, userID uint, req liveSessionRequest) error {
+	attachments := 0
+
+	if req.BattleSaveID != nil {
+		attachments++
+		var count int64
+		if err := database.WithContext(c.Request.Context()).
+			Model(&models.BattleSave{}).
+			Where("id = ? AND owner_id = ?", *req.BattleSaveID, userID).
+			Count(&count).Error; err != nil || count == 0 {
+			return fmt.Errorf("battleSaveId not found for user")
+		}
+	}
+
+	if req.RolePlaySessionID != nil {
+		attachments++
+		var count int64
+		if err := database.WithContext(c.Request.Context()).
+			Model(&models.RolePlaySession{}).
+			Where("id = ? AND owner_id = ?", *req.RolePlaySessionID, userID).
+			Count(&count).Error; err != nil || count == 0 {
+			return fmt.Errorf("rolePlaySessionId not found for user")
+		}
+	}
+
+	if req.ArenaID != nil {
+		attachments++
+		var count int64
+		if err := database.WithContext(c.Request.Context()).
+			Model(&models.BattleArena{}).
+			Where("id = ? AND host_user_id = ?", *req.ArenaID, userID).
+			Count(&count).Error; err != nil || count == 0 {
+			return fmt.Errorf("arenaId not found for user")
+		}
+	}
+
+	if req.CoopPartyID != nil {
+		attachments++
+		var count int64
+		if err := database.WithContext(c.Request.Context()).
+			Model(&models.CoopParty{}).
+			Where("id = ? AND host_user_id = ?", *req.CoopPartyID, userID).
+			Count(&count).Error; err != nil || count == 0 {
+			return fmt.Errorf("coopPartyId not found for user")
+		}
+	}
+
+	if attachments > 1 {
+		return fmt.Errorf("only one live attachment is allowed")
+	}
+
+	return nil
+}
+
+func liveEventsAfter(c *gin.Context, database *gorm.DB, sessionID uint, after int, limit int) ([]models.LiveEvent, error) {
+	var events []models.LiveEvent
+	err := database.WithContext(c.Request.Context()).
+		Where("live_session_id = ? AND sequence > ?", sessionID, after).
+		Order("sequence ASC").
+		Limit(limit).
+		Find(&events).Error
+	return events, err
+}
+
+func writeWebSocketJSON(conn *websocket.Conn, payload any) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		return err
+	}
+	return conn.WriteJSON(payload)
+}
+
+func randomHex(byteCount int) string {
+	buffer := make([]byte, byteCount)
+	if _, err := rand.Read(buffer); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
+
+	return hex.EncodeToString(buffer)
+}
+
+func bindPayload(c *gin.Context, out any) error {
+	if strings.Contains(c.GetHeader("Content-Type"), "application/json") {
+		return c.ShouldBindJSON(out)
+	}
+
+	return c.ShouldBind(out)
+}
+
+func writeNDJSON(c *gin.Context, flusher http.Flusher, payload any) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	_, _ = c.Writer.Write(data)
+	_, _ = c.Writer.Write([]byte("\n"))
+	flusher.Flush()
+}
+
+func battleEventKey(event scenarios.BattleStreamEvent) string {
+	return fmt.Sprintf("%d:%s:%s", event.Round, event.IA, event.Type)
+}
+
+func providerURL(name string) (string, error) {
+	return service.ProviderURL(name)
+}
+
+func applyQuestFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
+	status := c.Query("status")
+	if status == "" {
+		status = "published"
+	}
+	if status != "all" {
+		query = query.Where("status = ?", status)
+	}
+	if theme := c.Query("theme"); theme != "" {
+		query = query.Where("theme = ?", theme)
+	}
+	if level := c.Query("level"); level != "" {
+		query = query.Where("level = ?", level)
+	}
+
+	return query
+}
+
+func limitFromQuery(c *gin.Context) int {
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	if err != nil || limit <= 0 {
+		return 50
+	}
+	if limit > 200 {
+		return 200
+	}
+
+	return limit
+}
+
+func defaultString(value string, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+
+	return value
+}
+
+func aiProviderTestTimeout() time.Duration {
+	value, err := strconv.Atoi(getEnv("AI_PROVIDER_TEST_TIMEOUT_SECONDS", "20"))
+	if err != nil || value <= 0 {
+		return 20 * time.Second
+	}
+
+	return time.Duration(value) * time.Second
+}
+
+func aiProviderGenerationTimeout() time.Duration {
+	value, err := strconv.Atoi(getEnv("AI_PROVIDER_GENERATION_TIMEOUT_SECONDS", "45"))
+	if err != nil || value <= 0 {
+		return 45 * time.Second
+	}
+
+	return time.Duration(value) * time.Second
+}
+
+func truncateString(value string, maxLength int) string {
+	if maxLength <= 0 || len(value) <= maxLength {
+		return value
+	}
+
+	return value[:maxLength]
+}
+
+func slugify(value string) string {
+	slug := strings.ToLower(strings.TrimSpace(value))
+	slug = strings.ReplaceAll(slug, " ", "-")
+	slug = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return -1
+	}, slug)
+	if slug == "" {
+		return strconv.FormatInt(time.Now().UnixNano(), 10)
+	}
+
+	return slug
+}

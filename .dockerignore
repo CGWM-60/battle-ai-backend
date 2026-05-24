@@ -1,0 +1,10 @@
+.git
+.gitignore
+.DS_Store
+compose*.yml
+Dockerfile*
+README*
+tmp
+vendor
+*.log
+*.out

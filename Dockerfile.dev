@@ -1,0 +1,16 @@
+FROM golang:1.25-bookworm
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+ENV APP_HOST=0.0.0.0
+ENV APP_PORT=8080
+ENV GIN_MODE=debug
+
+EXPOSE 8080
+
+CMD ["go", "run", "."]
