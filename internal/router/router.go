@@ -83,6 +83,7 @@ func RouterApp(database *gorm.DB) {
 	private.GET("/battles/:id", getBattle(database))
 	private.GET("/battles/:id/turns", getBattleTurns(database))
 	private.POST("/battles/:id/next-round", nextBattleRound(database))
+	private.POST("/battles/:id/judge", judgeBattle(database))
 	private.POST("/battles/:id/resume", resumeBattle(database))
 	private.POST("/battles/:id/cancel", cancelBattle(database))
 

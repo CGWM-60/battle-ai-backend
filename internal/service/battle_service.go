@@ -518,6 +518,66 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 	return runErr
 }
 
+func (s *BattleService) Judge(ctx context.Context, ownerID uint, battleID uint, onEvent func(scenarios.BattleStreamEvent)) error {
+	battle, err := s.battles.GetOwnedByID(ctx, battleID, ownerID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("battle not found")
+		}
+		return fmt.Errorf("cannot get battle")
+	}
+
+	if battle.Status == constants.BattleStatusAbandoned {
+		return fmt.Errorf("battle is abandoned")
+	}
+
+	turns, err := s.battles.ListTurns(ctx, battle.Id)
+	if err != nil {
+		return fmt.Errorf("cannot list battle turns")
+	}
+	history := turnsToHistory(turns)
+	if len(history) == 0 {
+		return fmt.Errorf("judge mandatory: no IA messages to judge")
+	}
+
+	maxRound := maxRoundFromHistory(history)
+	totalRounds := battle.TotalRounds
+	if totalRounds < 1 {
+		totalRounds = 3
+	}
+	if maxRound < totalRounds {
+		return fmt.Errorf("battle not ready for judgement")
+	}
+
+	sequence, err := s.battles.NextTurnSequence(ctx, battle.Id)
+	if err != nil {
+		return fmt.Errorf("cannot prepare judge sequence")
+	}
+
+	run := &BattleRun{Battle: battle, IAs: iasFromSnapshot(battle)}
+	_, judgeErr := s.finalizeJudgeResult(ctx, run, &sequence, onEvent)
+	if judgeErr != nil {
+		return judgeErr
+	}
+
+	now := time.Now()
+	updates := map[string]any{
+		"status":           constants.BattleStatusFinished,
+		"finished_at":      &now,
+		"last_activity_at": &now,
+		"winner_name":      winnerNameFromJudgeContext(run),
+		"context":          run.Battle.Context,
+	}
+	if err := s.battles.UpdateFields(ctx, battle.Id, updates); err != nil {
+		return fmt.Errorf("cannot persist judge result")
+	}
+	if s.live != nil {
+		_ = s.live.EndSessionsByBattle(ctx, battle.Id)
+	}
+
+	return nil
+}
+
 func (s *BattleService) finalizeJudgeResult(
 	ctx context.Context,
 	run *BattleRun,
@@ -618,6 +678,23 @@ func winnerNameFromJudgeContext(run *BattleRun) string {
 	}
 
 	return ""
+}
+
+func iasFromSnapshot(battle *models.BattleSave) []models.BattleIAConfig {
+	if battle == nil || len(battle.IASnapshot) == 0 {
+		return nil
+	}
+
+	var snapshots []models.BattleIAConfig
+	if err := json.Unmarshal(battle.IASnapshot, &snapshots); err != nil {
+		return nil
+	}
+
+	for index := range snapshots {
+		snapshots[index].Provider = nil
+	}
+
+	return snapshots
 }
 
 func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *BattleRequest) ([]models.BattleIAConfig, error) {

@@ -432,6 +432,45 @@ func nextBattleRound(database *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func judgeBattle(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		battleID, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid battle id"})
+			return
+		}
+
+		battleService := newBattleService(database)
+
+		c.Writer.Header().Set("Content-Type", "application/x-ndjson")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Writer.Header().Set("X-Accel-Buffering", "no")
+
+		flusher, ok := c.Writer.(http.Flusher)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming non supporte"})
+			return
+		}
+
+		writeNDJSON(c, flusher, gin.H{
+			"type":      "judge_started",
+			"battle_id": battleID,
+			"done":      true,
+		})
+
+		if err := battleService.Judge(c.Request.Context(), currentUserID(c), battleID, func(event scenarios.BattleStreamEvent) {
+			writeNDJSON(c, flusher, event)
+		}); err != nil {
+			writeNDJSON(c, flusher, scenarios.BattleStreamEvent{
+				Type:  "error",
+				Error: err.Error(),
+				Done:  true,
+			})
+		}
+	}
+}
+
 func resumeBattle(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req battleRequest
