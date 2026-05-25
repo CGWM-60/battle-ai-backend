@@ -25,6 +25,8 @@ import (
 const cronQuestLimit = 10
 const cronLogLimit = 300
 
+var cronScheduleHours = []int{8, 12, 20}
+
 type CronLogEntry struct {
 	CreatedAt string
 	RunID     string
@@ -124,11 +126,11 @@ func StartQuestGenerationCron(db *gorm.DB) {
 	location := loadLocation()
 	setCronRuntime(true, location.String())
 	log.Printf(
-		"[quest-cron] step=boot status=enabled timezone=%s hours=08-21 limit=%d battle_job=true roleplay_job=true",
+		"[quest-cron] step=boot status=enabled timezone=%s hours=08,12,20 limit=%d battle_job=true roleplay_job=true",
 		location.String(),
 		cronQuestLimit,
 	)
-	recordCronLog(CronLogEntry{Step: "boot", Status: "enabled", Message: fmt.Sprintf("timezone=%s hours=08-21 limit=%d battle_job=true roleplay_job=true", location.String(), cronQuestLimit)})
+	recordCronLog(CronLogEntry{Step: "boot", Status: "enabled", Message: fmt.Sprintf("timezone=%s hours=08,12,20 limit=%d battle_job=true roleplay_job=true", location.String(), cronQuestLimit)})
 
 	go runHourlyJob(db, location, "battle", runBattleQuestJob)
 	go runHourlyJob(db, location, "roleplay", runRolePlayQuestJob)
@@ -153,7 +155,7 @@ func runHourlyJob(
 		if localNow.Minute() != 0 {
 			continue
 		}
-		if localNow.Hour() < 8 || localNow.Hour() > 21 {
+		if !isScheduledCronHour(localNow.Hour()) {
 			continue
 		}
 
@@ -396,10 +398,30 @@ func providerForHour(now time.Time) (aiProviderConfig, bool) {
 }
 
 func providerNameForHour(now time.Time) string {
-	if (now.Hour()-8)%2 == 0 {
+	slotIndex, ok := scheduledCronSlotIndex(now.Hour())
+	if !ok {
+		slotIndex = 0
+	}
+	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	dayIndex := int(midnight.Unix() / int64((24 * time.Hour).Seconds()))
+	if (dayIndex*len(cronScheduleHours)+slotIndex)%2 == 0 {
 		return "mistral"
 	}
 	return "openai"
+}
+
+func isScheduledCronHour(hour int) bool {
+	_, ok := scheduledCronSlotIndex(hour)
+	return ok
+}
+
+func scheduledCronSlotIndex(hour int) (int, bool) {
+	for index, scheduledHour := range cronScheduleHours {
+		if hour == scheduledHour {
+			return index, true
+		}
+	}
+	return 0, false
 }
 
 func providerKeyEnvForHour(now time.Time) string {
@@ -600,7 +622,7 @@ func Snapshot() CronSnapshot {
 	return CronSnapshot{
 		Enabled:  cronMemory.enabled,
 		Timezone: cronMemory.timezone,
-		Window:   "08:00-21:00",
+		Window:   "08:00, 12:00, 20:00",
 		Limit:    cronQuestLimit,
 		NextRun:  nextRunLocked(),
 		Battle:   cronMemory.states["battle"],
@@ -682,7 +704,7 @@ func nextRunLocked() string {
 	}
 	next := time.Now().In(location).Truncate(time.Hour).Add(time.Hour)
 	for i := 0; i < 72; i++ {
-		if next.Hour() >= 8 && next.Hour() <= 21 {
+		if isScheduledCronHour(next.Hour()) {
 			return next.Format(time.RFC3339)
 		}
 		next = next.Add(time.Hour)
