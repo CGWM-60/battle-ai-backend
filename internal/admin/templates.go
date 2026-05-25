@@ -89,6 +89,59 @@ const adminHTML = `
       </div>
     </section>
 
+    <section class="panel">
+      <h2>Cron Quetes IA</h2>
+      <div class="cron-summary">
+        <article><small>Etat</small><strong class="{{if .Cron.Enabled}}good{{else}}bad{{end}}">{{if .Cron.Enabled}}actif{{else}}inactif{{end}}</strong></article>
+        <article><small>Timezone</small><strong>{{.Cron.Timezone}}</strong></article>
+        <article><small>Fenetre</small><strong>{{.Cron.Window}}</strong></article>
+        <article><small>Limite</small><strong>{{.Cron.Limit}}</strong></article>
+        <article><small>Prochain run</small><strong>{{.Cron.NextRun}}</strong></article>
+      </div>
+      <table class="cron-table">
+        <thead><tr><th>Job</th><th>Dernier run</th><th>Provider</th><th>Step</th><th>Status</th><th>Duree</th><th>Message</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>battle</td>
+            <td>{{if .Cron.Battle.LastRunID}}{{.Cron.Battle.LastRunID}}{{else}}-{{end}}</td>
+            <td>{{if .Cron.Battle.LastProvider}}{{.Cron.Battle.LastProvider}} / {{.Cron.Battle.LastModel}}{{else}}-{{end}}</td>
+            <td>{{if .Cron.Battle.LastStep}}{{.Cron.Battle.LastStep}}{{else}}-{{end}}</td>
+            <td><span class="status {{.Cron.Battle.LastStatus}}">{{if .Cron.Battle.LastStatus}}{{.Cron.Battle.LastStatus}}{{else}}idle{{end}}</span></td>
+            <td>{{.Cron.Battle.LastDurationMS}} ms</td>
+            <td class="prewrap">{{if .Cron.Battle.LastError}}{{.Cron.Battle.LastError}}{{else}}{{.Cron.Battle.LastMessage}}{{end}}</td>
+          </tr>
+          <tr>
+            <td>roleplay</td>
+            <td>{{if .Cron.RolePlay.LastRunID}}{{.Cron.RolePlay.LastRunID}}{{else}}-{{end}}</td>
+            <td>{{if .Cron.RolePlay.LastProvider}}{{.Cron.RolePlay.LastProvider}} / {{.Cron.RolePlay.LastModel}}{{else}}-{{end}}</td>
+            <td>{{if .Cron.RolePlay.LastStep}}{{.Cron.RolePlay.LastStep}}{{else}}-{{end}}</td>
+            <td><span class="status {{.Cron.RolePlay.LastStatus}}">{{if .Cron.RolePlay.LastStatus}}{{.Cron.RolePlay.LastStatus}}{{else}}idle{{end}}</span></td>
+            <td>{{.Cron.RolePlay.LastDurationMS}} ms</td>
+            <td class="prewrap">{{if .Cron.RolePlay.LastError}}{{.Cron.RolePlay.LastError}}{{else}}{{.Cron.RolePlay.LastMessage}}{{end}}</td>
+          </tr>
+        </tbody>
+      </table>
+      <h3>Traces recentes</h3>
+      <table class="cron-table">
+        <thead><tr><th>Date</th><th>Job</th><th>Run</th><th>Provider</th><th>Step</th><th>Status</th><th>Message</th></tr></thead>
+        <tbody>
+        {{range .Cron.Logs}}
+          <tr>
+            <td>{{.CreatedAt}}</td>
+            <td>{{if .Job}}{{.Job}}{{else}}-{{end}}</td>
+            <td>{{if .RunID}}{{.RunID}}{{else}}-{{end}}</td>
+            <td>{{if .Provider}}{{.Provider}}{{if .Model}} / {{.Model}}{{end}}{{else}}-{{end}}</td>
+            <td>{{.Step}}</td>
+            <td><span class="status {{.Status}}">{{.Status}}</span></td>
+            <td class="prewrap">{{.Message}}</td>
+          </tr>
+        {{else}}
+          <tr><td colspan="7">Aucune trace cron en memoire.</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </section>
+
     <section class="grid forms">
       <article class="panel">
         <h2>Creer Quete Battle</h2>
@@ -222,6 +275,6 @@ const adminHTML = `
 {{end}}
 
 {{define "style"}}
-*{box-sizing:border-box}body{margin:0;background:#f6f7f9;color:#17202a;font:14px/1.45 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.topbar{height:60px;background:#111827;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:2}.topbar span{margin-left:14px;color:#cbd5e1}.page{max-width:1280px;margin:0 auto;padding:24px}.grid{display:grid;gap:16px}.metrics{grid-template-columns:repeat(8,minmax(0,1fr));margin-bottom:16px}.metrics article,.panel{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px}.metrics small{display:block;color:#6b7280}.metrics strong{font-size:22px}.forms{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:16px}.lists{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:40px}.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}h1,h2,h3{margin:0 0 12px}h2{font-size:18px}h3{font-size:15px;color:#374151}form{margin:0}input,textarea,select{width:100%;border:1px solid #cfd6df;border-radius:6px;padding:10px;margin-bottom:10px;background:#fff;color:#111827}textarea{min-height:88px;resize:vertical}.row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}button{border:0;border-radius:6px;background:#2563eb;color:#fff;padding:10px 14px;cursor:pointer;font-weight:600}.ghost{background:#374151}.danger{background:#dc2626;padding:7px 10px}.alert{border-radius:8px;padding:12px 14px;margin-bottom:16px}.ok{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}.error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}.good{color:#047857}.bad{color:#b91c1c}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid #e5e7eb;padding:10px;vertical-align:middle}dl{display:grid;grid-template-columns:220px 1fr;gap:8px;margin:0}dt{color:#6b7280}dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}ul{margin:0;padding-left:18px}li{margin:8px 0}.login-body{min-height:100vh;display:grid;place-items:center;background:#111827}.login-panel{width:min(420px,calc(100vw - 32px));background:#fff;border-radius:8px;padding:28px}.login-panel h1{font-size:26px}.login-panel p{color:#6b7280;margin-top:0}@media(max-width:980px){.metrics,.forms,.lists,.two{grid-template-columns:1fr}.row{grid-template-columns:1fr}.topbar{padding:0 14px}.page{padding:14px}}
+*{box-sizing:border-box}body{margin:0;background:#f6f7f9;color:#17202a;font:14px/1.45 Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.topbar{height:60px;background:#111827;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:2}.topbar span{margin-left:14px;color:#cbd5e1}.page{max-width:1280px;margin:0 auto;padding:24px}.grid{display:grid;gap:16px}.metrics{grid-template-columns:repeat(8,minmax(0,1fr));margin-bottom:16px}.metrics article,.panel{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:16px}.metrics small{display:block;color:#6b7280}.metrics strong{font-size:22px}.forms{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:16px}.lists{grid-template-columns:repeat(3,minmax(0,1fr));margin-bottom:40px}.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}h1,h2,h3{margin:0 0 12px}h2{font-size:18px}h3{font-size:15px;color:#374151}form{margin:0}input,textarea,select{width:100%;border:1px solid #cfd6df;border-radius:6px;padding:10px;margin-bottom:10px;background:#fff;color:#111827}textarea{min-height:88px;resize:vertical}.row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}button{border:0;border-radius:6px;background:#2563eb;color:#fff;padding:10px 14px;cursor:pointer;font-weight:600}.ghost{background:#374151}.danger{background:#dc2626;padding:7px 10px}.alert{border-radius:8px;padding:12px 14px;margin-bottom:16px}.ok{background:#ecfdf5;color:#065f46;border:1px solid #a7f3d0}.error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}.good{color:#047857}.bad{color:#b91c1c}table{width:100%;border-collapse:collapse}th,td{text-align:left;border-bottom:1px solid #e5e7eb;padding:10px;vertical-align:middle}dl{display:grid;grid-template-columns:220px 1fr;gap:8px;margin:0}dt{color:#6b7280}dd{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}ul{margin:0;padding-left:18px}li{margin:8px 0}.cron-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:14px}.cron-summary article{border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#f9fafb}.cron-summary small{display:block;color:#6b7280}.cron-summary strong{display:block;margin-top:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;overflow-wrap:anywhere}.cron-table{margin-bottom:16px}.status{display:inline-block;border-radius:999px;background:#e5e7eb;color:#374151;padding:2px 8px;font-size:12px;font-weight:700}.status.completed,.status.acquired,.status.released,.status.running,.status.enabled{background:#dcfce7;color:#166534}.status.failed,.status.invalid,.status.release_failed{background:#fee2e2;color:#991b1b}.status.skipped{background:#fef3c7;color:#92400e}.status.started{background:#dbeafe;color:#1d4ed8}.prewrap{white-space:pre-wrap;overflow-wrap:anywhere;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}.login-body{min-height:100vh;display:grid;place-items:center;background:#111827}.login-panel{width:min(420px,calc(100vw - 32px));background:#fff;border-radius:8px;padding:28px}.login-panel h1{font-size:26px}.login-panel p{color:#6b7280;margin-top:0}@media(max-width:980px){.metrics,.forms,.lists,.two,.cron-summary{grid-template-columns:1fr}.row{grid-template-columns:1fr}.topbar{padding:0 14px}.page{padding:14px}}
 {{end}}
 `

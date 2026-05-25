@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	_ "time/tzdata"
 
@@ -22,6 +23,59 @@ import (
 )
 
 const cronQuestLimit = 10
+const cronLogLimit = 300
+
+type CronLogEntry struct {
+	CreatedAt string
+	RunID     string
+	Job       string
+	Hour      string
+	Provider  string
+	Model     string
+	Step      string
+	Status    string
+	Message   string
+}
+
+type CronJobState struct {
+	Job            string
+	LastRunID      string
+	LastHour       string
+	LastProvider   string
+	LastModel      string
+	LastStatus     string
+	LastStep       string
+	LastMessage    string
+	LastStartedAt  string
+	LastFinishedAt string
+	LastDurationMS int64
+	LastError      string
+}
+
+type CronSnapshot struct {
+	Enabled  bool
+	Timezone string
+	Window   string
+	Limit    int
+	NextRun  string
+	Battle   CronJobState
+	RolePlay CronJobState
+	Logs     []CronLogEntry
+}
+
+var cronMemory = struct {
+	sync.Mutex
+	enabled  bool
+	timezone string
+	logs     []CronLogEntry
+	states   map[string]CronJobState
+}{
+	timezone: env("APP_TIMEZONE", "Europe/Paris"),
+	states: map[string]CronJobState{
+		"battle":   {Job: "battle"},
+		"roleplay": {Job: "roleplay"},
+	},
+}
 
 type cronTrace struct {
 	RunID    string
@@ -62,15 +116,19 @@ type generatedRolePlayQuest struct {
 func StartQuestGenerationCron(db *gorm.DB) {
 	if strings.EqualFold(env("AI_QUEST_CRON_ENABLED", "true"), "false") {
 		log.Printf("[quest-cron] step=boot status=disabled reason=AI_QUEST_CRON_ENABLED=false")
+		setCronRuntime(false, env("APP_TIMEZONE", "Europe/Paris"))
+		recordCronLog(CronLogEntry{Step: "boot", Status: "disabled", Message: "reason=AI_QUEST_CRON_ENABLED=false"})
 		return
 	}
 
 	location := loadLocation()
+	setCronRuntime(true, location.String())
 	log.Printf(
 		"[quest-cron] step=boot status=enabled timezone=%s hours=08-21 limit=%d battle_job=true roleplay_job=true",
 		location.String(),
 		cronQuestLimit,
 	)
+	recordCronLog(CronLogEntry{Step: "boot", Status: "enabled", Message: fmt.Sprintf("timezone=%s hours=08-21 limit=%d battle_job=true roleplay_job=true", location.String(), cronQuestLimit)})
 
 	go runHourlyJob(db, location, "battle", runBattleQuestJob)
 	go runHourlyJob(db, location, "roleplay", runRolePlayQuestJob)
@@ -86,6 +144,7 @@ func runHourlyJob(
 	defer ticker.Stop()
 
 	log.Printf("[quest-cron] job=%s step=worker_start status=running", jobName)
+	recordCronLog(CronLogEntry{Job: jobName, Step: "worker_start", Status: "running"})
 
 	var lastRun string
 	for {
@@ -115,6 +174,15 @@ func runHourlyJob(
 				runKey,
 				expectedProvider,
 			)
+			recordCronLog(CronLogEntry{
+				RunID:    runID,
+				Job:      jobName,
+				Hour:     runKey,
+				Provider: expectedProvider,
+				Step:     "provider_config",
+				Status:   "skipped",
+				Message:  "reason=missing_api_key_or_model",
+			})
 			continue
 		}
 
@@ -359,6 +427,18 @@ func providerConfig(name string, keyEnv string, modelEnv string) (aiProviderConf
 			modelEnv,
 			cfg.Model != "",
 		)
+		recordCronLog(CronLogEntry{
+			Provider: name,
+			Step:     "provider_config",
+			Status:   "invalid",
+			Message: fmt.Sprintf(
+				"key_env=%s key_present=%t model_env=%s model_present=%t",
+				keyEnv,
+				cfg.APIKey != "",
+				modelEnv,
+				cfg.Model != "",
+			),
+		})
 	}
 	return cfg, ok
 }
@@ -464,6 +544,7 @@ func loadLocation() *time.Location {
 	location, err := time.LoadLocation(name)
 	if err != nil {
 		log.Printf("[quest-cron] invalid APP_TIMEZONE=%s err=%v, using Local", name, err)
+		recordCronLog(CronLogEntry{Step: "timezone", Status: "invalid", Message: fmt.Sprintf("APP_TIMEZONE=%s err=%v using=Local", name, err)})
 		return time.Local
 	}
 	return location
@@ -479,7 +560,7 @@ func env(key string, fallback string) string {
 func (t cronTrace) log(step string, status string, format string, args ...any) {
 	message := ""
 	if format != "" {
-		message = " " + fmt.Sprintf(format, args...)
+		message = fmt.Sprintf(format, args...)
 	}
 	log.Printf(
 		"[quest-cron] run_id=%s job=%s hour=%s provider=%s model=%s step=%s status=%s%s",
@@ -490,8 +571,147 @@ func (t cronTrace) log(step string, status string, format string, args ...any) {
 		t.Model,
 		step,
 		status,
-		message,
+		formatLogMessage(message),
 	)
+	recordCronLog(CronLogEntry{
+		RunID:    t.RunID,
+		Job:      t.Job,
+		Hour:     t.Hour,
+		Provider: t.Provider,
+		Model:    t.Model,
+		Step:     step,
+		Status:   status,
+		Message:  message,
+	})
+}
+
+func Snapshot() CronSnapshot {
+	cronMemory.Lock()
+	defer cronMemory.Unlock()
+
+	logs := make([]CronLogEntry, len(cronMemory.logs))
+	copy(logs, cronMemory.logs)
+
+	return CronSnapshot{
+		Enabled:  cronMemory.enabled,
+		Timezone: cronMemory.timezone,
+		Window:   "08:00-21:00",
+		Limit:    cronQuestLimit,
+		NextRun:  nextRunLocked(),
+		Battle:   cronMemory.states["battle"],
+		RolePlay: cronMemory.states["roleplay"],
+		Logs:     logs,
+	}
+}
+
+func setCronRuntime(enabled bool, timezone string) {
+	cronMemory.Lock()
+	defer cronMemory.Unlock()
+	cronMemory.enabled = enabled
+	cronMemory.timezone = timezone
+	if cronMemory.states == nil {
+		cronMemory.states = map[string]CronJobState{}
+	}
+	for _, job := range []string{"battle", "roleplay"} {
+		state := cronMemory.states[job]
+		state.Job = job
+		cronMemory.states[job] = state
+	}
+}
+
+func recordCronLog(entry CronLogEntry) {
+	now := time.Now()
+	if entry.CreatedAt == "" {
+		entry.CreatedAt = now.Format(time.RFC3339)
+	}
+
+	cronMemory.Lock()
+	defer cronMemory.Unlock()
+
+	cronMemory.logs = append([]CronLogEntry{entry}, cronMemory.logs...)
+	if len(cronMemory.logs) > cronLogLimit {
+		cronMemory.logs = cronMemory.logs[:cronLogLimit]
+	}
+
+	if entry.Job == "" {
+		return
+	}
+	if cronMemory.states == nil {
+		cronMemory.states = map[string]CronJobState{}
+	}
+
+	state := cronMemory.states[entry.Job]
+	state.Job = entry.Job
+	state.LastRunID = firstNonEmpty(entry.RunID, state.LastRunID)
+	state.LastHour = firstNonEmpty(entry.Hour, state.LastHour)
+	state.LastProvider = firstNonEmpty(entry.Provider, state.LastProvider)
+	state.LastModel = firstNonEmpty(entry.Model, state.LastModel)
+	state.LastStatus = entry.Status
+	state.LastStep = entry.Step
+	state.LastMessage = entry.Message
+
+	if entry.Step == "trigger" && entry.Status == "started" {
+		state.LastStartedAt = entry.CreatedAt
+		state.LastFinishedAt = ""
+		state.LastDurationMS = 0
+		state.LastError = ""
+	}
+	if entry.Step == "run" && (entry.Status == "completed" || entry.Status == "failed") {
+		state.LastFinishedAt = entry.CreatedAt
+		state.LastDurationMS = parseLogInt(entry.Message, "duration_ms")
+		if entry.Status == "failed" {
+			state.LastError = entry.Message
+		}
+	}
+
+	cronMemory.states[entry.Job] = state
+}
+
+func nextRunLocked() string {
+	if !cronMemory.enabled {
+		return "-"
+	}
+	location, err := time.LoadLocation(cronMemory.timezone)
+	if err != nil {
+		location = time.Local
+	}
+	next := time.Now().In(location).Truncate(time.Hour).Add(time.Hour)
+	for i := 0; i < 72; i++ {
+		if next.Hour() >= 8 && next.Hour() <= 21 {
+			return next.Format(time.RFC3339)
+		}
+		next = next.Add(time.Hour)
+	}
+	return "-"
+}
+
+func formatLogMessage(message string) string {
+	if message == "" {
+		return ""
+	}
+	return " " + message
+}
+
+func firstNonEmpty(value string, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
+}
+
+func parseLogInt(message string, key string) int64 {
+	prefix := key + "="
+	for _, part := range strings.Fields(message) {
+		if !strings.HasPrefix(part, prefix) {
+			continue
+		}
+		value := strings.TrimPrefix(part, prefix)
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err == nil {
+			return parsed
+		}
+	}
+	return 0
 }
 
 func preview(value string, maxLength int) string {

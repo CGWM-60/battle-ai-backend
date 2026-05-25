@@ -20,6 +20,7 @@ import (
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
 	"cgwm/battle/internal/provider"
+	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +43,7 @@ type dashboardData struct {
 	Health        healthData
 	Stats         statsData
 	Config        configData
+	Cron          scheduler.CronSnapshot
 	Recent        recentData
 }
 
@@ -418,6 +420,7 @@ func (s *Server) dashboardData(c *gin.Context) dashboardData {
 			DBMaxOpenConns:        env("DB_MAX_OPEN_CONNS", "25"),
 			DBMaxIdleConns:        env("DB_MAX_IDLE_CONNS", "10"),
 		},
+		Cron: scheduler.Snapshot(),
 	}
 
 	sqlDB, err := s.db.DB()
