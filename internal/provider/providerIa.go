@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -33,10 +35,31 @@ type ProviderChatRequest struct {
 type ProviderStreamResponse struct {
 	Choices []struct {
 		Delta struct {
-			Content string `json:"content"`
+			Content any `json:"content"`
 		} `json:"delta"`
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
+}
+
+type ProviderCompletionResponse struct {
+	Choices []struct {
+		Message struct {
+			Content any    `json:"content"`
+			Refusal string `json:"refusal"`
+		} `json:"message"`
+		FinishReason *string `json:"finish_reason"`
+	} `json:"choices"`
+	Error *ProviderError `json:"error,omitempty"`
+}
+
+type ProviderErrorResponse struct {
+	Error *ProviderError `json:"error,omitempty"`
+}
+
+type ProviderError struct {
+	Message string `json:"message"`
+	Type    string `json:"type,omitempty"`
+	Code    any    `json:"code,omitempty"`
 }
 type SpecMessageTextOpenAI struct {
 	Type     string `json:"type"`
@@ -76,7 +99,14 @@ func (m ProviderMessage) MarshalJSON() ([]byte, error) {
 }
 
 func (p *Provider) Chat(ctx context.Context, messages []ProviderMessage) (string, error) {
-	return p.ChatStream(ctx, messages, nil)
+	response, err := p.chatCompletion(ctx, messages, false, nil)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(response) == "" {
+		return "", fmt.Errorf("provider returned empty non-stream response: model=%s host=%s", p.model, p.host())
+	}
+	return response, nil
 }
 
 func (p *Provider) ChatStream(
@@ -84,8 +114,40 @@ func (p *Provider) ChatStream(
 	messages []ProviderMessage,
 	onChunk func(chunk string),
 ) (string, error) {
+	response, err := p.chatCompletion(ctx, messages, true, onChunk)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(response) != "" {
+		return response, nil
+	}
+
+	if ctx.Err() != nil {
+		return "", ctx.Err()
+	}
+
+	log.Printf("[provider] empty stream response host=%s model=%s retry=non_stream", p.host(), p.model)
+	fallback, err := p.chatCompletion(ctx, messages, false, nil)
+	if err != nil {
+		return "", fmt.Errorf("empty stream then non-stream fallback failed: %w", err)
+	}
+	if strings.TrimSpace(fallback) == "" {
+		return "", fmt.Errorf("provider returned empty response after stream and non-stream fallback: model=%s host=%s", p.model, p.host())
+	}
+	if onChunk != nil {
+		onChunk(fallback)
+	}
+	return fallback, nil
+}
+
+func (p *Provider) chatCompletion(
+	ctx context.Context,
+	messages []ProviderMessage,
+	stream bool,
+	onChunk func(chunk string),
+) (string, error) {
 	request := ProviderChatRequest{
-		Stream:   true,
+		Stream:   stream,
 		Messages: messages,
 		Model:    p.model,
 	}
@@ -111,7 +173,11 @@ func (p *Provider) ChatStream(
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "text/event-stream")
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	if strings.Contains(p.url, "openrouter.ai") {
 		req.Header.Set("X-Title", "go-battle-ia")
@@ -130,9 +196,44 @@ func (p *Provider) ChatStream(
 		return "", fmt.Errorf("provider error: status=%s body=%s", resp.Status, string(body))
 	}
 
-	var fullResponse strings.Builder
+	if !stream {
+		return readCompletionResponse(resp.Body)
+	}
 
-	scanner := bufio.NewScanner(resp.Body)
+	return readStreamResponse(resp.Body, p.host(), p.model, onChunk)
+}
+
+func readCompletionResponse(body io.Reader) (string, error) {
+	bodyBytes, err := io.ReadAll(body)
+	if err != nil {
+		return "", err
+	}
+
+	var completion ProviderCompletionResponse
+	if err := json.Unmarshal(bodyBytes, &completion); err != nil {
+		return "", fmt.Errorf("parse provider completion JSON: %w body=%s", err, preview(bodyBytes, 600))
+	}
+	if completion.Error != nil {
+		return "", fmt.Errorf("provider error: type=%s code=%v message=%s", completion.Error.Type, completion.Error.Code, completion.Error.Message)
+	}
+
+	var fullResponse strings.Builder
+	for _, choice := range completion.Choices {
+		content := contentToString(choice.Message.Content)
+		if content != "" {
+			fullResponse.WriteString(content)
+		}
+	}
+	return fullResponse.String(), nil
+}
+
+func readStreamResponse(body io.Reader, host string, model string, onChunk func(chunk string)) (string, error) {
+	var fullResponse strings.Builder
+	chunkCount := 0
+	emptyChoiceCount := 0
+	lastData := ""
+
+	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
 
 	for scanner.Scan() {
@@ -142,29 +243,37 @@ func (p *Provider) ChatStream(
 			continue
 		}
 
-		if !strings.HasPrefix(line, "data: ") {
+		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
 
-		data := strings.TrimPrefix(line, "data: ")
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		lastData = data
 
 		if data == "[DONE]" {
 			break
 		}
 
+		var providerErr ProviderErrorResponse
+		if err := json.Unmarshal([]byte(data), &providerErr); err == nil && providerErr.Error != nil {
+			return "", fmt.Errorf("provider stream error: type=%s code=%v message=%s", providerErr.Error.Type, providerErr.Error.Code, providerErr.Error.Message)
+		}
+
 		var streamResp ProviderStreamResponse
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-			return "", err
+			return "", fmt.Errorf("parse provider stream JSON: %w data=%s", err, preview([]byte(data), 600))
 		}
 
 		for _, choice := range streamResp.Choices {
-			content := choice.Delta.Content
+			content := contentToString(choice.Delta.Content)
 			if content != "" {
-				fmt.Print(content) // affichage en live dans le terminal
+				chunkCount++
 				fullResponse.WriteString(content)
 				if onChunk != nil {
 					onChunk(content)
 				}
+			} else {
+				emptyChoiceCount++
 			}
 		}
 	}
@@ -172,6 +281,54 @@ func (p *Provider) ChatStream(
 	if err := scanner.Err(); err != nil {
 		return "", err
 	}
+	if fullResponse.Len() == 0 {
+		log.Printf(
+			"[provider] stream completed without content host=%s model=%s chunks=%d empty_choices=%d last_data=%s",
+			host,
+			model,
+			chunkCount,
+			emptyChoiceCount,
+			preview([]byte(lastData), 600),
+		)
+	}
 
 	return fullResponse.String(), nil
+}
+
+func contentToString(value any) string {
+	switch content := value.(type) {
+	case string:
+		return content
+	case []any:
+		var out strings.Builder
+		for _, item := range content {
+			part, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if text, ok := part["text"].(string); ok {
+				out.WriteString(text)
+			}
+		}
+		return out.String()
+	default:
+		return ""
+	}
+}
+
+func (p *Provider) host() string {
+	parsed, err := url.Parse(p.url)
+	if err != nil || parsed.Host == "" {
+		return "unknown"
+	}
+	return parsed.Host
+}
+
+func preview(value []byte, maxLength int) string {
+	clean := strings.ReplaceAll(string(value), "\n", " ")
+	clean = strings.ReplaceAll(clean, "\r", " ")
+	if len(clean) <= maxLength {
+		return clean
+	}
+	return clean[:maxLength] + "...(truncated)"
 }
