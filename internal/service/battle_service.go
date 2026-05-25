@@ -326,11 +326,30 @@ func (s *BattleService) Run(ctx context.Context, run *BattleRun, resumeTurns []m
 		writeCtx = context.Background()
 	}
 
-	_ = s.battles.UpdateFields(writeCtx, run.Battle.Id, map[string]any{
+	if runErr == nil && status == constants.BattleStatusFinished {
+		if _, judgeErr := s.finalizeJudgeResult(writeCtx, run, &sequence, onEvent); judgeErr != nil {
+			runErr = judgeErr
+			status = constants.BattleStatusPaused
+			if onEvent != nil {
+				onEvent(scenarios.BattleStreamEvent{
+					Type:  "error",
+					Error: judgeErr.Error(),
+					Done:  true,
+				})
+			}
+		}
+	}
+
+	updates := map[string]any{
 		"status":           status,
 		"finished_at":      finishedAtIfFinished(status, &finishedAt),
 		"last_activity_at": &finishedAt,
-	})
+	}
+	if run.Battle.Context.JudgeName != "" {
+		updates["winner_name"] = winnerNameFromJudgeContext(run)
+		updates["context"] = run.Battle.Context
+	}
+	_ = s.battles.UpdateFields(writeCtx, run.Battle.Id, updates)
 	if status == constants.BattleStatusFinished && s.live != nil {
 		_ = s.live.EndSessionsByBattle(writeCtx, run.Battle.Id)
 	}
@@ -463,62 +482,20 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 	}
 
 	if runErr == nil && round >= totalRounds {
-		finalTurns, listErr := s.battles.ListTurns(writeCtx, run.Battle.Id)
-		if listErr == nil {
-			judge := decideJudgeResult(run.IAs, turnsToHistory(finalTurns))
-			winnerName = judge.WinnerName
-
-			judgeEvent := scenarios.BattleStreamEvent{
-				Round:           round,
-				Type:            "judge_result",
-				Content:         judge.Reason,
-				Done:            true,
-				JudgeName:       judge.JudgeName,
-				JudgeSlot:       judge.JudgeSlot,
-				JudgeWinnerSlot: judge.WinnerSlot,
-				JudgeScoreOne:   judge.ScoreOne,
-				JudgeScoreTwo:   judge.ScoreTwo,
-			}
+		judge, judgeErr := s.finalizeJudgeResult(writeCtx, run, &sequence, onEvent)
+		if judgeErr != nil {
+			runErr = judgeErr
+			status = constants.BattleStatusPaused
+			finishedAt = nil
 			if onEvent != nil {
-				onEvent(judgeEvent)
+				onEvent(scenarios.BattleStreamEvent{
+					Type:  "error",
+					Error: judgeErr.Error(),
+					Done:  true,
+				})
 			}
-			if s.live != nil {
-				s.live.AppendBattleEvent(
-					writeCtx,
-					run.Battle.Id,
-					constants.LiveEventTypeScore,
-					constants.AuthorTypeSystem,
-					judge.JudgeName,
-					judgeEvent,
-				)
-			}
-
-			payloadBytes, _ := json.Marshal(map[string]any{
-				"judgeName":       judge.JudgeName,
-				"judgeSlot":       judge.JudgeSlot,
-				"judgeWinnerSlot": judge.WinnerSlot,
-				"judgeScoreOne":   judge.ScoreOne,
-				"judgeScoreTwo":   judge.ScoreTwo,
-			})
-			judgeTurn := &models.BattleSaveTurn{
-				BattleSaveID: run.Battle.Id,
-				Round:        round,
-				Phase:        "judge_result",
-				AuthorType:   constants.AuthorTypeSystem,
-				AuthorName:   judge.JudgeName,
-				Content:      judge.Reason,
-				Payload:      datatypes.JSON(payloadBytes),
-				Sequence:     sequence,
-			}
-			sequence++
-			_ = s.battles.AppendTurn(writeCtx, judgeTurn)
-
-			run.Battle.Context.JudgeName = judge.JudgeName
-			run.Battle.Context.JudgeSlot = judge.JudgeSlot
-			run.Battle.Context.JudgeWinnerSlot = judge.WinnerSlot
-			run.Battle.Context.JudgeScoreOne = judge.ScoreOne
-			run.Battle.Context.JudgeScoreTwo = judge.ScoreTwo
-			run.Battle.Context.JudgeReason = judge.Reason
+		} else {
+			winnerName = judge.WinnerName
 		}
 	}
 
@@ -539,6 +516,108 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 	}
 
 	return runErr
+}
+
+func (s *BattleService) finalizeJudgeResult(
+	ctx context.Context,
+	run *BattleRun,
+	sequence *int,
+	onEvent func(scenarios.BattleStreamEvent),
+) (judgeDecision, error) {
+	finalTurns, listErr := s.battles.ListTurns(ctx, run.Battle.Id)
+	if listErr != nil {
+		return judgeDecision{}, fmt.Errorf("judge mandatory: cannot load battle turns")
+	}
+
+	history := turnsToHistory(finalTurns)
+	if len(history) == 0 {
+		return judgeDecision{}, fmt.Errorf("judge mandatory: no IA messages to judge")
+	}
+
+	judge := decideJudgeResult(run.IAs, history)
+	finalRound := maxRoundFromHistory(history)
+	if finalRound < 1 {
+		finalRound = run.Battle.TotalRounds
+	}
+
+	judgeEvent := scenarios.BattleStreamEvent{
+		Round:           finalRound,
+		Type:            "judge_result",
+		Content:         judge.Reason,
+		Done:            true,
+		JudgeName:       judge.JudgeName,
+		JudgeSlot:       judge.JudgeSlot,
+		JudgeWinnerSlot: judge.WinnerSlot,
+		JudgeScoreOne:   judge.ScoreOne,
+		JudgeScoreTwo:   judge.ScoreTwo,
+	}
+	if onEvent != nil {
+		onEvent(judgeEvent)
+	}
+	if s.live != nil {
+		s.live.AppendBattleEvent(
+			ctx,
+			run.Battle.Id,
+			constants.LiveEventTypeScore,
+			constants.AuthorTypeSystem,
+			judge.JudgeName,
+			judgeEvent,
+		)
+	}
+
+	payloadBytes, _ := json.Marshal(map[string]any{
+		"judgeName":       judge.JudgeName,
+		"judgeSlot":       judge.JudgeSlot,
+		"judgeWinnerSlot": judge.WinnerSlot,
+		"judgeScoreOne":   judge.ScoreOne,
+		"judgeScoreTwo":   judge.ScoreTwo,
+	})
+	judgeTurn := &models.BattleSaveTurn{
+		BattleSaveID: run.Battle.Id,
+		Round:        finalRound,
+		Phase:        "judge_result",
+		AuthorType:   constants.AuthorTypeSystem,
+		AuthorName:   judge.JudgeName,
+		Content:      judge.Reason,
+		Payload:      datatypes.JSON(payloadBytes),
+		Sequence:     *sequence,
+	}
+	*sequence = *sequence + 1
+	if err := s.battles.AppendTurn(ctx, judgeTurn); err != nil {
+		return judgeDecision{}, fmt.Errorf("judge mandatory: cannot persist judge result")
+	}
+
+	run.Battle.Context.JudgeName = judge.JudgeName
+	run.Battle.Context.JudgeSlot = judge.JudgeSlot
+	run.Battle.Context.JudgeWinnerSlot = judge.WinnerSlot
+	run.Battle.Context.JudgeScoreOne = judge.ScoreOne
+	run.Battle.Context.JudgeScoreTwo = judge.ScoreTwo
+	run.Battle.Context.JudgeReason = judge.Reason
+
+	return judge, nil
+}
+
+func maxRoundFromHistory(history []models.BattleRoundMessage) int {
+	maxRound := 0
+	for _, msg := range history {
+		if msg.Round > maxRound {
+			maxRound = msg.Round
+		}
+	}
+
+	return maxRound
+}
+
+func winnerNameFromJudgeContext(run *BattleRun) string {
+	if run == nil {
+		return ""
+	}
+	slot := run.Battle.Context.JudgeWinnerSlot
+	if slot >= 1 && slot <= len(run.IAs) {
+		return defaultString(run.IAs[slot-1].Name, fmt.Sprintf("IA %d", slot))
+	}
+
+	return ""
 }
 
 func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *BattleRequest) ([]models.BattleIAConfig, error) {
