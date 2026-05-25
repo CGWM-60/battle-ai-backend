@@ -229,7 +229,7 @@ func runHourlyJob(
 			len(cfg.APIKey),
 		)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), questCronTimeout())
 		err := withMySQLLock(ctx, db, "go_battle_ia_"+jobName+"_"+runKey, trace, func(ctx context.Context) error {
 			return job(ctx, db, localNow, cfg, trace)
 		})
@@ -367,6 +367,32 @@ Format:
 }
 
 func generateRolePlayQuests(ctx context.Context, cfg aiProviderConfig, trace cronTrace) ([]generatedRolePlayQuest, error) {
+	quests := make([]generatedRolePlayQuest, 0, cronQuestLimit)
+	for len(quests) < cronQuestLimit {
+		batchCount := minInt(rolePlayGenerationBatchSize(), cronQuestLimit-len(quests))
+		trace.log("generate_batch", "started", "batch_size=%d current_total=%d target=%d", batchCount, len(quests), cronQuestLimit)
+		batch, err := generateRolePlayQuestsBatch(ctx, cfg, trace, batchCount)
+		if err != nil {
+			if len(quests) > 0 {
+				trace.log("generate_batch", "partial", "items=%d err=%v", len(quests), err)
+				return quests, nil
+			}
+			return nil, err
+		}
+		if len(batch) == 0 {
+			if len(quests) > 0 {
+				trace.log("generate_batch", "partial", "items=%d err=empty_batch", len(quests))
+				return quests, nil
+			}
+			return nil, fmt.Errorf("provider returned no roleplay quest")
+		}
+		quests = append(quests, batch...)
+		trace.log("generate_batch", "completed", "batch_items=%d total=%d", len(batch), len(quests))
+	}
+	return quests, nil
+}
+
+func generateRolePlayQuestsBatch(ctx context.Context, cfg aiProviderConfig, trace cronTrace, count int) ([]generatedRolePlayQuest, error) {
 	prompt := fmt.Sprintf(`Genere exactement %d quetes de jeu de role.
 Reponds uniquement en JSON valide, sans markdown.
 Les quetes doivent etre variees, jouables, immersives et differentes les unes des autres.
@@ -526,6 +552,32 @@ func providerModelEnvForHour(now time.Time) string {
 		return "MISTRAL_AI_MODEL"
 	}
 	return "OPEN_AI_MODEL"
+}
+
+func questCronTimeout() time.Duration {
+	seconds, err := strconv.Atoi(strings.TrimSpace(env("AI_QUEST_CRON_TIMEOUT_SECONDS", "900")))
+	if err != nil || seconds <= 0 {
+		seconds = 900
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func rolePlayGenerationBatchSize() int {
+	size, err := strconv.Atoi(strings.TrimSpace(env("AI_RP_GENERATION_BATCH_SIZE", "2")))
+	if err != nil || size <= 0 {
+		return 2
+	}
+	if size > 5 {
+		return 5
+	}
+	return size
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func providerConfig(name string, keyEnv string, modelEnv string) (aiProviderConfig, bool) {

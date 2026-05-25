@@ -577,6 +577,28 @@ Format:
 }
 
 func generateRolePlayQuestPayload(ctx context.Context, url string, apiKey string, model string, count int) ([]generatedRolePlayQuest, error) {
+	quests := make([]generatedRolePlayQuest, 0, count)
+	for len(quests) < count {
+		batchCount := minInt(adminRolePlayGenerationBatchSize(), count-len(quests))
+		batch, err := generateRolePlayQuestPayloadBatch(ctx, url, apiKey, model, batchCount)
+		if err != nil {
+			if len(quests) > 0 {
+				return quests, nil
+			}
+			return nil, err
+		}
+		if len(batch) == 0 {
+			if len(quests) > 0 {
+				return quests, nil
+			}
+			return nil, fmt.Errorf("provider returned no roleplay quest")
+		}
+		quests = append(quests, batch...)
+	}
+	return quests, nil
+}
+
+func generateRolePlayQuestPayloadBatch(ctx context.Context, url string, apiKey string, model string, count int) ([]generatedRolePlayQuest, error) {
 	prompt := fmt.Sprintf(`Genere exactement %d quetes de jeu de role.
 Reponds uniquement en JSON valide, sans markdown.
 Chaque quete doit avoir au minimum 2 arcs narratifs.
@@ -666,11 +688,42 @@ func hasAdminGeneratedRolePlayStructure(item generatedRolePlayQuest) bool {
 }
 
 func callAdminProvider(ctx context.Context, url string, apiKey string, model string, prompt string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, adminProviderTimeout())
 	defer cancel()
 
 	ai := provider.NewsProvider(apiKey, url, model)
 	return ai.Chat(ctx, []provider.ProviderMessage{{Role: "system", Content: prompt}})
+}
+
+func adminProviderTimeout() time.Duration {
+	seconds := envInt("ADMIN_AI_TIMEOUT_SECONDS", 480)
+	return time.Duration(seconds) * time.Second
+}
+
+func adminRolePlayGenerationBatchSize() int {
+	size := envInt("ADMIN_RP_GENERATION_BATCH_SIZE", 2)
+	if size < 1 {
+		return 1
+	}
+	if size > 5 {
+		return 5
+	}
+	return size
+}
+
+func envInt(key string, fallback int) int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func checkAdminPassword(password string) bool {
