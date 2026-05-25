@@ -922,6 +922,8 @@ IMPORTANT :
 Tu dois éviter les questions classiques, génériques ou trop souvent vues.
 Tu dois inventer des débats inattendus.
 Les questions doivent ressembler à des sujets de battle fun, pas à des sujets de dissertation scolaire.
+Au minimum 2 quêtes sur les 10 doivent avoir un angle clairement humoristique.
+Ces 2 quêtes humoristiques doivent rester débattables : l'humour sert le conflit d'idées, il ne remplace pas la question.
 
 Réponds uniquement avec un tableau JSON valide.
 Aucun markdown.
@@ -996,6 +998,7 @@ Style des questions :
 - Fun.
 - Original.
 - Débattable.
+- Avec au minimum 2 questions franchement humoristiques.
 - Un peu provocateur.
 - Compréhensible rapidement.
 - Pas trop sérieux.
@@ -1031,6 +1034,7 @@ Avant de répondre, vérifie mentalement que :
 - Aucune question interdite ou trop proche n’apparaît.
 - Les questions sont originales.
 - Les questions sont amusantes.
+- Il y a au moins 2 questions avec un vrai ressort humoristique.
 - Les questions ont plusieurs réponses possibles.
 - Il y a au maximum 1 niveau "très difficile".
 - Les points et XP respectent le barème.

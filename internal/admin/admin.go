@@ -486,8 +486,9 @@ func (s *Server) redirectError(c *gin.Context, message string) {
 func generateBattleQuestPayload(ctx context.Context, url string, apiKey string, model string, count int) ([]generatedBattleQuest, error) {
 	prompt := fmt.Sprintf(`Genere exactement %d quetes pour un jeu de battle entre IA.
 Reponds uniquement en JSON valide, sans markdown.
+Au minimum 2 quetes doivent avoir un angle clairement humoristique, tout en restant debatables.
 Format:
-[{"title":"...","content":"question debat complete","level":"facile|moyen|difficile","theme":"...","point":10,"xp":25,"coin":5,"metadata":{"angle":"..."}}]`, count)
+[{"title":"...","content":"question debat complete","level":"facile|moyen|difficile","theme":"...","point":10,"xp":25,"coin":5,"metadata":{"angle":"...","humour":true}}]`, count)
 	response, err := callAdminProvider(ctx, url, apiKey, model, prompt)
 	if err != nil {
 		return nil, err
