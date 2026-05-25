@@ -434,6 +434,14 @@ func nextBattleRound(database *gorm.DB) gin.HandlerFunc {
 
 func judgeBattle(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var req battleRequest
+		if c.Request.ContentLength != 0 {
+			if err := bindPayload(c, &req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid judge payload"})
+				return
+			}
+		}
+
 		battleID, err := parseUintParam(c, "id")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid battle id"})
@@ -459,9 +467,15 @@ func judgeBattle(database *gorm.DB) gin.HandlerFunc {
 			"done":      true,
 		})
 
-		if err := battleService.Judge(c.Request.Context(), currentUserID(c), battleID, func(event scenarios.BattleStreamEvent) {
-			writeNDJSON(c, flusher, event)
-		}); err != nil {
+		if err := battleService.Judge(
+			c.Request.Context(),
+			currentUserID(c),
+			battleID,
+			toServiceBattleRequest(req),
+			func(event scenarios.BattleStreamEvent) {
+				writeNDJSON(c, flusher, event)
+			},
+		); err != nil {
 			writeNDJSON(c, flusher, scenarios.BattleStreamEvent{
 				Type:  "error",
 				Error: err.Error(),

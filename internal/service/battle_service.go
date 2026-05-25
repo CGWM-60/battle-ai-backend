@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 
@@ -472,8 +473,7 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 			})
 		}
 	} else if round >= totalRounds {
-		status = constants.BattleStatusFinished
-		finishedAt = &now
+		status = constants.BattleStatusPaused
 	}
 
 	writeCtx := ctx
@@ -482,20 +482,13 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 	}
 
 	if runErr == nil && round >= totalRounds {
-		judge, judgeErr := s.finalizeJudgeResult(writeCtx, run, &sequence, onEvent)
-		if judgeErr != nil {
-			runErr = judgeErr
-			status = constants.BattleStatusPaused
-			finishedAt = nil
-			if onEvent != nil {
-				onEvent(scenarios.BattleStreamEvent{
-					Type:  "error",
-					Error: judgeErr.Error(),
-					Done:  true,
-				})
-			}
-		} else {
-			winnerName = judge.WinnerName
+		if onEvent != nil {
+			onEvent(scenarios.BattleStreamEvent{
+				Type:    "judge_required",
+				Round:   round,
+				Content: "Round final terminé. Lance le jugement backend pour obtenir le verdict IA.",
+				Done:    true,
+			})
 		}
 	}
 
@@ -518,7 +511,13 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 	return runErr
 }
 
-func (s *BattleService) Judge(ctx context.Context, ownerID uint, battleID uint, onEvent func(scenarios.BattleStreamEvent)) error {
+func (s *BattleService) Judge(
+	ctx context.Context,
+	ownerID uint,
+	battleID uint,
+	req BattleRequest,
+	onEvent func(scenarios.BattleStreamEvent),
+) error {
 	battle, err := s.battles.GetOwnedByID(ctx, battleID, ownerID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -549,12 +548,17 @@ func (s *BattleService) Judge(ctx context.Context, ownerID uint, battleID uint, 
 		return fmt.Errorf("battle not ready for judgement")
 	}
 
+	ias, buildErr := s.buildResumeIAConfigs(ctx, ownerID, battle, &req)
+	if buildErr != nil {
+		return fmt.Errorf("judge backend requires valid providers, models and API keys")
+	}
+
 	sequence, err := s.battles.NextTurnSequence(ctx, battle.Id)
 	if err != nil {
 		return fmt.Errorf("cannot prepare judge sequence")
 	}
 
-	run := &BattleRun{Battle: battle, IAs: iasFromSnapshot(battle)}
+	run := &BattleRun{Battle: battle, IAs: ias}
 	_, judgeErr := s.finalizeJudgeResult(ctx, run, &sequence, onEvent)
 	if judgeErr != nil {
 		return judgeErr
@@ -593,8 +597,14 @@ func (s *BattleService) finalizeJudgeResult(
 	if len(history) == 0 {
 		return judgeDecision{}, fmt.Errorf("judge mandatory: no IA messages to judge")
 	}
+	if len(run.IAs) < 2 {
+		return judgeDecision{}, fmt.Errorf("judge mandatory: IA providers unavailable")
+	}
 
-	judge := decideJudgeResult(run.IAs, history)
+	judge, judgeErr := decideJudgeResultWithAI(ctx, run.Battle.Question, run.IAs, history)
+	if judgeErr != nil {
+		return judgeDecision{}, fmt.Errorf("judge mandatory: %w", judgeErr)
+	}
 	finalRound := maxRoundFromHistory(history)
 	if finalRound < 1 {
 		finalRound = run.Battle.TotalRounds
@@ -678,23 +688,6 @@ func winnerNameFromJudgeContext(run *BattleRun) string {
 	}
 
 	return ""
-}
-
-func iasFromSnapshot(battle *models.BattleSave) []models.BattleIAConfig {
-	if battle == nil || len(battle.IASnapshot) == 0 {
-		return nil
-	}
-
-	var snapshots []models.BattleIAConfig
-	if err := json.Unmarshal(battle.IASnapshot, &snapshots); err != nil {
-		return nil
-	}
-
-	for index := range snapshots {
-		snapshots[index].Provider = nil
-	}
-
-	return snapshots
 }
 
 func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *BattleRequest) ([]models.BattleIAConfig, error) {
@@ -944,6 +937,221 @@ type judgeDecision struct {
 	ScoreOne   int
 	ScoreTwo   int
 	Reason     string
+}
+
+func decideJudgeResultWithAI(
+	ctx context.Context,
+	question string,
+	ias []models.BattleIAConfig,
+	history []models.BattleRoundMessage,
+) (judgeDecision, error) {
+	judgeCandidates := make([]int, 0, len(ias))
+	for index, ia := range ias {
+		if ia.Provider != nil {
+			judgeCandidates = append(judgeCandidates, index)
+		}
+	}
+	if len(judgeCandidates) == 0 {
+		return judgeDecision{}, fmt.Errorf("no provider available for AI judge")
+	}
+
+	seeded := rand.New(rand.NewSource(time.Now().UnixNano()))
+	chosen := judgeCandidates[seeded.Intn(len(judgeCandidates))]
+	judgeIA := ias[chosen]
+
+	type judgeHistoryItem struct {
+		Round   int    `json:"round"`
+		Speaker string `json:"speaker"`
+		Content string `json:"content"`
+	}
+	historyPayload := make([]judgeHistoryItem, 0, len(history))
+	for _, item := range history {
+		content := strings.TrimSpace(item.Content)
+		if content == "" {
+			continue
+		}
+		if len(content) > 1600 {
+			content = content[:1600]
+		}
+		historyPayload = append(historyPayload, judgeHistoryItem{
+			Round:   item.Round,
+			Speaker: item.IA,
+			Content: content,
+		})
+	}
+	if len(historyPayload) == 0 {
+		return judgeDecision{}, fmt.Errorf("no messages to evaluate")
+	}
+
+	payloadBytes, _ := json.Marshal(map[string]any{
+		"question": question,
+		"fighters": []map[string]any{
+			{"slot": 1, "name": defaultString(ias[0].Name, "IA 1")},
+			{"slot": 2, "name": defaultString(ias[1].Name, "IA 2")},
+		},
+		"history": historyPayload,
+	})
+
+	systemPrompt := `Tu es un juge IA strictement impartial.
+Ta mission: analyser les échanges du débat, expliquer ton raisonnement, puis rendre un verdict final.
+
+Contraintes:
+- Tu juges UNIQUEMENT le contenu du débat fourni.
+- Tu dois rester neutre, sans favoritisme.
+- Tu dois impérativement analyser les DEUX combattants.
+- Ton argumentation doit contenir explicitement:
+	1) Points forts IA 1
+	2) Points faibles IA 1
+	3) Points forts IA 2
+	4) Points faibles IA 2
+	5) Verdict final justifié
+- Donne une argumentation claire en français (5 à 10 phrases).
+- Le verdict doit designer un gagnant (slot 1 ou slot 2).
+- score_one et score_two sont des entiers entre 0 et 100, et leur somme doit faire 100.
+- Réponds en JSON strict, sans markdown.
+
+Format exact:
+{
+  "judge_name": "Juge IA",
+  "winner_slot": 1,
+  "score_one": 52,
+  "score_two": 48,
+	"reason": "Points forts IA 1: ...\nPoints faibles IA 1: ...\nPoints forts IA 2: ...\nPoints faibles IA 2: ...\nVerdict: ..."
+}`
+
+	response, err := judgeIA.Provider.Chat(ctx, []provider.ProviderMessage{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: string(payloadBytes)},
+	})
+	if err != nil {
+		return judgeDecision{}, fmt.Errorf("judge provider call failed: %w", err)
+	}
+
+	parsed, err := parseJudgeDecisionJSON(response)
+	if err != nil {
+		return judgeDecision{}, err
+	}
+
+	judgeName := parsed.JudgeName
+	if judgeName == "" {
+		judgeName = fmt.Sprintf("Juge IA (%s)", defaultString(judgeIA.ProviderName, "random"))
+	}
+
+	winnerSlot := parsed.WinnerSlot
+	if winnerSlot != 1 && winnerSlot != 2 {
+		if parsed.ScoreTwo > parsed.ScoreOne {
+			winnerSlot = 2
+		} else {
+			winnerSlot = 1
+		}
+	}
+
+	scoreOne := clampJudgeScore(parsed.ScoreOne)
+	scoreTwo := clampJudgeScore(parsed.ScoreTwo)
+	if scoreOne+scoreTwo == 0 {
+		scoreOne = 50
+		scoreTwo = 50
+	}
+	if scoreOne+scoreTwo != 100 {
+		scoreTwo = clampJudgeScore(100 - scoreOne)
+	}
+
+	winnerName := defaultString(ias[winnerSlot-1].Name, fmt.Sprintf("IA %d", winnerSlot))
+	reason := strings.TrimSpace(parsed.Reason)
+	if reason == "" {
+		return judgeDecision{}, fmt.Errorf("judge returned empty reasoning")
+	}
+
+	return judgeDecision{
+		JudgeName:  judgeName,
+		JudgeSlot:  chosen + 1,
+		WinnerSlot: winnerSlot,
+		WinnerName: winnerName,
+		ScoreOne:   scoreOne,
+		ScoreTwo:   scoreTwo,
+		Reason:     reason,
+	}, nil
+}
+
+type parsedJudgeDecision struct {
+	JudgeName  string
+	WinnerSlot int
+	ScoreOne   int
+	ScoreTwo   int
+	Reason     string
+}
+
+func parseJudgeDecisionJSON(raw string) (parsedJudgeDecision, error) {
+	clean := strings.TrimSpace(raw)
+	clean = strings.TrimPrefix(clean, "```json")
+	clean = strings.TrimPrefix(clean, "```")
+	clean = strings.TrimSuffix(clean, "```")
+	clean = strings.TrimSpace(clean)
+
+	start := strings.Index(clean, "{")
+	end := strings.LastIndex(clean, "}")
+	if start == -1 || end <= start {
+		return parsedJudgeDecision{}, fmt.Errorf("judge returned invalid JSON")
+	}
+
+	jsonSlice := clean[start : end+1]
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(jsonSlice), &payload); err != nil {
+		return parsedJudgeDecision{}, fmt.Errorf("judge JSON parse failed")
+	}
+
+	decision := parsedJudgeDecision{
+		JudgeName:  firstNonEmptyString(payload, "judge_name", "judgeName", "judge"),
+		WinnerSlot: firstInt(payload, 0, "winner_slot", "winnerSlot", "verdict_slot"),
+		ScoreOne:   firstInt(payload, 0, "score_one", "scoreOne"),
+		ScoreTwo:   firstInt(payload, 0, "score_two", "scoreTwo"),
+		Reason: firstNonEmptyString(
+			payload,
+			"reason",
+			"argumentation",
+			"analysis",
+			"verdict_text",
+		),
+	}
+
+	return decision, nil
+}
+
+func firstNonEmptyString(payload map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value := strings.TrimSpace(fmt.Sprintf("%v", payload[key]))
+		if value != "" && value != "<nil>" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstInt(payload map[string]any, fallback int, keys ...string) int {
+	for _, key := range keys {
+		raw, ok := payload[key]
+		if !ok || raw == nil {
+			continue
+		}
+		switch value := raw.(type) {
+		case float64:
+			return int(value)
+		case float32:
+			return int(value)
+		case int:
+			return value
+		case int32:
+			return int(value)
+		case int64:
+			return int(value)
+		case string:
+			if parsed, err := strconv.Atoi(strings.TrimSpace(value)); err == nil {
+				return parsed
+			}
+		}
+	}
+
+	return fallback
 }
 
 func decideJudgeResult(ias []models.BattleIAConfig, history []models.BattleRoundMessage) judgeDecision {
