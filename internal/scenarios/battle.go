@@ -611,26 +611,37 @@ func RunBattleScenarioSingleRoundStreamWithDurationContext(
 	}
 
 	if round == 1 {
+		var firstErr error
 		for index, ia := range ias {
 			if err := runTurn(index+1, "definition_avis", PromptInitialDefinition, ia); err != nil {
-				return err
+				if firstErr == nil {
+					firstErr = err
+				}
 			}
 		}
-
-		return nil
+		return firstErr
 	}
 
 	deadline := time.Now().Add(roundDuration)
 	turnIndex := 1
 	completedCycles := 0
+	var firstErr error
 	for {
+		cycleHadError := false
 		for _, ia := range ias {
 			if err := runTurn(turnIndex, "debat", PromptDebateRound, ia); err != nil {
-				return err
+				cycleHadError = true
+				if firstErr == nil {
+					firstErr = err
+				}
 			}
 			turnIndex++
 		}
 		completedCycles++
+
+		if cycleHadError {
+			break
+		}
 
 		// Le timer sert a decider si on lance un nouveau cycle complet.
 		// Un cycle commence toujours par IA1 puis IA2; on ne coupe jamais entre
@@ -640,7 +651,7 @@ func RunBattleScenarioSingleRoundStreamWithDurationContext(
 		}
 	}
 
-	return nil
+	return firstErr
 }
 
 func maxDebateCycles(roundDuration time.Duration) int {
@@ -875,7 +886,12 @@ func runIATurnStream(
 		fullResponse.WriteString(response)
 	}
 
-	return fullResponse.String(), nil
+	finalResponse := strings.TrimSpace(fullResponse.String())
+	if finalResponse == "" {
+		return "", fmt.Errorf("réponse vide du provider pour %s", ia.Name)
+	}
+
+	return finalResponse, nil
 }
 
 func buildBattleMessages(
