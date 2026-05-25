@@ -133,6 +133,12 @@ type BattleSave struct {
 	PublicVote bool
 	// WinnerName = gagnant final si la partie est terminee.
 	WinnerName string `gorm:"size:120"`
+	// PromptTokens / CompletionTokens / TotalTokens = consommation IA cumulee.
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+	// EstimatedCostMicros = cout estime en micro-USD, si les prix env sont configures.
+	EstimatedCostMicros int64
 
 	// IASnapshot = config complete des IA jouees au moment du lancement.
 	// Cela evite qu'une reprise casse si la config runtime change.
@@ -322,6 +328,12 @@ type RolePlaySession struct {
 	CurrentScene string `gorm:"type:text"`
 	// CurrentTurn = numero de tour pour reprise et live.
 	CurrentTurn int
+	// PromptTokens / CompletionTokens / TotalTokens = consommation IA cumulee.
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+	// EstimatedCostMicros = cout estime en micro-USD, si les prix env sont configures.
+	EstimatedCostMicros int64
 	// Snapshot = etat libre de la session roleplay.
 	Snapshot datatypes.JSON `gorm:"type:json"`
 
@@ -530,4 +542,45 @@ type BattleMessageContext struct {
 	MyPreviousMessages   []BattleRoundMessage `json:"myPreviousMessages"`
 	OpponentMessages     []BattleRoundMessage `json:"opponentMessages"`
 	AllPreviousRounds    []BattleRoundMessage `json:"allPreviousRounds"`
+}
+
+// AIUsageRecord = journal comptable des appels IA par session de jeu.
+// Les tokens peuvent venir du provider ou d'une estimation locale si le provider ne remonte pas usage.
+type AIUsageRecord struct {
+	Id        uint `gorm:"primaryKey"`
+	CreatedAt time.Time
+
+	OwnerID uint `gorm:"index"`
+
+	// SessionMode = battle_ia / roleplay_ia.
+	SessionMode       string           `gorm:"size:32;index"`
+	BattleSaveID      *uint            `gorm:"index"`
+	BattleSave        *BattleSave      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+	RolePlaySessionID *uint            `gorm:"index"`
+	RolePlaySession   *RolePlaySession `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+
+	// BillingSource = client_key / platform_key. Permet de distinguer gratuit vs credits plateforme.
+	BillingSource string `gorm:"size:32;index"`
+	ProviderName  string `gorm:"size:64;index"`
+	ProviderHost  string `gorm:"size:160"`
+	ModelName     string `gorm:"size:160;index"`
+	Operation     string `gorm:"size:64;index"`
+	Phase         string `gorm:"size:64;index"`
+	Round         int    `gorm:"index"`
+	ActorName     string `gorm:"size:120;index"`
+
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	InputChars       int
+	OutputChars      int
+	Stream           bool
+	Fallback         bool
+	Estimated        bool
+
+	Currency             string `gorm:"size:8"`
+	InputUSDPer1MToken   float64
+	OutputUSDPer1MToken  float64
+	EstimatedCostMicros  int64
+	PricingConfiguration string `gorm:"size:120"`
 }

@@ -67,6 +67,7 @@ type BattleService struct {
 	quests     *repository.QuestRepository
 	iaProfiles *repository.IAProfileRepository
 	live       *LiveService
+	usage      *repository.AIUsageRepository
 }
 
 func NewBattleService(
@@ -74,12 +75,14 @@ func NewBattleService(
 	quests *repository.QuestRepository,
 	iaProfiles *repository.IAProfileRepository,
 	live *LiveService,
+	usage *repository.AIUsageRepository,
 ) *BattleService {
 	return &BattleService{
 		battles:    battles,
 		quests:     quests,
 		iaProfiles: iaProfiles,
 		live:       live,
+		usage:      usage,
 	}
 }
 
@@ -151,7 +154,9 @@ func (s *BattleService) Create(ctx context.Context, ownerID uint, req BattleRequ
 		return nil, fmt.Errorf("cannot create battle")
 	}
 
-	return &BattleRun{Battle: battle, IAs: ias}, nil
+	run := &BattleRun{Battle: battle, IAs: ias}
+	s.attachBattleUsageRecorders(run)
+	return run, nil
 }
 
 func (s *BattleService) Resume(ctx context.Context, ownerID uint, battleID uint, req BattleRequest) (*BattleRun, []models.BattleSaveTurn, error) {
@@ -196,6 +201,8 @@ func (s *BattleService) Resume(ctx context.Context, ownerID uint, battleID uint,
 	if err != nil {
 		return nil, nil, err
 	}
+	run := &BattleRun{Battle: battle, IAs: ias}
+	s.attachBattleUsageRecorders(run)
 
 	now := time.Now()
 	_ = s.battles.UpdateFields(ctx, battle.Id, map[string]any{
@@ -203,10 +210,11 @@ func (s *BattleService) Resume(ctx context.Context, ownerID uint, battleID uint,
 		"last_activity_at": &now,
 	})
 
-	return &BattleRun{Battle: battle, IAs: ias}, turns, nil
+	return run, turns, nil
 }
 
 func (s *BattleService) Run(ctx context.Context, run *BattleRun, resumeTurns []models.BattleSaveTurn, onEvent func(scenarios.BattleStreamEvent)) error {
+	s.attachBattleUsageRecorders(run)
 	sequence, err := s.battles.NextTurnSequence(ctx, run.Battle.Id)
 	if err != nil {
 		return fmt.Errorf("cannot prepare battle sequence")
@@ -359,6 +367,7 @@ func (s *BattleService) Run(ctx context.Context, run *BattleRun, resumeTurns []m
 }
 
 func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns []models.BattleSaveTurn, onEvent func(scenarios.BattleStreamEvent)) error {
+	s.attachBattleUsageRecorders(run)
 	sequence, err := s.battles.NextTurnSequence(ctx, run.Battle.Id)
 	if err != nil {
 		return fmt.Errorf("cannot prepare battle sequence")
@@ -559,6 +568,7 @@ func (s *BattleService) Judge(
 	}
 
 	run := &BattleRun{Battle: battle, IAs: ias}
+	s.attachBattleUsageRecorders(run)
 	_, judgeErr := s.finalizeJudgeResult(ctx, run, &sequence, onEvent)
 	if judgeErr != nil {
 		return judgeErr
@@ -743,6 +753,24 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 	}
 
 	return ias, nil
+}
+
+func (s *BattleService) attachBattleUsageRecorders(run *BattleRun) {
+	if run == nil || run.Battle == nil || s.usage == nil {
+		return
+	}
+	battleID := run.Battle.Id
+	for index := range run.IAs {
+		ia := &run.IAs[index]
+		ia.Provider = attachUsageRecorder(s.usage, usageSessionRef{
+			OwnerID:       run.Battle.OwnerID,
+			SessionMode:   constants.ModeBattleIA,
+			BattleSaveID:  &battleID,
+			BillingSource: billingSourceClientKey,
+			ProviderName:  ia.ProviderName,
+			ModelName:     ia.ModelName,
+		}, ia.Provider)
+	}
 }
 
 func (s *BattleService) buildResumeIAConfigs(ctx context.Context, ownerID uint, battle *models.BattleSave, req *BattleRequest) ([]models.BattleIAConfig, error) {
@@ -1019,6 +1047,15 @@ Format exact:
 	"reason": "Points forts IA 1: ...\nPoints faibles IA 1: ...\nPoints forts IA 2: ...\nPoints faibles IA 2: ...\nVerdict: ..."
 }`
 
+	if judgeIA.Provider != nil {
+		judgeIA.Provider.WithUsageMetadata(provider.UsageMetadata{
+			Mode:      constants.ModeBattleIA,
+			Operation: "battle_judge",
+			Phase:     "judge_result",
+			Round:     maxRoundFromHistory(history),
+			ActorName: defaultString(judgeIA.Name, "Juge IA"),
+		})
+	}
 	response, err := judgeIA.Provider.Chat(ctx, []provider.ProviderMessage{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: string(payloadBytes)},

@@ -35,10 +35,11 @@ type RolePlayActionInput struct {
 type RolePlayService struct {
 	roleplay *repository.RolePlayRepository
 	quests   *repository.QuestRepository
+	usage    *repository.AIUsageRepository
 }
 
-func NewRolePlayService(roleplay *repository.RolePlayRepository, quests *repository.QuestRepository) *RolePlayService {
-	return &RolePlayService{roleplay: roleplay, quests: quests}
+func NewRolePlayService(roleplay *repository.RolePlayRepository, quests *repository.QuestRepository, usage *repository.AIUsageRepository) *RolePlayService {
+	return &RolePlayService{roleplay: roleplay, quests: quests, usage: usage}
 }
 
 func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input RolePlaySessionInput) (*models.RolePlaySession, error) {
@@ -134,7 +135,24 @@ func (s *RolePlayService) appendInitialNarration(ctx context.Context, session *m
 	callCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 
-	ai := provider.NewsProvider(apiKey, url, modelName)
+	sessionID := session.Id
+	ai := attachUsageRecorder(s.usage, usageSessionRef{
+		OwnerID:           session.OwnerID,
+		SessionMode:       constants.ModeRolePlayIA,
+		RolePlaySessionID: &sessionID,
+		BillingSource:     billingSourceClientKey,
+		ProviderName:      providerName,
+		ModelName:         modelName,
+	}, provider.NewsProvider(apiKey, url, modelName))
+	if ai != nil {
+		ai.WithUsageMetadata(provider.UsageMetadata{
+			Mode:      constants.ModeRolePlayIA,
+			Operation: "roleplay_narration",
+			Phase:     "opening",
+			Round:     1,
+			ActorName: "Narrateur",
+		})
+	}
 	response, err := ai.Chat(callCtx, []provider.ProviderMessage{
 		{
 			Role: "system",

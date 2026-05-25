@@ -14,10 +14,12 @@ import (
 )
 
 type Provider struct {
-	name   string
-	apiKey string
-	url    string
-	model  string
+	name          string
+	apiKey        string
+	url           string
+	model         string
+	usageRecorder UsageRecorder
+	usageMetadata UsageMetadata
 }
 
 type ProviderMessage struct {
@@ -31,6 +33,34 @@ type ProviderChatRequest struct {
 	Messages []ProviderMessage `json:"messages"`
 	Model    string            `json:"model"`
 }
+
+type UsageMetadata struct {
+	Mode      string
+	Operation string
+	Phase     string
+	Round     int
+	ActorName string
+}
+
+type UsageRecord struct {
+	ProviderHost     string
+	Model            string
+	Mode             string
+	Operation        string
+	Phase            string
+	Round            int
+	ActorName        string
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	InputChars       int
+	OutputChars      int
+	Stream           bool
+	Fallback         bool
+	Estimated        bool
+}
+
+type UsageRecorder func(UsageRecord)
 
 type ProviderStreamResponse struct {
 	Choices []struct {
@@ -50,6 +80,11 @@ type ProviderCompletionResponse struct {
 		FinishReason *string `json:"finish_reason"`
 	} `json:"choices"`
 	Error *ProviderError `json:"error,omitempty"`
+	Usage *struct {
+		PromptTokens     int `json:"prompt_tokens"`
+		CompletionTokens int `json:"completion_tokens"`
+		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage,omitempty"`
 }
 
 type ProviderErrorResponse struct {
@@ -60,6 +95,14 @@ type ProviderError struct {
 	Message string `json:"message"`
 	Type    string `json:"type,omitempty"`
 	Code    any    `json:"code,omitempty"`
+}
+
+type providerCallResult struct {
+	Content          string
+	PromptTokens     int
+	CompletionTokens int
+	TotalTokens      int
+	Estimated        bool
 }
 type SpecMessageTextOpenAI struct {
 	Type     string `json:"type"`
@@ -73,6 +116,16 @@ func NewsProvider(apiKey string, url string, model string) *Provider {
 		url:    url,
 		model:  model,
 	}
+}
+
+func (p *Provider) WithUsageRecorder(recorder UsageRecorder) *Provider {
+	p.usageRecorder = recorder
+	return p
+}
+
+func (p *Provider) WithUsageMetadata(metadata UsageMetadata) *Provider {
+	p.usageMetadata = metadata
+	return p
 }
 func (m ProviderMessage) MarshalJSON() ([]byte, error) {
 	type MessageString struct {
@@ -99,14 +152,15 @@ func (m ProviderMessage) MarshalJSON() ([]byte, error) {
 }
 
 func (p *Provider) Chat(ctx context.Context, messages []ProviderMessage) (string, error) {
-	response, err := p.chatCompletion(ctx, messages, false, nil)
+	result, err := p.chatCompletion(ctx, messages, false, nil)
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(response) == "" {
+	if strings.TrimSpace(result.Content) == "" {
 		return "", fmt.Errorf("provider returned empty non-stream response: model=%s host=%s", p.model, p.host())
 	}
-	return response, nil
+	p.recordUsage(messages, result, false, false)
+	return result.Content, nil
 }
 
 func (p *Provider) ChatStream(
@@ -114,12 +168,13 @@ func (p *Provider) ChatStream(
 	messages []ProviderMessage,
 	onChunk func(chunk string),
 ) (string, error) {
-	response, err := p.chatCompletion(ctx, messages, true, onChunk)
+	result, err := p.chatCompletion(ctx, messages, true, onChunk)
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(response) != "" {
-		return response, nil
+	if strings.TrimSpace(result.Content) != "" {
+		p.recordUsage(messages, result, true, false)
+		return result.Content, nil
 	}
 
 	if ctx.Err() != nil {
@@ -131,13 +186,14 @@ func (p *Provider) ChatStream(
 	if err != nil {
 		return "", fmt.Errorf("empty stream then non-stream fallback failed: %w", err)
 	}
-	if strings.TrimSpace(fallback) == "" {
+	if strings.TrimSpace(fallback.Content) == "" {
 		return "", fmt.Errorf("provider returned empty response after stream and non-stream fallback: model=%s host=%s", p.model, p.host())
 	}
 	if onChunk != nil {
-		onChunk(fallback)
+		onChunk(fallback.Content)
 	}
-	return fallback, nil
+	p.recordUsage(messages, fallback, false, true)
+	return fallback.Content, nil
 }
 
 func (p *Provider) chatCompletion(
@@ -145,7 +201,7 @@ func (p *Provider) chatCompletion(
 	messages []ProviderMessage,
 	stream bool,
 	onChunk func(chunk string),
-) (string, error) {
+) (providerCallResult, error) {
 	request := ProviderChatRequest{
 		Stream:   stream,
 		Messages: messages,
@@ -154,7 +210,7 @@ func (p *Provider) chatCompletion(
 
 	jsonData, err := json.Marshal(request)
 	if err != nil {
-		return "", err
+		return providerCallResult{}, err
 	}
 
 	req, err := http.NewRequestWithContext(
@@ -164,7 +220,7 @@ func (p *Provider) chatCompletion(
 		bytes.NewBuffer(jsonData),
 	)
 	if err != nil {
-		return "", err
+		return providerCallResult{}, err
 	}
 
 	apiKey := p.apiKey
@@ -187,13 +243,13 @@ func (p *Provider) chatCompletion(
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return providerCallResult{}, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("provider error: status=%s body=%s", resp.Status, string(body))
+		return providerCallResult{}, fmt.Errorf("provider error: status=%s body=%s", resp.Status, string(body))
 	}
 
 	if !stream {
@@ -203,18 +259,18 @@ func (p *Provider) chatCompletion(
 	return readStreamResponse(resp.Body, p.host(), p.model, onChunk)
 }
 
-func readCompletionResponse(body io.Reader) (string, error) {
+func readCompletionResponse(body io.Reader) (providerCallResult, error) {
 	bodyBytes, err := io.ReadAll(body)
 	if err != nil {
-		return "", err
+		return providerCallResult{}, err
 	}
 
 	var completion ProviderCompletionResponse
 	if err := json.Unmarshal(bodyBytes, &completion); err != nil {
-		return "", fmt.Errorf("parse provider completion JSON: %w body=%s", err, preview(bodyBytes, 600))
+		return providerCallResult{}, fmt.Errorf("parse provider completion JSON: %w body=%s", err, preview(bodyBytes, 600))
 	}
 	if completion.Error != nil {
-		return "", fmt.Errorf("provider error: type=%s code=%v message=%s", completion.Error.Type, completion.Error.Code, completion.Error.Message)
+		return providerCallResult{}, fmt.Errorf("provider error: type=%s code=%v message=%s", completion.Error.Type, completion.Error.Code, completion.Error.Message)
 	}
 
 	var fullResponse strings.Builder
@@ -224,10 +280,17 @@ func readCompletionResponse(body io.Reader) (string, error) {
 			fullResponse.WriteString(content)
 		}
 	}
-	return fullResponse.String(), nil
+	result := providerCallResult{Content: fullResponse.String(), Estimated: true}
+	if completion.Usage != nil {
+		result.PromptTokens = completion.Usage.PromptTokens
+		result.CompletionTokens = completion.Usage.CompletionTokens
+		result.TotalTokens = completion.Usage.TotalTokens
+		result.Estimated = false
+	}
+	return result, nil
 }
 
-func readStreamResponse(body io.Reader, host string, model string, onChunk func(chunk string)) (string, error) {
+func readStreamResponse(body io.Reader, host string, model string, onChunk func(chunk string)) (providerCallResult, error) {
 	var fullResponse strings.Builder
 	chunkCount := 0
 	emptyChoiceCount := 0
@@ -256,12 +319,12 @@ func readStreamResponse(body io.Reader, host string, model string, onChunk func(
 
 		var providerErr ProviderErrorResponse
 		if err := json.Unmarshal([]byte(data), &providerErr); err == nil && providerErr.Error != nil {
-			return "", fmt.Errorf("provider stream error: type=%s code=%v message=%s", providerErr.Error.Type, providerErr.Error.Code, providerErr.Error.Message)
+			return providerCallResult{}, fmt.Errorf("provider stream error: type=%s code=%v message=%s", providerErr.Error.Type, providerErr.Error.Code, providerErr.Error.Message)
 		}
 
 		var streamResp ProviderStreamResponse
 		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
-			return "", fmt.Errorf("parse provider stream JSON: %w data=%s", err, preview([]byte(data), 600))
+			return providerCallResult{}, fmt.Errorf("parse provider stream JSON: %w data=%s", err, preview([]byte(data), 600))
 		}
 
 		for _, choice := range streamResp.Choices {
@@ -279,7 +342,7 @@ func readStreamResponse(body io.Reader, host string, model string, onChunk func(
 	}
 
 	if err := scanner.Err(); err != nil {
-		return "", err
+		return providerCallResult{}, err
 	}
 	if fullResponse.Len() == 0 {
 		log.Printf(
@@ -292,7 +355,92 @@ func readStreamResponse(body io.Reader, host string, model string, onChunk func(
 		)
 	}
 
-	return fullResponse.String(), nil
+	return providerCallResult{Content: fullResponse.String(), Estimated: true}, nil
+}
+
+func (p *Provider) recordUsage(messages []ProviderMessage, result providerCallResult, stream bool, fallback bool) {
+	if p.usageRecorder == nil {
+		return
+	}
+	inputChars := CountMessageChars(messages)
+	outputChars := len([]rune(result.Content))
+	promptTokens := result.PromptTokens
+	completionTokens := result.CompletionTokens
+	totalTokens := result.TotalTokens
+	estimated := result.Estimated
+	if promptTokens <= 0 {
+		promptTokens = EstimateTokensForMessages(messages)
+		estimated = true
+	}
+	if completionTokens <= 0 {
+		completionTokens = EstimateTokensForText(result.Content)
+		estimated = true
+	}
+	if totalTokens <= 0 {
+		totalTokens = promptTokens + completionTokens
+	}
+	metadata := p.usageMetadata
+	p.usageRecorder(UsageRecord{
+		ProviderHost:     p.host(),
+		Model:            p.model,
+		Mode:             metadata.Mode,
+		Operation:        metadata.Operation,
+		Phase:            metadata.Phase,
+		Round:            metadata.Round,
+		ActorName:        metadata.ActorName,
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		TotalTokens:      totalTokens,
+		InputChars:       inputChars,
+		OutputChars:      outputChars,
+		Stream:           stream,
+		Fallback:         fallback,
+		Estimated:        estimated,
+	})
+}
+
+func CountMessageChars(messages []ProviderMessage) int {
+	total := 0
+	for _, message := range messages {
+		total += len([]rune(message.Role))
+		total += len([]rune(message.Content))
+		for _, block := range message.Content2 {
+			total += len([]rune(block.Type))
+			total += len([]rune(block.Text))
+			total += len([]rune(block.ImageUrl))
+		}
+	}
+	return total
+}
+
+func EstimateTokensForMessages(messages []ProviderMessage) int {
+	total := 0
+	for _, message := range messages {
+		total += 4
+		total += EstimateTokensForText(message.Role)
+		total += EstimateTokensForText(message.Content)
+		for _, block := range message.Content2 {
+			total += EstimateTokensForText(block.Type)
+			total += EstimateTokensForText(block.Text)
+			total += EstimateTokensForText(block.ImageUrl)
+		}
+	}
+	if total < 1 {
+		return 1
+	}
+	return total
+}
+
+func EstimateTokensForText(value string) int {
+	runes := len([]rune(value))
+	if runes <= 0 {
+		return 0
+	}
+	tokens := (runes + 3) / 4
+	if tokens < 1 {
+		return 1
+	}
+	return tokens
 }
 
 func contentToString(value any) string {

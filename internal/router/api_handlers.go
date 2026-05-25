@@ -579,6 +579,36 @@ func getBattleTurns(database *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func getBattleUsage(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		battle, ok := findOwnedBattle(c, database)
+		if !ok {
+			return
+		}
+
+		var records []models.AIUsageRecord
+		if err := database.WithContext(c.Request.Context()).
+			Where("battle_save_id = ? AND owner_id = ?", battle.Id, currentUserID(c)).
+			Order("created_at ASC").
+			Find(&records).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list battle usage"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"battleId": battle.Id,
+			"summary": gin.H{
+				"promptTokens":        battle.PromptTokens,
+				"completionTokens":    battle.CompletionTokens,
+				"totalTokens":         battle.TotalTokens,
+				"estimatedCostMicros": battle.EstimatedCostMicros,
+				"currency":            "USD",
+			},
+			"records": records,
+		})
+	}
+}
+
 func listPublicBattles(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var battles []models.BattleSave
@@ -1086,6 +1116,42 @@ func getRolePlaySessionTurns(database *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"turns": turns})
+	}
+}
+
+func getRolePlayUsage(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session id"})
+			return
+		}
+		session, err := newRolePlayService(database).GetSession(c.Request.Context(), id, currentUserID(c))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "roleplay session not found"})
+			return
+		}
+
+		var records []models.AIUsageRecord
+		if err := database.WithContext(c.Request.Context()).
+			Where("role_play_session_id = ? AND owner_id = ?", session.Id, currentUserID(c)).
+			Order("created_at ASC").
+			Find(&records).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list roleplay usage"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"rolePlaySessionId": session.Id,
+			"summary": gin.H{
+				"promptTokens":        session.PromptTokens,
+				"completionTokens":    session.CompletionTokens,
+				"totalTokens":         session.TotalTokens,
+				"estimatedCostMicros": session.EstimatedCostMicros,
+				"currency":            "USD",
+			},
+			"records": records,
+		})
 	}
 }
 
@@ -2095,6 +2161,7 @@ func newBattleService(database *gorm.DB) *service.BattleService {
 		repository.NewQuestRepository(database),
 		repository.NewIAProfileRepository(database),
 		service.NewLiveService(repository.NewLiveRepository(database)),
+		repository.NewAIUsageRepository(database),
 	)
 }
 
@@ -2113,6 +2180,7 @@ func newRolePlayService(database *gorm.DB) *service.RolePlayService {
 	return service.NewRolePlayService(
 		repository.NewRolePlayRepository(database),
 		repository.NewQuestRepository(database),
+		repository.NewAIUsageRepository(database),
 	)
 }
 

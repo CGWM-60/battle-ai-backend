@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 )
@@ -45,9 +46,9 @@ Tu dois INCARNER ce profil dans ta réponse :
 
 Position de débat obligatoire :
 - Le contexte JSON contient "debatePosition", "opponentPosition" et "conflictInstruction".
-- Tu dois défendre clairement "debatePosition", même si tu reconnais des nuances.
-- Tu ne dois pas avoir la même conclusion que l'autre IA.
-- Si ton intuition rejoint l'autre IA, transforme-la en divergence de fond : priorité différente, valeur différente, risque différent ou définition différente.
+- Tu dois partir de "debatePosition", mais tu peux reconnaître que tu es partiellement d'accord avec l'autre IA.
+- Tu dois identifier au moins un point de discord réel avec "opponentPosition".
+- Si ton intuition rejoint l'autre IA, ne force pas une opposition totale : fais porter la thèse sur une divergence de fond précise, comme la priorité, le risque, la valeur morale, la conséquence pratique ou la définition du sujet.
 - Le round 1 doit poser une vraie thèse, pas une réponse neutre.
 
 Si le style contient "humour", tu dois ajouter une touche d’humour.
@@ -94,11 +95,11 @@ Si l'autre IA vient de parler, réponds directement à son dernier argument puis
 
 Position de débat obligatoire :
 - Le contexte JSON contient "debatePosition", "opponentPosition" et "conflictInstruction".
-- Tu dois défendre "debatePosition" pendant tout le débat.
-- Tu peux concéder un détail, mais tu dois maintenir une divergence de fond avec "opponentPosition".
-- Tu ne dois jamais conclure que vous êtes globalement d'accord.
-- Si l'autre IA va dans ton sens, crée la divergence sur le critère central : priorité, risque, valeur morale, conséquence pratique ou définition.
-- Une bonne réponse doit contenir au moins un désaccord clair avec l'argument adverse récent.
+- Tu dois défendre l'angle de "debatePosition" pendant tout le débat.
+- Tu peux être d'accord avec une partie de l'argument adverse, mais tu dois faire avancer le débat sur un point de discord réel.
+- Ne réponds pas par une opposition artificielle si vous partagez une idée: précise plutôt où vous divergez exactement.
+- Si l'autre IA va dans ton sens, recentre sur le critère qui vous sépare : priorité, risque, valeur morale, conséquence pratique ou définition.
+- Une bonne réponse peut commencer par une concession, mais elle doit contenir au moins un point de désaccord clair avec l'argument adverse récent.
 
 Règles de style :
 - Tu dois incarner personality.
@@ -149,8 +150,9 @@ Tu dois :
 
 Position de débat obligatoire :
 - Tu dois conclure depuis "debatePosition".
-- Tu peux reconnaître une nuance adverse, mais ta conclusion finale doit rester différente de celle de l'autre IA.
-- Ne termine jamais par un consensus global.
+- Tu peux reconnaître une nuance adverse ou un accord partiel.
+- Ta conclusion doit expliquer le point de discord principal qui reste après le débat.
+- Ne termine pas par un simple consensus global sans préciser ce qui continue de vous séparer.
 
 Règles :
 - Ne répète pas tout l’historique.
@@ -896,6 +898,15 @@ func runIATurnStream(
 
 	var fullResponse strings.Builder
 
+	if ia.Provider != nil {
+		ia.Provider.WithUsageMetadata(provider.UsageMetadata{
+			Mode:      "battle_ia",
+			Operation: "battle_turn",
+			Phase:     roundType,
+			Round:     round,
+			ActorName: ia.Name,
+		})
+	}
 	response, err := ia.Provider.ChatStream(ctx, messages, func(chunk string) {
 		fullResponse.WriteString(chunk)
 		if onChunk != nil {
@@ -1151,6 +1162,15 @@ func runIATurn(
 		return "", fmt.Errorf("erreur JSON context pour %s: %w", ia.Name, err)
 	}
 
+	if ia.Provider != nil {
+		ia.Provider.WithUsageMetadata(provider.UsageMetadata{
+			Mode:      "battle_ia",
+			Operation: "battle_turn",
+			Phase:     phase,
+			Round:     round,
+			ActorName: ia.Name,
+		})
+	}
 	response, err := ia.Provider.Chat(ctx, []provider.ProviderMessage{
 		{
 			Role:    "system",
@@ -1237,17 +1257,30 @@ func buildOpposingDebatePositions(
 	}
 
 	positionA, positionB := inferOpposingPositions(question)
+	if firstIAStartsWithPositionB(question, allIAs) {
+		positionA, positionB = positionB, positionA
+	}
 	if currentIndex%2 == 0 {
 		return positionA, positionB, fmt.Sprintf(
-			"Tu dois défendre cette position contre %s. Vous ne devez pas avoir la même opinion: transforme les points communs en divergence de fond sur les priorités, les risques, les valeurs ou la définition du sujet.",
+			"Tu dois défendre cet angle face à %s. Tu peux être partiellement d'accord avec l'autre IA, mais tu dois isoler au moins un point de discord réel. Si vous convergeez sur la conclusion, fais porter le débat sur la divergence de fond: priorité, risque, valeur morale, conséquence pratique ou définition du sujet.",
 			opponentName,
 		)
 	}
 
 	return positionB, positionA, fmt.Sprintf(
-		"Tu dois défendre cette position contre %s. Vous ne devez pas avoir la même opinion: transforme les points communs en divergence de fond sur les priorités, les risques, les valeurs ou la définition du sujet.",
+		"Tu dois défendre cet angle face à %s. Tu peux être partiellement d'accord avec l'autre IA, mais tu dois isoler au moins un point de discord réel. Si vous convergeez sur la conclusion, fais porter le débat sur la divergence de fond: priorité, risque, valeur morale, conséquence pratique ou définition du sujet.",
 		opponentName,
 	)
+}
+
+func firstIAStartsWithPositionB(question string, allIAs []models.BattleIAConfig) bool {
+	seed := strings.TrimSpace(strings.ToLower(question))
+	for _, ia := range allIAs {
+		seed += "|" + strings.TrimSpace(strings.ToLower(ia.Name))
+	}
+	hash := fnv.New32a()
+	_, _ = hash.Write([]byte(seed))
+	return hash.Sum32()%2 == 1
 }
 
 func inferOpposingPositions(question string) (string, string) {
