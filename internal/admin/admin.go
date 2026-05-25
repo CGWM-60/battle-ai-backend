@@ -20,6 +20,7 @@ import (
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
 	"cgwm/battle/internal/provider"
+	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
 
@@ -109,14 +110,37 @@ type generatedBattleQuest struct {
 }
 
 type generatedRolePlayQuest struct {
-	Title   string         `json:"title"`
-	Summary string         `json:"summary"`
-	Prompt  string         `json:"prompt"`
-	Theme   string         `json:"theme"`
-	Level   string         `json:"level"`
-	Xp      int            `json:"xp"`
-	Coin    int            `json:"coin"`
-	Meta    map[string]any `json:"metadata"`
+	Title   string                 `json:"title"`
+	Summary string                 `json:"summary"`
+	Prompt  string                 `json:"prompt"`
+	Theme   string                 `json:"theme"`
+	Level   string                 `json:"level"`
+	Xp      int                    `json:"xp"`
+	Coin    int                    `json:"coin"`
+	Meta    map[string]any         `json:"metadata"`
+	Arcs    []generatedRolePlayArc `json:"arcs"`
+}
+
+type generatedRolePlayArc struct {
+	Title     string                     `json:"title"`
+	Summary   string                     `json:"summary"`
+	Objective string                     `json:"objective"`
+	Prompt    string                     `json:"prompt"`
+	Meta      map[string]any             `json:"metadata"`
+	Chapters  []generatedRolePlayChapter `json:"chapters"`
+}
+
+type generatedRolePlayChapter struct {
+	Title         string         `json:"title"`
+	Summary       string         `json:"summary"`
+	Objective     string         `json:"objective"`
+	IntroPrompt   string         `json:"introPrompt"`
+	SuccessPrompt string         `json:"successPrompt"`
+	FailurePrompt string         `json:"failurePrompt"`
+	IsBoss        bool           `json:"isBoss"`
+	Xp            int            `json:"xp"`
+	Coin          int            `json:"coin"`
+	Meta          map[string]any `json:"metadata"`
 }
 
 func Register(router *gin.Engine, db *gorm.DB) {
@@ -357,21 +381,11 @@ func (s *Server) generateRolePlayQuests(c *gin.Context) {
 		if item.Title == "" || item.Prompt == "" {
 			continue
 		}
-		meta, _ := json.Marshal(item.Meta)
-		quest := models.RolePlayQuestTemplate{
-			Slug:     defaultSlug("", item.Title),
-			Title:    item.Title,
-			Summary:  item.Summary,
-			Prompt:   item.Prompt,
-			Theme:    item.Theme,
-			Level:    item.Level,
-			Xp:       item.Xp,
-			Coin:     item.Coin,
-			Source:   "admin_ai",
-			Status:   constants.QuestStatusPublished,
-			Metadata: datatypes.JSON(meta),
+		if !hasAdminGeneratedRolePlayStructure(item) {
+			continue
 		}
-		if err := s.db.WithContext(c.Request.Context()).Create(&quest).Error; err == nil {
+		input := adminGeneratedRolePlayQuestInput(item, defaultSlug("", item.Title))
+		if _, err := service.NewQuestService(repository.NewQuestRepository(s.db)).CreateRolePlay(c.Request.Context(), input); err == nil {
 			created++
 		}
 	}
@@ -565,8 +579,11 @@ Format:
 func generateRolePlayQuestPayload(ctx context.Context, url string, apiKey string, model string, count int) ([]generatedRolePlayQuest, error) {
 	prompt := fmt.Sprintf(`Genere exactement %d quetes de jeu de role.
 Reponds uniquement en JSON valide, sans markdown.
+Chaque quete doit avoir au minimum 2 arcs narratifs.
+Chaque arc doit avoir au minimum 2 chapitres jouables.
+Les arcs et chapitres doivent etre clairement identifies et ordonnes dans le JSON.
 Format:
-[{"title":"...","summary":"resume court","prompt":"prompt complet jouable","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"metadata":{"ton":"..."}}]`, count)
+[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"metadata":{"ton":"..."},"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, count)
 	response, err := callAdminProvider(ctx, url, apiKey, model, prompt)
 	if err != nil {
 		return nil, err
@@ -576,6 +593,76 @@ Format:
 		return nil, err
 	}
 	return quests, nil
+}
+
+func adminGeneratedRolePlayQuestInput(item generatedRolePlayQuest, slug string) service.RolePlayQuestInput {
+	return service.RolePlayQuestInput{
+		Slug:     slug,
+		Title:    item.Title,
+		Summary:  item.Summary,
+		Prompt:   item.Prompt,
+		Theme:    item.Theme,
+		Level:    item.Level,
+		Xp:       item.Xp,
+		Coin:     item.Coin,
+		Source:   "admin_ai",
+		Status:   constants.QuestStatusPublished,
+		Metadata: item.Meta,
+		Arcs:     adminGeneratedRolePlayArcInputs(item.Arcs),
+	}
+}
+
+func adminGeneratedRolePlayArcInputs(items []generatedRolePlayArc) []service.RolePlayQuestArcInput {
+	arcs := make([]service.RolePlayQuestArcInput, 0, len(items))
+	for index, item := range items {
+		arcs = append(arcs, service.RolePlayQuestArcInput{
+			Position:  index + 1,
+			Title:     item.Title,
+			Summary:   item.Summary,
+			Objective: item.Objective,
+			Prompt:    item.Prompt,
+			Metadata:  item.Meta,
+			Chapters:  adminGeneratedRolePlayChapterInputs(item.Chapters),
+		})
+	}
+	return arcs
+}
+
+func adminGeneratedRolePlayChapterInputs(items []generatedRolePlayChapter) []service.RolePlayQuestChapterInput {
+	chapters := make([]service.RolePlayQuestChapterInput, 0, len(items))
+	for index, item := range items {
+		chapters = append(chapters, service.RolePlayQuestChapterInput{
+			Position:      index + 1,
+			Title:         item.Title,
+			Summary:       item.Summary,
+			Objective:     item.Objective,
+			IntroPrompt:   item.IntroPrompt,
+			SuccessPrompt: item.SuccessPrompt,
+			FailurePrompt: item.FailurePrompt,
+			IsBoss:        item.IsBoss,
+			Xp:            item.Xp,
+			Coin:          item.Coin,
+			Metadata:      item.Meta,
+		})
+	}
+	return chapters
+}
+
+func hasAdminGeneratedRolePlayStructure(item generatedRolePlayQuest) bool {
+	if len(item.Arcs) < 2 {
+		return false
+	}
+	for _, arc := range item.Arcs {
+		if strings.TrimSpace(arc.Title) == "" || len(arc.Chapters) < 2 {
+			return false
+		}
+		for _, chapter := range arc.Chapters {
+			if strings.TrimSpace(chapter.Title) == "" || strings.TrimSpace(chapter.Objective) == "" {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func callAdminProvider(ctx context.Context, url string, apiKey string, model string, prompt string) (string, error) {

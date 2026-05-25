@@ -80,3 +80,10 @@ func (r *RolePlayRepository) NextTurnSequence(ctx context.Context, sessionID uin
 func (r *RolePlayRepository) CreateQuestRun(ctx context.Context, run *models.RolePlayQuestRun) error {
 	return r.db.WithContext(ctx).Create(run).Error
 }
+
+func (r *RolePlayRepository) UpdateQuestRunBySession(ctx context.Context, sessionID uint, fields map[string]any) error {
+	return r.db.WithContext(ctx).
+		Model(&models.RolePlayQuestRun{}).
+		Where("session_id = ?", sessionID).
+		Updates(fields).Error
+}

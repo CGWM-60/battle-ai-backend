@@ -569,10 +569,17 @@ func (s *BattleService) Judge(
 
 	run := &BattleRun{Battle: battle, IAs: ias}
 	s.attachBattleUsageRecorders(run)
-	_, judgeErr := s.finalizeJudgeResult(ctx, run, &sequence, onEvent)
+
+	judgeCtx, cancelJudge := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancelJudge()
+
+	_, judgeErr := s.finalizeJudgeResult(judgeCtx, run, &sequence, onEvent)
 	if judgeErr != nil {
 		return judgeErr
 	}
+
+	writeCtx, cancelWrite := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelWrite()
 
 	now := time.Now()
 	updates := map[string]any{
@@ -582,11 +589,11 @@ func (s *BattleService) Judge(
 		"winner_name":      winnerNameFromJudgeContext(run),
 		"context":          run.Battle.Context,
 	}
-	if err := s.battles.UpdateFields(ctx, battle.Id, updates); err != nil {
+	if err := s.battles.UpdateFields(writeCtx, battle.Id, updates); err != nil {
 		return fmt.Errorf("cannot persist judge result")
 	}
 	if s.live != nil {
-		_ = s.live.EndSessionsByBattle(ctx, battle.Id)
+		_ = s.live.EndSessionsByBattle(writeCtx, battle.Id)
 	}
 
 	return nil

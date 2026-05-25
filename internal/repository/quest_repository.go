@@ -76,7 +76,7 @@ func (r *QuestRepository) RandomBattleQuest(ctx context.Context, theme string, l
 
 func (r *QuestRepository) ListRolePlayQuests(ctx context.Context, status string, theme string, level string, limit int) ([]models.RolePlayQuestTemplate, error) {
 	var quests []models.RolePlayQuestTemplate
-	query := r.db.WithContext(ctx).Model(&models.RolePlayQuestTemplate{})
+	query := r.rolePlayQuestScope(ctx)
 	query = applyQuestQuery(query, status, theme, level)
 	err := query.Order("created_at DESC").Limit(limit).Find(&quests).Error
 	return quests, err
@@ -84,7 +84,7 @@ func (r *QuestRepository) ListRolePlayQuests(ctx context.Context, status string,
 
 func (r *QuestRepository) GetRolePlayQuestByID(ctx context.Context, id uint) (*models.RolePlayQuestTemplate, error) {
 	var quest models.RolePlayQuestTemplate
-	err := r.db.WithContext(ctx).Where("id = ?", id).First(&quest).Error
+	err := r.rolePlayQuestScope(ctx).Where("id = ?", id).First(&quest).Error
 	if err != nil {
 		return nil, err
 	}
@@ -92,15 +92,74 @@ func (r *QuestRepository) GetRolePlayQuestByID(ctx context.Context, id uint) (*m
 }
 
 func (r *QuestRepository) CreateRolePlayQuest(ctx context.Context, quest *models.RolePlayQuestTemplate) error {
-	return r.db.WithContext(ctx).Create(quest).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		arcs := quest.Arcs
+		quest.Arcs = nil
+		if err := tx.Create(quest).Error; err != nil {
+			return err
+		}
+		return createRolePlayQuestStructure(tx, quest.Id, arcs)
+	})
 }
 
 func (r *QuestRepository) UpdateRolePlayQuest(ctx context.Context, id uint, fields map[string]any) error {
 	return r.db.WithContext(ctx).Model(&models.RolePlayQuestTemplate{}).Where("id = ?", id).Updates(fields).Error
 }
 
+func (r *QuestRepository) ReplaceRolePlayQuestStructure(ctx context.Context, id uint, arcs []models.RolePlayQuestArc) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("template_id = ?", id).Delete(&models.RolePlayQuestChapter{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("template_id = ?", id).Delete(&models.RolePlayQuestArc{}).Error; err != nil {
+			return err
+		}
+		return createRolePlayQuestStructure(tx, id, arcs)
+	})
+}
+
 func (r *QuestRepository) DeleteRolePlayQuest(ctx context.Context, id uint) error {
 	return r.db.WithContext(ctx).Delete(&models.RolePlayQuestTemplate{}, id).Error
+}
+
+func (r *QuestRepository) rolePlayQuestScope(ctx context.Context) *gorm.DB {
+	return r.db.WithContext(ctx).
+		Model(&models.RolePlayQuestTemplate{}).
+		Preload("Arcs", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("position ASC").Order("id ASC")
+		}).
+		Preload("Arcs.Chapters", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("position ASC").Order("id ASC")
+		})
+}
+
+func createRolePlayQuestStructure(tx *gorm.DB, templateID uint, arcs []models.RolePlayQuestArc) error {
+	for arcIndex := range arcs {
+		arc := arcs[arcIndex]
+		chapters := arc.Chapters
+		arc.Id = 0
+		arc.TemplateID = templateID
+		arc.Chapters = nil
+		if arc.Position <= 0 {
+			arc.Position = arcIndex + 1
+		}
+		if err := tx.Create(&arc).Error; err != nil {
+			return err
+		}
+		for chapterIndex := range chapters {
+			chapter := chapters[chapterIndex]
+			chapter.Id = 0
+			chapter.TemplateID = templateID
+			chapter.ArcID = arc.Id
+			if chapter.Position <= 0 {
+				chapter.Position = chapterIndex + 1
+			}
+			if err := tx.Create(&chapter).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func applyQuestQuery(query *gorm.DB, status string, theme string, level string) *gorm.DB {

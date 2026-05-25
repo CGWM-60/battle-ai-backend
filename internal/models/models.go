@@ -267,7 +267,57 @@ type RolePlayQuestTemplate struct {
 	Status   string         `gorm:"size:32;index"`
 	Metadata datatypes.JSON `gorm:"type:json"`
 
+	Arcs []RolePlayQuestArc `gorm:"foreignKey:TemplateID"`
 	Runs []RolePlayQuestRun `gorm:"foreignKey:TemplateID"`
+}
+
+// RolePlayQuestArc = grande partie narrative d'une quete RP.
+// Un template doit pouvoir porter plusieurs arcs, chacun decoupe en chapitres.
+type RolePlayQuestArc struct {
+	Id        uint `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	TemplateID uint                  `gorm:"index" json:"templateId"`
+	Template   RolePlayQuestTemplate `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+
+	Position  int            `gorm:"index" json:"position"`
+	Slug      string         `gorm:"size:120;index" json:"slug"`
+	Title     string         `gorm:"size:160;index" json:"title"`
+	Summary   string         `gorm:"type:text" json:"summary"`
+	Objective string         `gorm:"type:text" json:"objective"`
+	Prompt    string         `gorm:"type:longtext" json:"prompt"`
+	Metadata  datatypes.JSON `gorm:"type:json" json:"metadata"`
+
+	Chapters []RolePlayQuestChapter `gorm:"foreignKey:ArcID" json:"chapters"`
+}
+
+// RolePlayQuestChapter = checkpoint jouable dans un arc RP.
+// C'est l'unite que Flutter peut afficher et que le backend peut suivre.
+type RolePlayQuestChapter struct {
+	Id        uint `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	TemplateID uint                  `gorm:"index" json:"templateId"`
+	Template   RolePlayQuestTemplate `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	ArcID      uint                  `gorm:"index" json:"arcId"`
+	Arc        RolePlayQuestArc      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+
+	Position      int            `gorm:"index" json:"position"`
+	Slug          string         `gorm:"size:120;index" json:"slug"`
+	Title         string         `gorm:"size:160;index" json:"title"`
+	Summary       string         `gorm:"type:text" json:"summary"`
+	Objective     string         `gorm:"type:text" json:"objective"`
+	IntroPrompt   string         `gorm:"type:longtext" json:"introPrompt"`
+	SuccessPrompt string         `gorm:"type:longtext" json:"successPrompt"`
+	FailurePrompt string         `gorm:"type:longtext" json:"failurePrompt"`
+	IsBoss        bool           `json:"isBoss"`
+	Xp            int            `json:"xp"`
+	Coin          int            `json:"coin"`
+	Metadata      datatypes.JSON `gorm:"type:json" json:"metadata"`
 }
 
 // RolePlayQuestRun = progression d'un joueur sur une quete roleplay.
@@ -293,8 +343,12 @@ type RolePlayQuestRun struct {
 	// Status = draft / live / paused / finished / failed / abandoned.
 	Status string `gorm:"size:32;index"`
 	// CurrentStep / TotalSteps = checkpoints fonctionnels de la quete.
-	CurrentStep int
-	TotalSteps  int
+	CurrentStep      int
+	TotalSteps       int
+	CurrentArcID     *uint `gorm:"index"`
+	CurrentChapterID *uint `gorm:"index"`
+	// CompletedChapters = ids des chapitres termines, conserve en JSON pour avancer vite cote API.
+	CompletedChapters datatypes.JSON `gorm:"type:json"`
 	// Journal = resume evolutif des faits marquants.
 	Journal string `gorm:"type:longtext"`
 	// State = etat libre de la quete, inventaire, flags, objectifs, etc.

@@ -103,17 +103,44 @@ type battleQuestRequest struct {
 }
 
 type rolePlayQuestRequest struct {
-	Slug     string         `form:"slug" json:"slug"`
-	Title    string         `form:"title" json:"title"`
-	Summary  string         `form:"summary" json:"summary"`
-	Prompt   string         `form:"prompt" json:"prompt"`
-	Theme    string         `form:"theme" json:"theme"`
-	Level    string         `form:"level" json:"level"`
-	Xp       int            `form:"xp" json:"xp"`
-	Coin     int            `form:"coin" json:"coin"`
-	Source   string         `form:"source" json:"source"`
-	Status   string         `form:"status" json:"status"`
-	Metadata map[string]any `form:"-" json:"metadata"`
+	Slug     string                    `form:"slug" json:"slug"`
+	Title    string                    `form:"title" json:"title"`
+	Summary  string                    `form:"summary" json:"summary"`
+	Prompt   string                    `form:"prompt" json:"prompt"`
+	Theme    string                    `form:"theme" json:"theme"`
+	Level    string                    `form:"level" json:"level"`
+	Xp       int                       `form:"xp" json:"xp"`
+	Coin     int                       `form:"coin" json:"coin"`
+	Source   string                    `form:"source" json:"source"`
+	Status   string                    `form:"status" json:"status"`
+	Metadata map[string]any            `form:"-" json:"metadata"`
+	Arcs     []rolePlayQuestArcRequest `form:"-" json:"arcs"`
+}
+
+type rolePlayQuestArcRequest struct {
+	Position  int                           `form:"position" json:"position"`
+	Slug      string                        `form:"slug" json:"slug"`
+	Title     string                        `form:"title" json:"title"`
+	Summary   string                        `form:"summary" json:"summary"`
+	Objective string                        `form:"objective" json:"objective"`
+	Prompt    string                        `form:"prompt" json:"prompt"`
+	Metadata  map[string]any                `form:"-" json:"metadata"`
+	Chapters  []rolePlayQuestChapterRequest `form:"-" json:"chapters"`
+}
+
+type rolePlayQuestChapterRequest struct {
+	Position      int            `form:"position" json:"position"`
+	Slug          string         `form:"slug" json:"slug"`
+	Title         string         `form:"title" json:"title"`
+	Summary       string         `form:"summary" json:"summary"`
+	Objective     string         `form:"objective" json:"objective"`
+	IntroPrompt   string         `form:"introPrompt" json:"introPrompt"`
+	SuccessPrompt string         `form:"successPrompt" json:"successPrompt"`
+	FailurePrompt string         `form:"failurePrompt" json:"failurePrompt"`
+	IsBoss        bool           `form:"isBoss" json:"isBoss"`
+	Xp            int            `form:"xp" json:"xp"`
+	Coin          int            `form:"coin" json:"coin"`
+	Metadata      map[string]any `form:"-" json:"metadata"`
 }
 
 type liveSessionRequest struct {
@@ -2241,6 +2268,50 @@ func toBattleQuestInput(req battleQuestRequest) service.BattleQuestInput {
 	}
 }
 
+func toRolePlayArcInputs(reqs []rolePlayQuestArcRequest) []service.RolePlayQuestArcInput {
+	if len(reqs) == 0 {
+		return nil
+	}
+	arcs := make([]service.RolePlayQuestArcInput, 0, len(reqs))
+	for _, req := range reqs {
+		arcs = append(arcs, service.RolePlayQuestArcInput{
+			Position:  req.Position,
+			Slug:      req.Slug,
+			Title:     req.Title,
+			Summary:   req.Summary,
+			Objective: req.Objective,
+			Prompt:    req.Prompt,
+			Metadata:  req.Metadata,
+			Chapters:  toRolePlayChapterInputs(req.Chapters),
+		})
+	}
+	return arcs
+}
+
+func toRolePlayChapterInputs(reqs []rolePlayQuestChapterRequest) []service.RolePlayQuestChapterInput {
+	if len(reqs) == 0 {
+		return nil
+	}
+	chapters := make([]service.RolePlayQuestChapterInput, 0, len(reqs))
+	for _, req := range reqs {
+		chapters = append(chapters, service.RolePlayQuestChapterInput{
+			Position:      req.Position,
+			Slug:          req.Slug,
+			Title:         req.Title,
+			Summary:       req.Summary,
+			Objective:     req.Objective,
+			IntroPrompt:   req.IntroPrompt,
+			SuccessPrompt: req.SuccessPrompt,
+			FailurePrompt: req.FailurePrompt,
+			IsBoss:        req.IsBoss,
+			Xp:            req.Xp,
+			Coin:          req.Coin,
+			Metadata:      req.Metadata,
+		})
+	}
+	return chapters
+}
+
 func toRolePlayQuestInput(req rolePlayQuestRequest) service.RolePlayQuestInput {
 	return service.RolePlayQuestInput{
 		Slug:     req.Slug,
@@ -2254,6 +2325,7 @@ func toRolePlayQuestInput(req rolePlayQuestRequest) service.RolePlayQuestInput {
 		Source:   req.Source,
 		Status:   req.Status,
 		Metadata: req.Metadata,
+		Arcs:     toRolePlayArcInputs(req.Arcs),
 	}
 }
 

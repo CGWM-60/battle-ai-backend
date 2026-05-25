@@ -70,19 +70,20 @@ func (s *LiveService) EndSessionsByBattle(ctx context.Context, battleID uint) er
 
 func (s *LiveService) EndSession(ctx context.Context, sessionID uint, channelKey string) error {
 	now := time.Now()
-	if err := s.AppendEvent(ctx, sessionID, constants.LiveEventTypeStatus, constants.AuthorTypeSystem, constants.AuthorTypeSystem, map[string]any{
-		"status":  constants.LiveStatusEnded,
-		"channel": channelKey,
-		"message": "live session ended",
+	if err := s.live.UpdateSessionFields(ctx, sessionID, map[string]any{
+		"status":        constants.LiveStatusEnded,
+		"ended_at":      &now,
+		"last_event_at": &now,
 	}); err != nil {
 		return err
 	}
 
-	return s.live.UpdateSessionFields(ctx, sessionID, map[string]any{
-		"status":        constants.LiveStatusEnded,
-		"ended_at":      &now,
-		"last_event_at": &now,
+	_ = s.AppendEvent(ctx, sessionID, constants.LiveEventTypeStatus, constants.AuthorTypeSystem, constants.AuthorTypeSystem, map[string]any{
+		"status":  constants.LiveStatusEnded,
+		"channel": channelKey,
+		"message": "live session ended",
 	})
+	return nil
 }
 
 func (s *LiveService) HistoryByChannel(ctx context.Context, channel string, ownerID uint, after int, limit int) (*models.LiveSession, []models.LiveEvent, error) {

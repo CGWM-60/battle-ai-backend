@@ -69,6 +69,9 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 		snapshotBytes = []byte("{}")
 	}
 	var templateID *uint
+	var firstArcID *uint
+	var firstChapterID *uint
+	totalChapters := 0
 	if input.TemplateID != 0 {
 		template, err := s.quests.GetRolePlayQuestByID(ctx, input.TemplateID)
 		if err != nil {
@@ -77,6 +80,7 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 		templateID = &template.Id
 		title = defaultString(title, template.Title)
 		prompt = defaultString(prompt, template.Prompt)
+		firstArcID, firstChapterID, totalChapters = rolePlayQuestProgressBounds(template)
 	}
 	if title == "" || prompt == "" {
 		return nil, fmt.Errorf("title and scenarioPrompt are required")
@@ -98,17 +102,20 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 	}
 	if templateID != nil {
 		run := &models.RolePlayQuestRun{
-			TemplateID:     templateID,
-			UserID:         ownerID,
-			SessionID:      &session.Id,
-			Title:          title,
-			Status:         constants.RolePlayStatusLive,
-			CurrentStep:    1,
-			TotalSteps:     0,
-			Journal:        "",
-			State:          datatypes.JSON([]byte("{}")),
-			StartedAt:      &now,
-			LastActivityAt: &now,
+			TemplateID:        templateID,
+			UserID:            ownerID,
+			SessionID:         &session.Id,
+			Title:             title,
+			Status:            constants.RolePlayStatusLive,
+			CurrentStep:       1,
+			TotalSteps:        totalChapters,
+			CurrentArcID:      firstArcID,
+			CurrentChapterID:  firstChapterID,
+			CompletedChapters: datatypes.JSON([]byte("[]")),
+			Journal:           "",
+			State:             datatypes.JSON([]byte("{}")),
+			StartedAt:         &now,
+			LastActivityAt:    &now,
 		}
 		_ = s.roleplay.CreateQuestRun(ctx, run)
 	}
@@ -258,6 +265,7 @@ func (s *RolePlayService) AppendAction(ctx context.Context, id uint, ownerID uin
 		"current_scene":    input.Content,
 		"last_activity_at": &now,
 	})
+	s.updateQuestRunProgressFromPayload(ctx, session, input.Payload, now)
 	return turn, nil
 }
 
@@ -280,9 +288,116 @@ func (s *RolePlayService) Resume(ctx context.Context, id uint, ownerID uint) (*m
 
 func (s *RolePlayService) End(ctx context.Context, id uint, ownerID uint) error {
 	now := time.Now()
-	return s.roleplay.UpdateSessionFields(ctx, id, ownerID, map[string]any{
+	if err := s.roleplay.UpdateSessionFields(ctx, id, ownerID, map[string]any{
+		"status":           constants.RolePlayStatusFinished,
+		"finished_at":      &now,
+		"last_activity_at": &now,
+	}); err != nil {
+		return err
+	}
+	_ = s.roleplay.UpdateQuestRunBySession(ctx, id, map[string]any{
 		"status":           constants.RolePlayStatusFinished,
 		"finished_at":      &now,
 		"last_activity_at": &now,
 	})
+	return nil
+}
+
+func rolePlayQuestProgressBounds(template *models.RolePlayQuestTemplate) (*uint, *uint, int) {
+	if template == nil {
+		return nil, nil, 0
+	}
+	var firstArcID *uint
+	var firstChapterID *uint
+	total := 0
+	for arcIndex := range template.Arcs {
+		arc := template.Arcs[arcIndex]
+		if firstArcID == nil {
+			id := arc.Id
+			firstArcID = &id
+		}
+		for chapterIndex := range arc.Chapters {
+			total++
+			if firstChapterID == nil {
+				id := arc.Chapters[chapterIndex].Id
+				firstChapterID = &id
+			}
+		}
+	}
+	return firstArcID, firstChapterID, total
+}
+
+func (s *RolePlayService) updateQuestRunProgressFromPayload(ctx context.Context, session *models.RolePlaySession, payload map[string]any, now time.Time) {
+	if session == nil || len(payload) == 0 {
+		return
+	}
+	fields := map[string]any{
+		"last_activity_at": &now,
+	}
+	if step := intFromPayload(payload["nextStep"]); step > 0 {
+		fields["current_step"] = step
+	} else if step := intFromPayload(payload["step"]); step > 0 {
+		fields["current_step"] = step
+	}
+	if id := uintFromPayload(payload["nextArcId"]); id != nil {
+		fields["current_arc_id"] = id
+	} else if id := uintFromPayload(payload["currentArcId"]); id != nil {
+		fields["current_arc_id"] = id
+	}
+	if id := uintFromPayload(payload["nextChapterId"]); id != nil {
+		fields["current_chapter_id"] = id
+	} else if id := uintFromPayload(payload["currentChapterId"]); id != nil {
+		fields["current_chapter_id"] = id
+	}
+	if ids := uintSliceFromPayload(payload["completedChapterIds"]); len(ids) > 0 {
+		data, _ := json.Marshal(ids)
+		fields["completed_chapters"] = datatypes.JSON(data)
+	} else if id := uintFromPayload(payload["completedChapterId"]); id != nil {
+		data, _ := json.Marshal([]uint{*id})
+		fields["completed_chapters"] = datatypes.JSON(data)
+	}
+	_ = s.roleplay.UpdateQuestRunBySession(ctx, session.Id, fields)
+}
+
+func intFromPayload(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		i, _ := v.Int64()
+		return int(i)
+	case string:
+		var parsed int
+		_, _ = fmt.Sscanf(v, "%d", &parsed)
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func uintFromPayload(value any) *uint {
+	parsed := intFromPayload(value)
+	if parsed <= 0 {
+		return nil
+	}
+	id := uint(parsed)
+	return &id
+}
+
+func uintSliceFromPayload(value any) []uint {
+	raw, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	ids := make([]uint, 0, len(raw))
+	for _, item := range raw {
+		if id := uintFromPayload(item); id != nil {
+			ids = append(ids, *id)
+		}
+	}
+	return ids
 }

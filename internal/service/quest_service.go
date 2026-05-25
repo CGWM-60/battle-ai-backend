@@ -41,6 +41,33 @@ type RolePlayQuestInput struct {
 	Source   string
 	Status   string
 	Metadata map[string]any
+	Arcs     []RolePlayQuestArcInput
+}
+
+type RolePlayQuestArcInput struct {
+	Position  int
+	Slug      string
+	Title     string
+	Summary   string
+	Objective string
+	Prompt    string
+	Metadata  map[string]any
+	Chapters  []RolePlayQuestChapterInput
+}
+
+type RolePlayQuestChapterInput struct {
+	Position      int
+	Slug          string
+	Title         string
+	Summary       string
+	Objective     string
+	IntroPrompt   string
+	SuccessPrompt string
+	FailurePrompt string
+	IsBoss        bool
+	Xp            int
+	Coin          int
+	Metadata      map[string]any
 }
 
 type QuestService struct {
@@ -145,10 +172,12 @@ func (s *QuestService) CreateRolePlay(ctx context.Context, input RolePlayQuestIn
 		Source:   defaultString(input.Source, "manual"),
 		Status:   defaultString(input.Status, constants.QuestStatusPublished),
 		Metadata: datatypes.JSON(metadata),
+		Arcs:     buildRolePlayQuestArcs(input.Arcs),
 	}
 	if err := s.quests.CreateRolePlayQuest(ctx, quest); err != nil {
 		return nil, err
 	}
+	quest, _ = s.quests.GetRolePlayQuestByID(ctx, quest.Id)
 	return quest, nil
 }
 
@@ -168,11 +197,77 @@ func (s *QuestService) UpdateRolePlay(ctx context.Context, id uint, input RolePl
 		metadata, _ := json.Marshal(input.Metadata)
 		fields["metadata"] = datatypes.JSON(metadata)
 	}
-	return s.quests.UpdateRolePlayQuest(ctx, id, fields)
+	if err := s.quests.UpdateRolePlayQuest(ctx, id, fields); err != nil {
+		return err
+	}
+	if len(input.Arcs) > 0 {
+		return s.quests.ReplaceRolePlayQuestStructure(ctx, id, buildRolePlayQuestArcs(input.Arcs))
+	}
+	return nil
 }
 
 func (s *QuestService) DeleteRolePlay(ctx context.Context, id uint) error {
 	return s.quests.DeleteRolePlayQuest(ctx, id)
+}
+
+func buildRolePlayQuestArcs(inputs []RolePlayQuestArcInput) []models.RolePlayQuestArc {
+	if len(inputs) == 0 {
+		return nil
+	}
+	arcs := make([]models.RolePlayQuestArc, 0, len(inputs))
+	for index, input := range inputs {
+		if strings.TrimSpace(input.Title) == "" {
+			continue
+		}
+		metadata, _ := json.Marshal(input.Metadata)
+		arc := models.RolePlayQuestArc{
+			Position:  input.Position,
+			Slug:      input.Slug,
+			Title:     input.Title,
+			Summary:   input.Summary,
+			Objective: input.Objective,
+			Prompt:    input.Prompt,
+			Metadata:  datatypes.JSON(metadata),
+			Chapters:  buildRolePlayQuestChapters(input.Chapters),
+		}
+		if arc.Position <= 0 {
+			arc.Position = index + 1
+		}
+		arcs = append(arcs, arc)
+	}
+	return arcs
+}
+
+func buildRolePlayQuestChapters(inputs []RolePlayQuestChapterInput) []models.RolePlayQuestChapter {
+	if len(inputs) == 0 {
+		return nil
+	}
+	chapters := make([]models.RolePlayQuestChapter, 0, len(inputs))
+	for index, input := range inputs {
+		if strings.TrimSpace(input.Title) == "" {
+			continue
+		}
+		metadata, _ := json.Marshal(input.Metadata)
+		chapter := models.RolePlayQuestChapter{
+			Position:      input.Position,
+			Slug:          input.Slug,
+			Title:         input.Title,
+			Summary:       input.Summary,
+			Objective:     input.Objective,
+			IntroPrompt:   input.IntroPrompt,
+			SuccessPrompt: input.SuccessPrompt,
+			FailurePrompt: input.FailurePrompt,
+			IsBoss:        input.IsBoss,
+			Xp:            input.Xp,
+			Coin:          input.Coin,
+			Metadata:      datatypes.JSON(metadata),
+		}
+		if chapter.Position <= 0 {
+			chapter.Position = index + 1
+		}
+		chapters = append(chapters, chapter)
+	}
+	return chapters
 }
 
 func addString(fields map[string]any, key string, value string) {
