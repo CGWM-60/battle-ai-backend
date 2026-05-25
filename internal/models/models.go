@@ -515,6 +515,12 @@ type BattleMessageContext struct {
 	Round                int                  `json:"round"`
 	TotalRounds          int                  `json:"totalRounds"`
 	RoundDurationSeconds int                  `json:"roundDurationSeconds"`
+	JudgeName            string               `json:"judgeName,omitempty"`
+	JudgeSlot            int                  `json:"judgeSlot,omitempty"`
+	JudgeWinnerSlot      int                  `json:"judgeWinnerSlot,omitempty"`
+	JudgeScoreOne        int                  `json:"judgeScoreOne,omitempty"`
+	JudgeScoreTwo        int                  `json:"judgeScoreTwo,omitempty"`
+	JudgeReason          string               `json:"judgeReason,omitempty"`
 	CurrentIA            string               `json:"currentIa"`
 	DebatePosition       string               `json:"debatePosition"`
 	OpponentPosition     string               `json:"opponentPosition"`

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -228,7 +229,13 @@ func (s *BattleService) Run(ctx context.Context, run *BattleRun, resumeTurns []m
 			if event.Type == "error" {
 				eventType = constants.LiveEventTypeError
 			}
-			s.live.AppendBattleEvent(ctx, run.Battle.Id, eventType, constants.AuthorTypeIA, event.IA, event)
+			authorType := constants.AuthorTypeIA
+			authorName := event.IA
+			if event.Type == "judge_result" {
+				authorType = constants.AuthorTypeSystem
+				authorName = defaultString(event.JudgeName, "Juge")
+			}
+			s.live.AppendBattleEvent(ctx, run.Battle.Id, eventType, authorType, authorName, event)
 		}
 
 		if event.Done && event.Type != "error" && ctx.Err() == nil {
@@ -236,16 +243,28 @@ func (s *BattleService) Run(ctx context.Context, run *BattleRun, resumeTurns []m
 			content := chunks[key]
 			delete(chunks, key)
 
+			authorType := constants.AuthorTypeIA
+			authorName := event.IA
+			if event.Type == "judge_result" {
+				authorType = constants.AuthorTypeSystem
+				authorName = defaultString(event.JudgeName, "Juge")
+			}
+
 			payloadBytes, _ := json.Marshal(map[string]any{
-				"turnIndex": event.TurnIndex,
+				"turnIndex":       event.TurnIndex,
+				"judgeName":       event.JudgeName,
+				"judgeSlot":       event.JudgeSlot,
+				"judgeWinnerSlot": event.JudgeWinnerSlot,
+				"judgeScoreOne":   event.JudgeScoreOne,
+				"judgeScoreTwo":   event.JudgeScoreTwo,
 			})
 
 			turn := &models.BattleSaveTurn{
 				BattleSaveID: run.Battle.Id,
 				Round:        event.Round,
 				Phase:        event.Type,
-				AuthorType:   constants.AuthorTypeIA,
-				AuthorName:   event.IA,
+				AuthorType:   authorType,
+				AuthorName:   authorName,
 				Content:      content,
 				Payload:      datatypes.JSON(payloadBytes),
 				Sequence:     sequence,
@@ -343,7 +362,13 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 			if event.Type == "error" {
 				eventType = constants.LiveEventTypeError
 			}
-			s.live.AppendBattleEvent(ctx, run.Battle.Id, eventType, constants.AuthorTypeIA, event.IA, event)
+			authorType := constants.AuthorTypeIA
+			authorName := event.IA
+			if event.Type == "judge_result" {
+				authorType = constants.AuthorTypeSystem
+				authorName = defaultString(event.JudgeName, "Juge")
+			}
+			s.live.AppendBattleEvent(ctx, run.Battle.Id, eventType, authorType, authorName, event)
 		}
 
 		if event.Done && event.Type != "error" && ctx.Err() == nil {
@@ -351,16 +376,28 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 			content := chunks[key]
 			delete(chunks, key)
 
+			authorType := constants.AuthorTypeIA
+			authorName := event.IA
+			if event.Type == "judge_result" {
+				authorType = constants.AuthorTypeSystem
+				authorName = defaultString(event.JudgeName, "Juge")
+			}
+
 			payloadBytes, _ := json.Marshal(map[string]any{
-				"turnIndex": event.TurnIndex,
+				"turnIndex":       event.TurnIndex,
+				"judgeName":       event.JudgeName,
+				"judgeSlot":       event.JudgeSlot,
+				"judgeWinnerSlot": event.JudgeWinnerSlot,
+				"judgeScoreOne":   event.JudgeScoreOne,
+				"judgeScoreTwo":   event.JudgeScoreTwo,
 			})
 
 			turn := &models.BattleSaveTurn{
 				BattleSaveID: run.Battle.Id,
 				Round:        event.Round,
 				Phase:        event.Type,
-				AuthorType:   constants.AuthorTypeIA,
-				AuthorName:   event.IA,
+				AuthorType:   authorType,
+				AuthorName:   authorName,
 				Content:      content,
 				Payload:      datatypes.JSON(payloadBytes),
 				Sequence:     sequence,
@@ -405,6 +442,7 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 	now := time.Now()
 	status := constants.BattleStatusPaused
 	var finishedAt *time.Time
+	var winnerName string
 	if runErr != nil {
 		status = constants.BattleStatusPaused
 		if onEvent != nil {
@@ -424,11 +462,78 @@ func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns 
 		writeCtx = context.Background()
 	}
 
-	_ = s.battles.UpdateFields(writeCtx, run.Battle.Id, map[string]any{
+	if runErr == nil && round >= totalRounds {
+		finalTurns, listErr := s.battles.ListTurns(writeCtx, run.Battle.Id)
+		if listErr == nil {
+			judge := decideJudgeResult(run.IAs, turnsToHistory(finalTurns))
+			winnerName = judge.WinnerName
+
+			judgeEvent := scenarios.BattleStreamEvent{
+				Round:           round,
+				Type:            "judge_result",
+				Content:         judge.Reason,
+				Done:            true,
+				JudgeName:       judge.JudgeName,
+				JudgeSlot:       judge.JudgeSlot,
+				JudgeWinnerSlot: judge.WinnerSlot,
+				JudgeScoreOne:   judge.ScoreOne,
+				JudgeScoreTwo:   judge.ScoreTwo,
+			}
+			if onEvent != nil {
+				onEvent(judgeEvent)
+			}
+			if s.live != nil {
+				s.live.AppendBattleEvent(
+					writeCtx,
+					run.Battle.Id,
+					constants.LiveEventTypeScore,
+					constants.AuthorTypeSystem,
+					judge.JudgeName,
+					judgeEvent,
+				)
+			}
+
+			payloadBytes, _ := json.Marshal(map[string]any{
+				"judgeName":       judge.JudgeName,
+				"judgeSlot":       judge.JudgeSlot,
+				"judgeWinnerSlot": judge.WinnerSlot,
+				"judgeScoreOne":   judge.ScoreOne,
+				"judgeScoreTwo":   judge.ScoreTwo,
+			})
+			judgeTurn := &models.BattleSaveTurn{
+				BattleSaveID: run.Battle.Id,
+				Round:        round,
+				Phase:        "judge_result",
+				AuthorType:   constants.AuthorTypeSystem,
+				AuthorName:   judge.JudgeName,
+				Content:      judge.Reason,
+				Payload:      datatypes.JSON(payloadBytes),
+				Sequence:     sequence,
+			}
+			sequence++
+			_ = s.battles.AppendTurn(writeCtx, judgeTurn)
+
+			run.Battle.Context.JudgeName = judge.JudgeName
+			run.Battle.Context.JudgeSlot = judge.JudgeSlot
+			run.Battle.Context.JudgeWinnerSlot = judge.WinnerSlot
+			run.Battle.Context.JudgeScoreOne = judge.ScoreOne
+			run.Battle.Context.JudgeScoreTwo = judge.ScoreTwo
+			run.Battle.Context.JudgeReason = judge.Reason
+		}
+	}
+
+	updates := map[string]any{
 		"status":           status,
 		"finished_at":      finishedAt,
 		"last_activity_at": &now,
-	})
+	}
+	if winnerName != "" {
+		updates["winner_name"] = winnerName
+	}
+	if run.Battle.Context.JudgeName != "" {
+		updates["context"] = run.Battle.Context
+	}
+	_ = s.battles.UpdateFields(writeCtx, run.Battle.Id, updates)
 	if status == constants.BattleStatusFinished && s.live != nil {
 		_ = s.live.EndSessionsByBattle(writeCtx, run.Battle.Id)
 	}
@@ -673,6 +778,106 @@ func hasInlineIAConfigs(req *BattleRequest) bool {
 
 func normalizeProviderName(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
+}
+
+type judgeDecision struct {
+	JudgeName  string
+	JudgeSlot  int
+	WinnerSlot int
+	WinnerName string
+	ScoreOne   int
+	ScoreTwo   int
+	Reason     string
+}
+
+func decideJudgeResult(ias []models.BattleIAConfig, history []models.BattleRoundMessage) judgeDecision {
+	if len(ias) == 0 {
+		return judgeDecision{
+			JudgeName:  "Juge IA",
+			JudgeSlot:  1,
+			WinnerSlot: 1,
+			WinnerName: "IA 1",
+			ScoreOne:   50,
+			ScoreTwo:   50,
+			Reason:     "Aucune donnee suffisante pour juger ce round final.",
+		}
+	}
+
+	judgeIndex := rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(ias))
+	judgeName := defaultString(ias[judgeIndex].Name, fmt.Sprintf("IA %d", judgeIndex+1))
+
+	charStats := make([]int, len(ias))
+	messageStats := make([]int, len(ias))
+	for _, message := range history {
+		for index, ia := range ias {
+			if strings.EqualFold(strings.TrimSpace(message.IA), strings.TrimSpace(ia.Name)) {
+				charStats[index] += len([]rune(strings.TrimSpace(message.Content)))
+				messageStats[index]++
+				break
+			}
+		}
+	}
+
+	totalChars := 0
+	for _, count := range charStats {
+		totalChars += count
+	}
+	if totalChars <= 0 {
+		totalChars = 1
+	}
+
+	ratioOne := float64(charStats[0]) / float64(totalChars)
+	scoreOne := clampJudgeScore(int(40 + ratioOne*60))
+	scoreTwo := clampJudgeScore(100 - scoreOne)
+
+	winnerSlot := 1
+	if len(ias) > 1 && (scoreTwo > scoreOne || (scoreTwo == scoreOne && rand.Intn(2) == 1)) {
+		winnerSlot = 2
+	}
+	winnerName := defaultString(ias[winnerSlot-1].Name, fmt.Sprintf("IA %d", winnerSlot))
+
+	reason := fmt.Sprintf(
+		"Juge %s: analyse finale sur le volume d'arguments (%d/%d caracteres, %d/%d prises de parole). Verdict %s avec un score juge %d-%d.",
+		judgeName,
+		charStats[0],
+		func() int {
+			if len(charStats) > 1 {
+				return charStats[1]
+			}
+			return 0
+		}(),
+		messageStats[0],
+		func() int {
+			if len(messageStats) > 1 {
+				return messageStats[1]
+			}
+			return 0
+		}(),
+		winnerName,
+		scoreOne,
+		scoreTwo,
+	)
+
+	return judgeDecision{
+		JudgeName:  judgeName,
+		JudgeSlot:  judgeIndex + 1,
+		WinnerSlot: winnerSlot,
+		WinnerName: winnerName,
+		ScoreOne:   scoreOne,
+		ScoreTwo:   scoreTwo,
+		Reason:     reason,
+	}
+}
+
+func clampJudgeScore(score int) int {
+	if score < 0 {
+		return 0
+	}
+	if score > 100 {
+		return 100
+	}
+
+	return score
 }
 
 func sanitizeTotalRounds(totalRounds int) int {

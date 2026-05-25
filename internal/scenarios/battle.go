@@ -11,13 +11,18 @@ import (
 )
 
 type BattleStreamEvent struct {
-	IA        string `json:"ia"`
-	Round     int    `json:"round"`
-	Type      string `json:"type"`
-	TurnIndex int    `json:"turn_index,omitempty"`
-	Content   string `json:"content"`
-	Done      bool   `json:"done"`
-	Error     string `json:"error,omitempty"`
+	IA              string `json:"ia"`
+	Round           int    `json:"round"`
+	Type            string `json:"type"`
+	TurnIndex       int    `json:"turn_index,omitempty"`
+	Content         string `json:"content"`
+	Done            bool   `json:"done"`
+	Error           string `json:"error,omitempty"`
+	JudgeName       string `json:"judge_name,omitempty"`
+	JudgeSlot       int    `json:"judge_slot,omitempty"`
+	JudgeWinnerSlot int    `json:"judge_winner_slot,omitempty"`
+	JudgeScoreOne   int    `json:"judge_score_one,omitempty"`
+	JudgeScoreTwo   int    `json:"judge_score_two,omitempty"`
 }
 
 const DefaultDebateDuration = 1 * time.Minute
