@@ -6,7 +6,7 @@ import (
 )
 
 func TestAdminTemplatesParse(t *testing.T) {
-	if _, err := template.New("admin").Funcs(template.FuncMap{"json": toJSON}).Parse(adminHTML); err != nil {
+	if _, err := template.New("admin").Funcs(adminTemplateFuncs()).Parse(adminHTML); err != nil {
 		t.Fatalf("admin templates should parse: %v", err)
 	}
 }

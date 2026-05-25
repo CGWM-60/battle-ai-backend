@@ -44,6 +44,7 @@ type dashboardData struct {
 	Stats         statsData
 	Config        configData
 	Cron          scheduler.CronSnapshot
+	Usage         usageData
 	Recent        recentData
 }
 
@@ -80,6 +81,22 @@ type recentData struct {
 	LiveSessions   []models.LiveSession
 }
 
+type usageData struct {
+	Total       usageSummary
+	Battle      usageSummary
+	RolePlay    usageSummary
+	Recent      []models.AIUsageRecord
+	PricingHint string
+}
+
+type usageSummary struct {
+	CallCount           int64
+	PromptTokens        int64
+	CompletionTokens    int64
+	TotalTokens         int64
+	EstimatedCostMicros int64
+}
+
 type generatedBattleQuest struct {
 	Title   string         `json:"title"`
 	Content string         `json:"content"`
@@ -105,7 +122,7 @@ type generatedRolePlayQuest struct {
 func Register(router *gin.Engine, db *gorm.DB) {
 	server := &Server{
 		db:        db,
-		templates: template.Must(template.New("admin").Funcs(template.FuncMap{"json": toJSON}).Parse(adminHTML)),
+		templates: template.Must(template.New("admin").Funcs(adminTemplateFuncs()).Parse(adminHTML)),
 	}
 
 	router.GET("/admin/login", server.loginPage)
@@ -120,6 +137,10 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	group.POST("/generate/battle", server.generateBattleQuests)
 	group.POST("/generate/rp", server.generateRolePlayQuests)
 	group.POST("/live/:id/end", server.endLiveSession)
+}
+
+func adminTemplateFuncs() template.FuncMap {
+	return template.FuncMap{"json": toJSON, "usdMicros": usdMicros}
 }
 
 func (s *Server) loginPage(c *gin.Context) {
@@ -441,11 +462,43 @@ func (s *Server) dashboardData(c *gin.Context) dashboardData {
 	s.db.WithContext(c.Request.Context()).Model(&models.LiveSession{}).Where("status = ?", constants.LiveStatusStreaming).Count(&data.Stats.LiveStreaming)
 	s.db.WithContext(c.Request.Context()).Model(&models.LiveSession{}).Where("status = ?", constants.LiveStatusEnded).Count(&data.Stats.LiveEnded)
 
+	data.Usage = s.usageDashboardData(c.Request.Context())
+
 	s.db.WithContext(c.Request.Context()).Order("created_at DESC").Limit(8).Find(&data.Recent.BattleQuests)
 	s.db.WithContext(c.Request.Context()).Order("created_at DESC").Limit(8).Find(&data.Recent.RolePlayQuests)
 	s.db.WithContext(c.Request.Context()).Order("updated_at DESC").Limit(8).Find(&data.Recent.Battles)
 	s.db.WithContext(c.Request.Context()).Order("updated_at DESC").Limit(8).Find(&data.Recent.LiveSessions)
 
+	return data
+}
+
+func (s *Server) usageDashboardData(ctx context.Context) usageData {
+	data := usageData{
+		PricingHint: "Configure AI_PRICE_*_USD_PER_1M pour estimer les couts plateforme. A 0, seuls les tokens sont collectes.",
+	}
+	load := func(mode string) usageSummary {
+		var summary usageSummary
+		query := s.db.WithContext(ctx).Model(&models.AIUsageRecord{})
+		if mode != "" {
+			query = query.Where("session_mode = ?", mode)
+		}
+		_ = query.Select(`
+			COUNT(*) AS call_count,
+			COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+			COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+			COALESCE(SUM(total_tokens), 0) AS total_tokens,
+			COALESCE(SUM(estimated_cost_micros), 0) AS estimated_cost_micros
+		`).Scan(&summary).Error
+		return summary
+	}
+
+	data.Total = load("")
+	data.Battle = load(constants.ModeBattleIA)
+	data.RolePlay = load(constants.ModeRolePlayIA)
+	_ = s.db.WithContext(ctx).
+		Order("created_at DESC").
+		Limit(12).
+		Find(&data.Recent).Error
 	return data
 }
 
@@ -693,6 +746,10 @@ func cleanJSON(response string) string {
 func toJSON(value any) string {
 	data, _ := json.MarshalIndent(value, "", "  ")
 	return string(data)
+}
+
+func usdMicros(value int64) string {
+	return fmt.Sprintf("$%.6f", float64(value)/1_000_000)
 }
 
 func env(key string, fallback string) string {
