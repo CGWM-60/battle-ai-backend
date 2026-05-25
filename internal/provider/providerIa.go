@@ -223,10 +223,7 @@ func (p *Provider) chatCompletion(
 		return providerCallResult{}, err
 	}
 
-	apiKey := p.apiKey
-	if apiKey == "" {
-		apiKey = p.apiKey
-	}
+	apiKey := cleanProviderAPIKey(p.apiKey)
 
 	req.Header.Set("Content-Type", "application/json")
 	if stream {
@@ -257,6 +254,15 @@ func (p *Provider) chatCompletion(
 	}
 
 	return readStreamResponse(resp.Body, p.host(), p.model, onChunk)
+}
+
+func cleanProviderAPIKey(apiKey string) string {
+	cleaned := strings.TrimSpace(apiKey)
+	cleaned = strings.Trim(cleaned, `"'`)
+	if strings.HasPrefix(strings.ToLower(cleaned), "bearer ") {
+		cleaned = strings.TrimSpace(cleaned[len("bearer "):])
+	}
+	return strings.Trim(cleaned, `"'`)
 }
 
 func readCompletionResponse(body io.Reader) (providerCallResult, error) {

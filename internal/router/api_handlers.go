@@ -266,7 +266,7 @@ func testAIProvider() gin.HandlerFunc {
 				"providerName": providerName,
 				"modelName":    modelName,
 				"latencyMs":    latency.Milliseconds(),
-				"error":        err.Error(),
+				"error":        providerTestErrorMessage(providerName, err),
 			})
 			return
 		}
@@ -2556,6 +2556,19 @@ func battleEventKey(event scenarios.BattleStreamEvent) string {
 
 func providerURL(name string) (string, error) {
 	return service.ProviderURL(name)
+}
+
+func providerTestErrorMessage(providerName string, err error) string {
+	message := err.Error()
+	if strings.Contains(message, "status=401") || strings.Contains(message, "401 Unauthorized") {
+		switch strings.ToLower(strings.TrimSpace(providerName)) {
+		case "xia", "xai", "x-ai":
+			return "xAI a refuse la requete en 401. Verifie que la cle commence par xai-, qu'elle est active sur console.x.ai, et colle la cle seule sans le prefixe Bearer. Detail provider: " + message
+		default:
+			return "Provider refuse en 401. Verifie la cle API et colle la cle seule sans le prefixe Bearer. Detail provider: " + message
+		}
+	}
+	return message
 }
 
 func applyQuestFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
