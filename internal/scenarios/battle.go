@@ -38,6 +38,13 @@ Tu dois INCARNER ce profil dans ta réponse :
 - goal influence ce que tu cherches à prouver.
 - weakness est une limite que tu peux laisser apparaître légèrement.
 
+Position de débat obligatoire :
+- Le contexte JSON contient "debatePosition", "opponentPosition" et "conflictInstruction".
+- Tu dois défendre clairement "debatePosition", même si tu reconnais des nuances.
+- Tu ne dois pas avoir la même conclusion que l'autre IA.
+- Si ton intuition rejoint l'autre IA, transforme-la en divergence de fond : priorité différente, valeur différente, risque différent ou définition différente.
+- Le round 1 doit poser une vraie thèse, pas une réponse neutre.
+
 Si le style contient "humour", tu dois ajouter une touche d’humour.
 Si le style contient "énergie", tu dois écrire avec plus de rythme.
 Si le style contient "piques amicales", tu peux faire des remarques taquines mais jamais méchantes.
@@ -79,6 +86,14 @@ Objectif :
 Tu écris une seule prise de parole naturelle, comme dans une conversation.
 Si tu es la première IA du tour, avance un argument clair.
 Si l'autre IA vient de parler, réponds directement à son dernier argument puis ajoute ton propre point.
+
+Position de débat obligatoire :
+- Le contexte JSON contient "debatePosition", "opponentPosition" et "conflictInstruction".
+- Tu dois défendre "debatePosition" pendant tout le débat.
+- Tu peux concéder un détail, mais tu dois maintenir une divergence de fond avec "opponentPosition".
+- Tu ne dois jamais conclure que vous êtes globalement d'accord.
+- Si l'autre IA va dans ton sens, crée la divergence sur le critère central : priorité, risque, valeur morale, conséquence pratique ou définition.
+- Une bonne réponse doit contenir au moins un désaccord clair avec l'argument adverse récent.
 
 Règles de style :
 - Tu dois incarner personality.
@@ -126,6 +141,11 @@ Tu dois :
 - Donner ton argument final le plus fort.
 - Reconnaître la faiblesse principale de ta position.
 - Donner une note de confiance de 0 à 100.
+
+Position de débat obligatoire :
+- Tu dois conclure depuis "debatePosition".
+- Tu peux reconnaître une nuance adverse, mais ta conclusion finale doit rester différente de celle de l'autre IA.
+- Ne termine jamais par un consensus global.
 
 Règles :
 - Ne répète pas tout l’historique.
@@ -930,16 +950,21 @@ func buildBattleMessages(
 }
 
 const promptQuestBattleIa = `
-Génère exactement 10 quêtes pour un jeu de battle entre IA.
+Génère exactement 10 quêtes pour un jeu où deux IA vont débattre.
 
-Le but est de créer des questions de débat amusantes, originales, ouvertes, parfois absurdes, mais toujours argumentables.
+Important : les IA sont seulement les participantes du débat. Les sujets ne doivent pas tourner principalement autour de l'intelligence artificielle.
+
+Le but est de créer des questions de débat amusantes, originales, ouvertes, parfois absurdes, mais toujours argumentables, sur la vie réelle, la culture générale et les situations du quotidien.
 
 IMPORTANT :
 Tu dois éviter les questions classiques, génériques ou trop souvent vues.
 Tu dois inventer des débats inattendus.
 Les questions doivent ressembler à des sujets de battle fun, pas à des sujets de dissertation scolaire.
-Au minimum 2 quêtes sur les 10 doivent avoir un angle clairement humoristique.
-Ces 2 quêtes humoristiques doivent rester débattables : l'humour sert le conflit d'idées, il ne remplace pas la question.
+Au minimum 4 quêtes sur les 10 doivent avoir un angle clairement humoristique.
+Ces 4 quêtes humoristiques doivent rester débattables : l'humour sert le conflit d'idées, il ne remplace pas la question.
+Au moins 6 quêtes doivent parler de sujets non technologiques.
+Au moins 5 quêtes doivent partir d'une situation de tous les jours ou de culture générale.
+Maximum 1 quête peut parler d'IA, de robots ou de technologie numérique.
 
 Réponds uniquement avec un tableau JSON valide.
 Aucun markdown.
@@ -952,9 +977,14 @@ Structure obligatoire :
     "title": "Titre court de la quête",
     "content": "Question complète du débat",
     "level": "facile|moyen|compliqué|difficile|très difficile",
-    "theme": "société|IA|technologie|philosophie|écologie|économie|éducation|culture|morale|futur|langage|quotidien",
+    "theme": "quotidien|culture générale|société|famille|école|travail|loisirs|sport|cuisine|ville|voyage|cinéma|musique|histoire|morale|écologie|économie|langage|technologie",
     "point": 0,
-    "xp": 0
+    "xp": 0,
+    "coin": 0,
+    "metadata": {
+      "angle": "angle du conflit",
+      "humour": true
+    }
   }
 ]
 
@@ -962,9 +992,11 @@ Thèmes :
 - Génère exactement 10 objets.
 - Chaque objet doit avoir un thème différent.
 - Tu dois choisir 10 thèmes différents parmi :
-  société, IA, technologie, philosophie, écologie, économie, éducation, culture, morale, futur, langage, quotidien.
+  quotidien, culture générale, société, famille, école, travail, loisirs, sport, cuisine, ville, voyage, cinéma, musique, histoire, morale, écologie, économie, langage, technologie.
 - Ne répète jamais deux fois le même thème.
 - Le champ "theme" doit correspondre exactement au thème choisi.
+- Le thème "technologie" est optionnel et ne doit apparaître qu'une seule fois maximum.
+- Ne crée pas de thème "IA".
 
 INTERDICTIONS IMPORTANTES :
 Tu ne dois pas générer ces questions ni leurs variantes proches :
@@ -983,10 +1015,14 @@ Tu ne dois pas générer ces questions ni leurs variantes proches :
 - Les devoirs à la maison sont-ils utiles ?
 - Le travail doit-il disparaître avec les machines ?
 - Les animaux sont-ils meilleurs que les humains ?
+- L'IA va-t-elle remplacer les humains ?
+- ChatGPT est-il plus intelligent que nous ?
+- Les robots vont-ils voler nos métiers ?
 
 Règles anti-boucle :
 - Ne pose pas de questions célèbres ou évidentes.
 - Ne pose pas de questions trop générales.
+- Ne centre pas les questions sur l'IA, les robots, les algorithmes ou les applications.
 - Ne pose pas deux questions avec la même structure.
 - Ne commence pas plus de 2 questions par "Faut-il".
 - Ne commence pas plus de 2 questions par "Est-ce que".
@@ -1004,17 +1040,19 @@ Pour chaque quête, imagine mentalement :
 4. au moins deux positions défendables.
 
 Exemples de bons styles de questions, sans les recopier :
-- "Un frigo intelligent doit-il avoir le droit de juger tes repas ?"
-- "Un ascenseur qui parle trop est-il un progrès ou une punition ?"
-- "Les chaussettes dépareillées sont-elles un style ou un abandon moral ?"
-- "Une ville devrait-elle récompenser les gens qui marchent lentement ?"
-- "Un prof remplacé par une IA drôle serait-il meilleur ou dangereux ?"
+- "Les chaussettes dépareillées sont-elles un style ou une démission morale ?"
+- "Un voisin qui tond le dimanche mérite-t-il une médaille ou un exil diplomatique ?"
+- "Les spoilers de films devraient-ils être punis plus sévèrement que les retards au dîner ?"
+- "Un buffet à volonté révèle-t-il la vraie nature humaine ?"
+- "Les gens qui parlent au cinéma sont-ils incompris ou réellement dangereux pour la civilisation ?"
+- "Une ville devrait-elle récompenser les personnes qui savent faire la queue sans soupirer ?"
+- "Les plats moches mais délicieux méritent-ils plus de respect que les plats photogéniques ?"
 
 Style des questions :
 - Fun.
 - Original.
 - Débattable.
-- Avec au minimum 2 questions franchement humoristiques.
+- Avec au minimum 4 questions franchement humoristiques.
 - Un peu provocateur.
 - Compréhensible rapidement.
 - Pas trop sérieux.
@@ -1027,11 +1065,16 @@ Niveaux :
 - Les autres niveaux doivent varier entre "facile", "moyen", "compliqué" et "difficile".
 
 Barème obligatoire :
-- facile : point entre 5 et 10, xp entre 10 et 25
-- moyen : point entre 10 et 20, xp entre 25 et 50
-- compliqué : point entre 20 et 35, xp entre 50 et 80
-- difficile : point entre 35 et 50, xp entre 80 et 120
-- très difficile : point entre 50 et 75, xp entre 120 et 200
+- facile : point entre 5 et 10, xp entre 10 et 25, coin entre 2 et 8
+- moyen : point entre 10 et 20, xp entre 25 et 50, coin entre 5 et 15
+- compliqué : point entre 20 et 35, xp entre 50 et 80, coin entre 10 et 25
+- difficile : point entre 35 et 50, xp entre 80 et 120, coin entre 20 et 40
+- très difficile : point entre 50 et 75, xp entre 120 et 200, coin entre 35 et 60
+
+Metadata obligatoire :
+- metadata.angle décrit en quelques mots le conflit central.
+- metadata.humour vaut true pour au moins 4 objets.
+- metadata.humour vaut false pour les objets sérieux.
 
 Contraintes :
 - Pas de question purement factuelle.
@@ -1040,6 +1083,7 @@ Contraintes :
 - Pas de politique réelle sensible.
 - Pas de question trop vague comme "Que penses-tu du monde ?".
 - Pas de question trop académique.
+- Pas de lot centré sur l'IA, les robots ou la technologie.
 - Pas de répétition d’idée.
 - Pas de variante proche des questions interdites.
 
@@ -1050,10 +1094,14 @@ Avant de répondre, vérifie mentalement que :
 - Aucune question interdite ou trop proche n’apparaît.
 - Les questions sont originales.
 - Les questions sont amusantes.
-- Il y a au moins 2 questions avec un vrai ressort humoristique.
+- Il y a au moins 4 questions avec un vrai ressort humoristique.
+- Il y a au moins 6 questions non technologiques.
+- Il y a au moins 5 questions de quotidien ou de culture générale.
+- Il y a au maximum 1 question liée à l'IA, aux robots ou à la technologie numérique.
 - Les questions ont plusieurs réponses possibles.
 - Il y a au maximum 1 niveau "très difficile".
-- Les points et XP respectent le barème.
+- Les points, XP et coins respectent le barème.
+- Le champ metadata.humour vaut true sur au moins 4 objets.
 - Le JSON est valide.
 
 Retour attendu uniquement :
@@ -1064,7 +1112,12 @@ Retour attendu uniquement :
     "level": "...",
     "theme": "...",
     "point": 0,
-    "xp": 0
+    "xp": 0,
+    "coin": 0,
+    "metadata": {
+      "angle": "...",
+      "humour": true
+    }
   }
 ]
 `
@@ -1143,17 +1196,93 @@ func buildBattleContext(
 		instruction = "Réponds selon le contexte fourni."
 	}
 
+	debatePosition, opponentPosition, conflictInstruction := buildOpposingDebatePositions(question, currentIA, allIAs)
+
 	return models.BattleMessageContext{
-		Question:           question,
-		Round:              round,
-		TotalRounds:        0,
-		CurrentIA:          currentIA.Name,
-		Instruction:        instruction,
-		IAProfile:          buildIAProfile(currentIA),
-		MyPreviousMessages: myPreviousMessages,
-		OpponentMessages:   opponentMessages,
-		AllPreviousRounds:  history,
+		Question:            question,
+		Round:               round,
+		TotalRounds:         0,
+		CurrentIA:           currentIA.Name,
+		DebatePosition:      debatePosition,
+		OpponentPosition:    opponentPosition,
+		ConflictInstruction: conflictInstruction,
+		Instruction:         instruction,
+		IAProfile:           buildIAProfile(currentIA),
+		MyPreviousMessages:  myPreviousMessages,
+		OpponentMessages:    opponentMessages,
+		AllPreviousRounds:   history,
 	}
+}
+
+func buildOpposingDebatePositions(
+	question string,
+	currentIA models.BattleIAConfig,
+	allIAs []models.BattleIAConfig,
+) (string, string, string) {
+	currentIndex := 0
+	opponentName := "l'autre IA"
+	for index, ia := range allIAs {
+		if ia.Name == currentIA.Name {
+			currentIndex = index
+			continue
+		}
+		if ia.Name != "" {
+			opponentName = ia.Name
+		}
+	}
+
+	positionA, positionB := inferOpposingPositions(question)
+	if currentIndex%2 == 0 {
+		return positionA, positionB, fmt.Sprintf(
+			"Tu dois défendre cette position contre %s. Vous ne devez pas avoir la même opinion: transforme les points communs en divergence de fond sur les priorités, les risques, les valeurs ou la définition du sujet.",
+			opponentName,
+		)
+	}
+
+	return positionB, positionA, fmt.Sprintf(
+		"Tu dois défendre cette position contre %s. Vous ne devez pas avoir la même opinion: transforme les points communs en divergence de fond sur les priorités, les risques, les valeurs ou la définition du sujet.",
+		opponentName,
+	)
+}
+
+func inferOpposingPositions(question string) (string, string) {
+	cleanQuestion := strings.TrimSpace(question)
+	if cleanQuestion == "" {
+		return "Position A: défendre une réponse favorable au sujet.", "Position B: défendre une réponse critique ou opposée au sujet."
+	}
+
+	left, right, ok := splitBinaryQuestion(cleanQuestion)
+	if ok {
+		return fmt.Sprintf("Position A: défendre principalement « %s » comme meilleure réponse à la question.", left),
+			fmt.Sprintf("Position B: défendre principalement « %s » comme meilleure réponse à la question.", right)
+	}
+
+	return fmt.Sprintf("Position A: répondre plutôt OUI / POUR à la question « %s », en défendant pourquoi cette thèse est souhaitable, utile ou cohérente.", cleanQuestion),
+		fmt.Sprintf("Position B: répondre plutôt NON / CONTRE à la question « %s », en défendant pourquoi cette thèse est risquée, insuffisante ou incohérente.", cleanQuestion)
+}
+
+func splitBinaryQuestion(question string) (string, string, bool) {
+	trimmed := strings.Trim(question, " ?!.")
+	lower := strings.ToLower(trimmed)
+	marker := " ou "
+	index := strings.Index(lower, marker)
+	if index <= 0 {
+		return "", "", false
+	}
+
+	left := strings.TrimSpace(trimmed[:index])
+	right := strings.TrimSpace(trimmed[index+len(marker):])
+	if left == "" || right == "" {
+		return "", "", false
+	}
+	if strings.Contains(strings.ToLower(right), " ou ") {
+		return "", "", false
+	}
+
+	if colon := strings.LastIndexAny(left, ":;"); colon >= 0 && colon+1 < len(left) {
+		left = strings.TrimSpace(left[colon+1:])
+	}
+	return left, right, true
 }
 
 func buildIAProfile(ia models.BattleIAConfig) models.BattleIAProfile {

@@ -516,6 +516,9 @@ type BattleMessageContext struct {
 	TotalRounds          int                  `json:"totalRounds"`
 	RoundDurationSeconds int                  `json:"roundDurationSeconds"`
 	CurrentIA            string               `json:"currentIa"`
+	DebatePosition       string               `json:"debatePosition"`
+	OpponentPosition     string               `json:"opponentPosition"`
+	ConflictInstruction  string               `json:"conflictInstruction"`
 	Instruction          string               `json:"instruction"`
 	IAProfile            BattleIAProfile      `json:"iaProfile"`
 	MyPreviousMessages   []BattleRoundMessage `json:"myPreviousMessages"`

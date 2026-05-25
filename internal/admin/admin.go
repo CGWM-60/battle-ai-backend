@@ -489,7 +489,13 @@ func (s *Server) redirectError(c *gin.Context, message string) {
 func generateBattleQuestPayload(ctx context.Context, url string, apiKey string, model string, count int) ([]generatedBattleQuest, error) {
 	prompt := fmt.Sprintf(`Genere exactement %d quetes pour un jeu de battle entre IA.
 Reponds uniquement en JSON valide, sans markdown.
-Au minimum 2 quetes doivent avoir un angle clairement humoristique, tout en restant debatables.
+Les IA sont seulement les participantes du debat: les sujets ne doivent pas tourner principalement autour de l'IA.
+Genere surtout des questions generales, de culture generale, de vie quotidienne, sport, cuisine, famille, travail, ecole, cinema, musique, ville, voyage, morale ou societe.
+Au moins 6 quetes doivent etre non technologiques.
+Au moins 5 quetes doivent partir d'une situation de tous les jours ou de culture generale.
+Maximum 1 quete peut parler d'IA, de robots ou de technologie numerique.
+Au minimum 4 quetes doivent avoir un angle clairement humoristique, tout en restant debatables.
+Evite les themes IA/robots/algorithmes sauf exception unique.
 Format:
 [{"title":"...","content":"question debat complete","level":"facile|moyen|difficile","theme":"...","point":10,"xp":25,"coin":5,"metadata":{"angle":"...","humour":true}}]`, count)
 	response, err := callAdminProvider(ctx, url, apiKey, model, prompt)

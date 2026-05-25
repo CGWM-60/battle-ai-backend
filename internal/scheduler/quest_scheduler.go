@@ -317,10 +317,15 @@ func runRolePlayQuestJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg 
 func generateBattleQuests(ctx context.Context, cfg aiProviderConfig, trace cronTrace) ([]generatedBattleQuest, error) {
 	prompt := fmt.Sprintf(`Genere exactement %d quetes pour un jeu de battle entre IA.
 Reponds uniquement en JSON valide, sans markdown.
-Les sujets doivent etre amusants, originaux, ouverts, parfois absurdes, mais toujours debatables.
-Au minimum 2 quetes doivent avoir un angle clairement humoristique.
-Ces 2 quetes humoristiques doivent rester argumentables et opposer au moins deux camps.
+Les IA sont seulement les participantes du debat: les sujets ne doivent pas tourner principalement autour de l'IA.
+Les sujets doivent etre varies, amusants, originaux, ouverts, parfois absurdes, mais toujours debatables.
+Au moins 6 quetes doivent etre non technologiques.
+Au moins 5 quetes doivent parler de vie quotidienne, culture generale, sport, cuisine, famille, travail, ecole, cinema, musique, ville, voyage, morale ou societe.
+Maximum 1 quete peut parler d'IA, de robots ou de technologie numerique.
+Au minimum 4 quetes doivent avoir un angle clairement humoristique.
+Ces 4 quetes humoristiques doivent rester argumentables et opposer au moins deux camps.
 Evite les questions classiques, scolaires, trop generales ou deja vues.
+Evite les themes IA/robots/algorithmes sauf exception unique.
 Ne commence pas plus de 2 questions par "Faut-il".
 Ne commence pas plus de 2 questions par "Est-ce que".
 Format:
