@@ -17,9 +17,17 @@ func NewCoopRepository(db *gorm.DB) *CoopRepository {
 	return &CoopRepository{db: db}
 }
 
+func (r *CoopRepository) coopPartyQuery(ctx context.Context) *gorm.DB {
+	return r.db.WithContext(ctx).
+		Preload("Members", func(db *gorm.DB) *gorm.DB {
+			return db.Where("status <> ?", "left").Order("created_at ASC")
+		}).
+		Preload("Members.User")
+}
+
 func (r *CoopRepository) ListPartiesByHost(ctx context.Context, hostUserID uint, limit int) ([]models.CoopParty, error) {
 	var parties []models.CoopParty
-	err := r.db.WithContext(ctx).
+	err := r.coopPartyQuery(ctx).
 		Where("host_user_id = ?", hostUserID).
 		Order("updated_at DESC").
 		Limit(limit).
@@ -33,7 +41,7 @@ func (r *CoopRepository) CreateParty(ctx context.Context, party *models.CoopPart
 
 func (r *CoopRepository) GetByCode(ctx context.Context, code string) (*models.CoopParty, error) {
 	var party models.CoopParty
-	err := r.db.WithContext(ctx).Where("code = ?", code).First(&party).Error
+	err := r.coopPartyQuery(ctx).Where("code = ?", code).First(&party).Error
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +51,8 @@ func (r *CoopRepository) GetByCode(ctx context.Context, code string) (*models.Co
 func (r *CoopRepository) ListMembers(ctx context.Context, partyID uint) ([]models.CoopPartyMember, error) {
 	var members []models.CoopPartyMember
 	err := r.db.WithContext(ctx).
-		Where("coop_party_id = ?", partyID).
+		Preload("User").
+		Where("coop_party_id = ? AND status <> ?", partyID, "left").
 		Order("created_at ASC").
 		Find(&members).Error
 	return members, err
@@ -81,10 +90,29 @@ func (r *CoopRepository) Ready(ctx context.Context, partyID uint, userID uint) e
 		Updates(map[string]any{"status": "ready", "last_seen_at": &now}).Error
 }
 
-func (r *CoopRepository) UpdateSharedState(ctx context.Context, partyID uint, hostUserID uint, state any) error {
+func (r *CoopRepository) TouchMember(ctx context.Context, partyID uint, userID uint) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).
+		Model(&models.CoopPartyMember{}).
+		Where("coop_party_id = ? AND user_id = ? AND status <> ?", partyID, userID, "left").
+		Updates(map[string]any{"last_seen_at": &now}).Error
+}
+
+func (r *CoopRepository) UpdatePartyStatus(ctx context.Context, partyID uint, status string) error {
+	if status == "" {
+		return nil
+	}
+
+	return r.db.WithContext(ctx).
+		Model(&models.CoopParty{}).
+		Where("id = ?", partyID).
+		Update("status", status).Error
+}
+
+func (r *CoopRepository) UpdateSharedState(ctx context.Context, partyID uint, state any) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).
 		Model(&models.CoopParty{}).
-		Where("id = ? AND host_user_id = ?", partyID, hostUserID).
+		Where("id = ?", partyID).
 		Updates(map[string]any{"shared_state": state, "last_activity_at": &now}).Error
 }

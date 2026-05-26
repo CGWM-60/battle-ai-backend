@@ -1427,7 +1427,7 @@ func readyCoopParty(database *gorm.DB) gin.HandlerFunc {
 
 func listCoopMembers(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		members, err := newCoopService(database).Members(c.Request.Context(), c.Param("code"))
+		members, err := newCoopService(database).Members(c.Request.Context(), c.Param("code"), currentUserID(c))
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "coop party not found"})
 			return
@@ -1443,11 +1443,12 @@ func updateCoopState(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid coop state payload"})
 			return
 		}
-		if err := newCoopService(database).UpdateState(c.Request.Context(), c.Param("code"), currentUserID(c), req.SharedState); err != nil {
-			c.JSON(http.StatusForbidden, gin.H{"error": "only host can update coop state"})
+		party, err := newCoopService(database).UpdateState(c.Request.Context(), c.Param("code"), currentUserID(c), req.SharedState)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"updated": true})
+		c.JSON(http.StatusOK, gin.H{"updated": true, "party": party})
 	}
 }
 
