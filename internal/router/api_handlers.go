@@ -1706,6 +1706,81 @@ func streamLiveChannel(database *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		if !websocket.IsWebSocketUpgrade(c.Request) {
+			flusher, ok := c.Writer.(http.Flusher)
+			if !ok {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming non supporte"})
+				return
+			}
+
+			c.Header("Content-Type", "text/event-stream")
+			c.Header("Cache-Control", "no-cache")
+			c.Header("Connection", "keep-alive")
+			c.Header("X-Accel-Buffering", "no")
+
+			database.WithContext(c.Request.Context()).
+				Model(&models.LiveSession{}).
+				Where("id = ?", session.Id).
+				UpdateColumn("viewer_count", gorm.Expr("viewer_count + ?", 1))
+			defer database.WithContext(c.Request.Context()).
+				Model(&models.LiveSession{}).
+				Where("id = ? AND viewer_count > 0", session.Id).
+				UpdateColumn("viewer_count", gorm.Expr("viewer_count - ?", 1))
+
+			lastSequence, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
+			if err := writeSSEEvent(c, flusher, "live_connected", gin.H{
+				"type":    "live_connected",
+				"session": session,
+			}); err != nil {
+				return
+			}
+
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				events, err := liveEventsAfter(c, database, session.Id, lastSequence, 100)
+				if err != nil {
+					_ = writeSSEEvent(c, flusher, "error", gin.H{"type": "error", "error": "cannot read live events"})
+					return
+				}
+
+				for _, event := range events {
+					if err := writeSSEEvent(c, flusher, "live_event", gin.H{
+						"type":  "live_event",
+						"event": event,
+					}); err != nil {
+						return
+					}
+					lastSequence = event.Sequence
+				}
+
+				var refreshed models.LiveSession
+				err = database.WithContext(c.Request.Context()).
+					Where("id = ? AND owner_id = ?", session.Id, currentUserID(c)).
+					First(&refreshed).Error
+				if err != nil {
+					return
+				}
+				if refreshed.Status == constants.LiveStatusEnded {
+					_ = writeSSEEvent(c, flusher, "live_ended", gin.H{
+						"type":    "live_ended",
+						"session": refreshed,
+					})
+					return
+				}
+
+				select {
+				case <-ticker.C:
+					if err := writeSSEEvent(c, flusher, "heartbeat", gin.H{"type": "heartbeat", "ts": time.Now().UTC()}); err != nil {
+						return
+					}
+				case <-c.Request.Context().Done():
+					return
+				}
+			}
+		}
+
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			return
@@ -1787,6 +1862,81 @@ func streamPublicLiveChannel(database *gorm.DB) gin.HandlerFunc {
 		session, ok := findPublicLiveSessionByChannel(c, database)
 		if !ok {
 			return
+		}
+
+		if !websocket.IsWebSocketUpgrade(c.Request) {
+			flusher, ok := c.Writer.(http.Flusher)
+			if !ok {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming non supporte"})
+				return
+			}
+
+			c.Header("Content-Type", "text/event-stream")
+			c.Header("Cache-Control", "no-cache")
+			c.Header("Connection", "keep-alive")
+			c.Header("X-Accel-Buffering", "no")
+
+			database.WithContext(c.Request.Context()).
+				Model(&models.LiveSession{}).
+				Where("id = ?", session.Id).
+				UpdateColumn("viewer_count", gorm.Expr("viewer_count + ?", 1))
+			defer database.WithContext(c.Request.Context()).
+				Model(&models.LiveSession{}).
+				Where("id = ? AND viewer_count > 0", session.Id).
+				UpdateColumn("viewer_count", gorm.Expr("viewer_count - ?", 1))
+
+			lastSequence, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
+			if err := writeSSEEvent(c, flusher, "live_connected", gin.H{
+				"type":    "live_connected",
+				"session": session,
+			}); err != nil {
+				return
+			}
+
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				events, err := liveEventsAfter(c, database, session.Id, lastSequence, 100)
+				if err != nil {
+					_ = writeSSEEvent(c, flusher, "error", gin.H{"type": "error", "error": "cannot read live events"})
+					return
+				}
+
+				for _, event := range events {
+					if err := writeSSEEvent(c, flusher, "live_event", gin.H{
+						"type":  "live_event",
+						"event": event,
+					}); err != nil {
+						return
+					}
+					lastSequence = event.Sequence
+				}
+
+				var refreshed models.LiveSession
+				err = database.WithContext(c.Request.Context()).
+					Where("id = ?", session.Id).
+					First(&refreshed).Error
+				if err != nil {
+					return
+				}
+				if refreshed.Status == constants.LiveStatusEnded {
+					_ = writeSSEEvent(c, flusher, "live_ended", gin.H{
+						"type":    "live_ended",
+						"session": refreshed,
+					})
+					return
+				}
+
+				select {
+				case <-ticker.C:
+					if err := writeSSEEvent(c, flusher, "heartbeat", gin.H{"type": "heartbeat", "ts": time.Now().UTC()}); err != nil {
+						return
+					}
+				case <-c.Request.Context().Done():
+					return
+				}
+			}
 		}
 
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -2521,6 +2671,22 @@ func writeWebSocketJSON(conn *websocket.Conn, payload any) error {
 		return err
 	}
 	return conn.WriteJSON(payload)
+}
+
+func writeSSEEvent(c *gin.Context, flusher http.Flusher, event string, payload any) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	if _, err := c.Writer.Write([]byte("event: " + event + "\n")); err != nil {
+		return err
+	}
+	if _, err := c.Writer.Write([]byte("data: " + string(data) + "\n\n")); err != nil {
+		return err
+	}
+	flusher.Flush()
+	return nil
 }
 
 func randomHex(byteCount int) string {
