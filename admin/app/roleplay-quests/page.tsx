@@ -1,6 +1,6 @@
 "use client";
 
-import { Save } from "lucide-react";
+import { BookOpen, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "../components/AdminShell";
 import { ErrorState, LoadingState } from "../components/LoadState";
@@ -12,10 +12,14 @@ export default function RolePlayQuestsPage() {
   const [data, setData] = useState<AdminRolePlayQuestsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [savingId, setSavingId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [busyId, setBusyId] = useState<number | "all" | null>(null);
 
   const reload = () => {
-    loadAdminData<AdminRolePlayQuestsResponse>("roleplay-quests").then(setData).catch((err: Error) => setError(err.message));
+    loadAdminData<AdminRolePlayQuestsResponse>("roleplay-quests").then((payload) => {
+      setData(payload);
+      setSelectedId((current) => current ?? payload.quests[0]?.id ?? null);
+    }).catch((err: Error) => setError(err.message));
   };
 
   useEffect(() => {
@@ -24,26 +28,31 @@ export default function RolePlayQuestsPage() {
 
   const quests = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!data || !needle) {
-      return data?.quests ?? [];
+    const list = data?.quests ?? [];
+    if (!needle) {
+      return list;
     }
-    return data.quests.filter((quest) =>
+    return list.filter((quest) =>
       [quest.title, quest.slug, quest.theme, quest.level, quest.status, String(quest.id)].some((value) =>
         value.toLowerCase().includes(needle),
       ),
     );
   }, [data, query]);
 
-  function updateQuest(index: number, patch: Partial<AdminRolePlayQuest>) {
+  const selectedQuest = quests.find((quest) => quest.id === selectedId) ?? quests[0] ?? null;
+
+  function patchQuest(id: number, patch: Partial<AdminRolePlayQuest>) {
     if (!data) {
       return;
     }
-    const next = data.quests.map((quest, current) => (current === index ? { ...quest, ...patch } : quest));
-    setData({ ...data, quests: next });
+    setData({
+      ...data,
+      quests: data.quests.map((quest) => (quest.id === id ? { ...quest, ...patch } : quest)),
+    });
   }
 
   async function saveQuest(quest: AdminRolePlayQuest) {
-    setSavingId(quest.id);
+    setBusyId(quest.id);
     setError(null);
     try {
       const response = await fetch(`/admin/api/roleplay-quests/${quest.id}`, {
@@ -60,12 +69,58 @@ export default function RolePlayQuestsPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "save failed");
     } finally {
-      setSavingId(null);
+      setBusyId(null);
+    }
+  }
+
+  async function deleteQuest(quest: AdminRolePlayQuest) {
+    if (!window.confirm(`Supprimer la quete RP "${quest.title}" ?`)) {
+      return;
+    }
+    setBusyId(quest.id);
+    setError(null);
+    try {
+      const response = await fetch(`/admin/api/roleplay-quests/${quest.id}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      setSelectedId(null);
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "delete failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function clearAll() {
+    if (!window.confirm("Effacer toutes les quetes RP du systeme ? Les sessions existantes gardent leur historique mais ne seront plus liees a un template.")) {
+      return;
+    }
+    setBusyId("all");
+    setError(null);
+    try {
+      const response = await fetch("/admin/api/roleplay-quests", {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      setSelectedId(null);
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "clear failed");
+    } finally {
+      setBusyId(null);
     }
   }
 
   return (
-    <AdminShell title="Quetes RP" description="Lecture des quetes roleplay, structure arcs/chapitres et recompenses XP/coins.">
+    <AdminShell title="Quetes RP" description="Catalogue roleplay, recompenses, arcs et chapitres.">
       {error ? <ErrorState message={error} /> : null}
       {!data && !error ? <LoadingState /> : null}
       {data ? (
@@ -74,28 +129,76 @@ export default function RolePlayQuestsPage() {
             items={[
               { label: "Quetes RP", value: formatNumber(data.stats.totalQuests) },
               { label: "Publiees", value: formatNumber(data.stats.published), tone: "good" },
-              { label: "Draft", value: formatNumber(data.stats.draft) },
+              { label: "Brouillons", value: formatNumber(data.stats.draft) },
               { label: "Archivees", value: formatNumber(data.stats.archived) },
               { label: "Arcs", value: formatNumber(data.stats.totalArcs) },
               { label: "Chapitres", value: formatNumber(data.stats.totalChapters) },
             ]}
           />
 
-          <section className="panel">
-            <h2>Catalogue RP</h2>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrer par id, titre, theme, niveau ou statut" />
-            <div className="rp-quest-list">
-              {quests.map((quest, index) => (
-                <RolePlayQuestCard
-                  key={quest.id}
-                  quest={quest}
-                  saving={savingId === quest.id}
-                  onChange={(patch) => updateQuest(index, patch)}
-                  onSave={() => saveQuest(quest)}
-                />
-              ))}
-              {!quests.length ? <p className="hint">Aucune quete RP trouvee.</p> : null}
+          <section className="rp-toolbar">
+            <div>
+              <BookOpen size={18} aria-hidden />
+              <strong>{formatNumber(quests.length)} quetes affichees</strong>
             </div>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrer par id, titre, theme, niveau ou statut" />
+            <button className="danger" type="button" onClick={clearAll} disabled={busyId === "all" || data.stats.totalQuests === 0}>
+              <Trash2 size={16} aria-hidden />
+              Clear all
+            </button>
+          </section>
+
+          <section className="rp-admin-layout">
+            <div className="panel rp-table-panel">
+              <div className="table-wrap">
+                <table className="rp-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Titre</th>
+                      <th>Statut</th>
+                      <th>Arc</th>
+                      <th>Chap.</th>
+                      <th>XP</th>
+                      <th>Coin</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {quests.map((quest) => (
+                      <tr
+                        key={quest.id}
+                        className={selectedQuest?.id === quest.id ? "selected" : ""}
+                        onClick={() => setSelectedId(quest.id)}
+                      >
+                        <td>#{quest.id}</td>
+                        <td>
+                          <strong>{quest.title}</strong>
+                          <small>{quest.theme || "-"} / {quest.level || "-"}</small>
+                        </td>
+                        <td><span className={`status ${quest.status}`}>{quest.status}</span></td>
+                        <td>{formatNumber(quest.arcCount)}</td>
+                        <td>{formatNumber(quest.chapterCount)}</td>
+                        <td>{formatNumber(quest.xp)}</td>
+                        <td>{formatNumber(quest.coin)}</td>
+                      </tr>
+                    ))}
+                    {!quests.length ? (
+                      <tr>
+                        <td colSpan={7}>Aucune quete RP.</td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <QuestDetail
+              quest={selectedQuest}
+              busy={busyId}
+              onPatch={patchQuest}
+              onSave={saveQuest}
+              onDelete={deleteQuest}
+            />
           </section>
         </>
       ) : null}
@@ -103,68 +206,84 @@ export default function RolePlayQuestsPage() {
   );
 }
 
-function RolePlayQuestCard({
+function QuestDetail({
   quest,
-  saving,
-  onChange,
+  busy,
+  onPatch,
   onSave,
+  onDelete,
 }: {
-  quest: AdminRolePlayQuest;
-  saving: boolean;
-  onChange: (patch: Partial<AdminRolePlayQuest>) => void;
-  onSave: () => void;
+  quest: AdminRolePlayQuest | null;
+  busy: number | "all" | null;
+  onPatch: (id: number, patch: Partial<AdminRolePlayQuest>) => void;
+  onSave: (quest: AdminRolePlayQuest) => void;
+  onDelete: (quest: AdminRolePlayQuest) => void;
 }) {
+  if (!quest) {
+    return <aside className="panel rp-detail empty">Selectionne une quete RP.</aside>;
+  }
+
   return (
-    <article className="rp-quest-card">
+    <aside className="panel rp-detail">
       <header>
-        <div>
-          <span className={`status ${quest.status}`}>{quest.status || "-"}</span>
-          <h3>#{quest.id} {quest.title}</h3>
-          <p>{quest.summary || "Sans resume."}</p>
-        </div>
-        <dl>
-          <dt>Arcs</dt>
-          <dd>{formatNumber(quest.arcCount)}</dd>
-          <dt>Chapitres</dt>
-          <dd>{formatNumber(quest.chapterCount)}</dd>
-          <dt>Maj</dt>
-          <dd>{formatDate(quest.updatedAt)}</dd>
-        </dl>
+        <span className={`status ${quest.status}`}>{quest.status}</span>
+        <h2>#{quest.id} {quest.title}</h2>
+        <p>{quest.summary || "Sans resume."}</p>
       </header>
 
-      <div className="rp-reward-row">
+      <div className="rp-edit-strip">
         <label>
           XP
-          <input type="number" value={quest.xp} onChange={(event) => onChange({ xp: Number(event.target.value) })} />
+          <input type="number" value={quest.xp} onChange={(event) => onPatch(quest.id, { xp: Number(event.target.value) })} />
         </label>
         <label>
           Coins
-          <input type="number" value={quest.coin} onChange={(event) => onChange({ coin: Number(event.target.value) })} />
+          <input type="number" value={quest.coin} onChange={(event) => onPatch(quest.id, { coin: Number(event.target.value) })} />
         </label>
         <label>
-          Status
-          <select value={quest.status} onChange={(event) => onChange({ status: event.target.value })}>
+          Statut
+          <select value={quest.status} onChange={(event) => onPatch(quest.id, { status: event.target.value })}>
             <option value="published">published</option>
             <option value="draft">draft</option>
             <option value="archived">archived</option>
           </select>
         </label>
-        <button className="primary" type="button" onClick={onSave} disabled={saving}>
+      </div>
+
+      <div className="rp-detail-actions">
+        <button className="primary" type="button" onClick={() => onSave(quest)} disabled={busy === quest.id}>
           <Save size={16} aria-hidden />
-          {saving ? "Enregistrement" : "Enregistrer"}
+          Enregistrer
+        </button>
+        <button className="danger" type="button" onClick={() => onDelete(quest)} disabled={busy === quest.id}>
+          <Trash2 size={16} aria-hidden />
+          Supprimer
         </button>
       </div>
 
-      <details>
-        <summary>Lire le prompt</summary>
-        <p className="prewrap">{quest.prompt}</p>
-      </details>
+      <dl className="rp-facts">
+        <dt>Slug</dt>
+        <dd>{quest.slug}</dd>
+        <dt>Theme</dt>
+        <dd>{quest.theme || "-"}</dd>
+        <dt>Niveau</dt>
+        <dd>{quest.level || "-"}</dd>
+        <dt>Arcs / chapitres</dt>
+        <dd>{quest.arcCount} / {quest.chapterCount}</dd>
+        <dt>Creation</dt>
+        <dd>{formatDate(quest.createdAt)}</dd>
+      </dl>
 
-      <details>
-        <summary>Voir les arcs et chapitres</summary>
+      <section className="rp-read-block">
+        <h3>Prompt</h3>
+        <p className="prewrap">{quest.prompt}</p>
+      </section>
+
+      <section className="rp-read-block">
+        <h3>Structure</h3>
         <div className="rp-arc-list">
           {quest.arcs.map((arc) => (
-            <section key={arc.id} className="rp-arc">
+            <article key={arc.id} className="rp-arc">
               <h4>Arc {arc.position}: {arc.title}</h4>
               <p>{arc.objective || arc.summary || "Sans objectif."}</p>
               <ul>
@@ -176,10 +295,10 @@ function RolePlayQuestCard({
                   </li>
                 ))}
               </ul>
-            </section>
+            </article>
           ))}
         </div>
-      </details>
-    </article>
+      </section>
+    </aside>
   );
 }

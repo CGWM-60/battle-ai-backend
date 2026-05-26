@@ -444,56 +444,118 @@ dd {
   margin-top: 14px;
 }
 
-.rp-quest-list {
+.rp-toolbar {
   display: grid;
-  gap: 14px;
-}
-
-.rp-quest-card {
+  grid-template-columns: auto minmax(280px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #ffffff;
-  padding: 16px;
+  padding: 12px;
+  margin-bottom: 16px;
 }
 
-.rp-quest-card header {
+.rp-toolbar div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rp-toolbar input {
+  margin-bottom: 0;
+}
+
+.rp-admin-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  grid-template-columns: minmax(520px, 0.95fr) minmax(360px, 0.8fr);
   gap: 16px;
+  align-items: start;
 }
 
-.rp-quest-card h3 {
-  margin: 10px 0 8px;
-  font-size: 18px;
+.rp-table-panel {
+  padding: 0;
+  overflow: hidden;
 }
 
-.rp-quest-card p {
+.rp-table th,
+.rp-table td {
+  padding: 11px 12px;
+}
+
+.rp-table tr {
+  cursor: pointer;
+}
+
+.rp-table tbody tr:hover,
+.rp-table tbody tr.selected {
+  background: #eef6ff;
+}
+
+.rp-table td strong,
+.rp-table td small {
+  display: block;
+}
+
+.rp-table td small {
   color: var(--muted);
-  margin: 0 0 10px;
+  margin-top: 3px;
 }
 
-.rp-reward-row {
+.rp-detail {
+  position: sticky;
+  top: 20px;
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+}
+
+.rp-detail.empty {
+  color: var(--muted);
+}
+
+.rp-detail header h2 {
+  margin: 10px 0 8px;
+  font-size: 20px;
+}
+
+.rp-detail header p {
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+
+.rp-edit-strip {
   display: grid;
-  grid-template-columns: 120px 120px 160px auto;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
-  align-items: end;
-  margin: 12px 0;
 }
 
-.rp-reward-row label {
+.rp-edit-strip label {
   color: var(--muted);
   font-size: 12px;
 }
 
-details {
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-  margin-top: 10px;
+.rp-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
 }
 
-summary {
-  cursor: pointer;
-  font-weight: 700;
+.rp-facts {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+  margin-bottom: 14px;
+}
+
+.rp-read-block {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+.rp-read-block h3 {
+  margin-top: 0;
 }
 
 .rp-arc-list {
@@ -580,8 +642,15 @@ summary {
   .triple,
   .form-grid,
   .nexus-card-grid,
-  .nexus-edit-grid {
+  .nexus-edit-grid,
+  .rp-admin-layout,
+  .rp-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .rp-detail {
+    position: static;
+    max-height: none;
   }
 }
 
@@ -592,8 +661,7 @@ summary {
 
   .nav-list,
   .row,
-  .rp-quest-card header,
-  .rp-reward-row {
+  .rp-edit-strip {
     grid-template-columns: 1fr;
   }
 

@@ -369,6 +369,8 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.GET("/roleplay-quests", server.rolePlayQuestsAdminAPI)
 	api.PATCH("/roleplay-quests/:id", server.updateRolePlayQuestAdminAPI)
 	api.PUT("/roleplay-quests/:id", server.updateRolePlayQuestAdminAPI)
+	api.DELETE("/roleplay-quests", server.clearRolePlayQuestsAdminAPI)
+	api.DELETE("/roleplay-quests/:id", server.deleteRolePlayQuestAdminAPI)
 	api.GET("/nexus-coin", server.nexusCoinAPI)
 	api.POST("/nexus-coin/plans", server.createNexusCoinPlanAPI)
 	api.PUT("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
@@ -642,6 +644,27 @@ func (s *Server) updateRolePlayQuestAdminAPI(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"updated": true})
+}
+
+func (s *Server) deleteRolePlayQuestAdminAPI(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay quest id"})
+		return
+	}
+	if err := s.deleteRolePlayQuestTemplate(c.Request.Context(), uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) clearRolePlayQuestsAdminAPI(c *gin.Context) {
+	if err := s.clearRolePlayQuestTemplates(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) nexusCoinAPI(c *gin.Context) {
@@ -1120,6 +1143,40 @@ func (s *Server) rolePlayQuestsAdminData(ctx context.Context) (adminRolePlayQues
 		response.Quests = append(response.Quests, item)
 	}
 	return response, nil
+}
+
+func (s *Server) deleteRolePlayQuestTemplate(ctx context.Context, id uint) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.RolePlayQuestRun{}).
+			Where("template_id = ?", id).
+			Update("template_id", nil).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("template_id = ?", id).Delete(&models.RolePlayQuestChapter{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("template_id = ?", id).Delete(&models.RolePlayQuestArc{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&models.RolePlayQuestTemplate{}, id).Error
+	})
+}
+
+func (s *Server) clearRolePlayQuestTemplates(ctx context.Context) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.RolePlayQuestRun{}).
+			Where("template_id IS NOT NULL").
+			Update("template_id", nil).Error; err != nil {
+			return err
+		}
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.RolePlayQuestChapter{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.RolePlayQuestArc{}).Error; err != nil {
+			return err
+		}
+		return tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.RolePlayQuestTemplate{}).Error
+	})
 }
 
 func (s *Server) nexusCoinData(ctx context.Context) (nexusCoinResponse, error) {
