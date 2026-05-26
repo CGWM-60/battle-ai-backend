@@ -17,14 +17,21 @@ GET  /admin
 GET  /admin/accounts
 GET  /admin/system
 GET  /admin/usage
+GET  /admin/nexus-coin
 GET  /admin/quests
 GET  /admin/live
 GET  /admin/api/dashboard
 GET  /admin/api/accounts
 GET  /admin/api/system
 GET  /admin/api/usage
+GET  /admin/api/nexus-coin
+POST /admin/api/nexus-coin/plans
+PUT  /admin/api/nexus-coin/plans/:id
+PATCH /admin/api/nexus-coin/plans/:id
+DELETE /admin/api/nexus-coin/plans/:id
 GET  /admin/api/quests
 GET  /admin/api/live
+GET  /api/v1/nexus-coin/plans
 POST /admin/logout
 POST /admin/quests/battle
 POST /admin/quests/rp
@@ -68,6 +75,7 @@ Le dashboard admin permet de :
 - voir les stats principales sur des pages Next.js separees
 - consulter les comptes actuels avec progression et activite
 - suivre les connexions DB, les requetes HTTP, la charge runtime Go et les stats reseau applicatives
+- gerer les packs Nexus Coin pour les credits IA avec estimation token + marge
 - creer des quetes Battle manuellement
 - creer des quetes RolePlay manuellement
 - generer des quetes Battle avec un provider IA
@@ -94,6 +102,23 @@ go run .
 ```
 
 Le backend sert ensuite `admin/out` directement. Si `admin/out` n'existe pas, l'ancien template Go reste disponible comme fallback minimal.
+
+## Nexus Coin
+
+La page `/admin/nexus-coin` affiche :
+
+- 4 estimations automatiques calculees depuis `AIUsageRecord`
+- une marge par defaut de `50%` configurable via `NEXUS_COIN_DEFAULT_MARGIN_PERCENT`
+- 4 plans persistants en base (`nexus_coin_plans`) crees au premier chargement
+- un CRUD admin pour modifier le texte, la marge, les credits, le statut et les tokens
+
+Les plans actifs sont exposables au client Flutter via :
+
+```text
+GET /api/v1/nexus-coin/plans
+```
+
+Si aucun cout IA n'est encore disponible en base, l'estimation utilise `NEXUS_COIN_FALLBACK_USD_PER_1M_TOKENS` avec `2.5` par defaut.
 
 ## Providers IA
 

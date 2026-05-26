@@ -383,6 +383,67 @@ dd {
   margin: 0 0 14px;
 }
 
+.nexus-card-grid,
+.nexus-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.nexus-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.nexus-card h3 {
+  margin: 12px 0 6px;
+  font-size: 18px;
+}
+
+.nexus-card p {
+  min-height: 42px;
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.nexus-card > strong {
+  display: block;
+  font-size: 25px;
+  margin-bottom: 14px;
+}
+
+.nexus-card dl,
+.nexus-editor dl {
+  grid-template-columns: 1fr;
+}
+
+.nexus-card dt,
+.nexus-editor dt {
+  font-size: 12px;
+}
+
+.nexus-card dd,
+.nexus-editor dd {
+  margin-bottom: 8px;
+}
+
+.nexus-editor {
+  margin-bottom: 0;
+}
+
+.nexus-editor label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
 .login-body {
   min-height: 100vh;
   display: grid;
@@ -425,7 +486,9 @@ dd {
   .metric-grid,
   .split,
   .triple,
-  .form-grid {
+  .form-grid,
+  .nexus-card-grid,
+  .nexus-edit-grid {
     grid-template-columns: 1fr;
   }
 }

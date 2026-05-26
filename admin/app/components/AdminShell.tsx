@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Activity,
   BrainCircuit,
+  Coins,
   Gauge,
   ListChecks,
   LogOut,
@@ -18,6 +19,7 @@ const navItems = [
   { href: "/accounts/", path: "/admin/accounts/", label: "Comptes", icon: Users },
   { href: "/system/", path: "/admin/system/", label: "Systeme", icon: Activity },
   { href: "/usage/", path: "/admin/usage/", label: "IA & couts", icon: BrainCircuit },
+  { href: "/nexus-coin/", path: "/admin/nexus-coin/", label: "Nexus Coin", icon: Coins },
   { href: "/quests/", path: "/admin/quests/", label: "Quetes", icon: ListChecks },
   { href: "/live/", path: "/admin/live/", label: "Live", icon: Radio },
 ];

@@ -23,6 +23,7 @@ func main() {
 		models.RolePlayQuestRun{},
 		models.RolePlaySession{},
 		models.RolePlaySessionTurn{},
+		models.NexusCoinPlan{},
 		models.CoopParty{},
 		models.CoopPartyMember{},
 		models.LiveSession{},

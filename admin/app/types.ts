@@ -230,3 +230,40 @@ export type SystemResponse = {
     coopParties: number;
   };
 };
+
+export type NexusCoinStats = {
+  callCount: number;
+  totalTokens: number;
+  totalCostMicros: number;
+  averageTokensPerCall: number;
+  averageCostMicrosPerToken: number;
+  marginPercent: number;
+  costSource: string;
+};
+
+export type NexusCoinPlan = {
+  id: number;
+  slug: string;
+  position: number;
+  name: string;
+  subtitle: string;
+  description: string;
+  status: string;
+  tokenBudget: number;
+  nexusCoins: number;
+  baseCostMicros: number;
+  marginPercent: number;
+  priceMicros: number;
+  estimatedCalls: number;
+  estimatedTokensPerCall: number;
+};
+
+export type NexusCoinEstimate = Omit<NexusCoinPlan, "id" | "position" | "status"> & {
+  costSource: string;
+};
+
+export type NexusCoinResponse = {
+  stats: NexusCoinStats;
+  estimations: NexusCoinEstimate[];
+  plans: NexusCoinPlan[];
+};

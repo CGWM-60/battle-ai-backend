@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"html/template"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -198,6 +199,49 @@ type networkStatsData struct {
 	CoopParties   int64 `json:"coopParties"`
 }
 
+type nexusCoinResponse struct {
+	Stats       nexusCoinStats         `json:"stats"`
+	Estimations []nexusCoinEstimate    `json:"estimations"`
+	Plans       []models.NexusCoinPlan `json:"plans"`
+}
+
+type nexusCoinStats struct {
+	CallCount                 int64   `json:"callCount"`
+	TotalTokens               int64   `json:"totalTokens"`
+	TotalCostMicros           int64   `json:"totalCostMicros"`
+	AverageTokensPerCall      int64   `json:"averageTokensPerCall"`
+	AverageCostMicrosPerToken float64 `json:"averageCostMicrosPerToken"`
+	MarginPercent             int     `json:"marginPercent"`
+	CostSource                string  `json:"costSource"`
+}
+
+type nexusCoinEstimate struct {
+	Slug                   string `json:"slug"`
+	Name                   string `json:"name"`
+	Subtitle               string `json:"subtitle"`
+	Description            string `json:"description"`
+	TokenBudget            int64  `json:"tokenBudget"`
+	NexusCoins             int64  `json:"nexusCoins"`
+	BaseCostMicros         int64  `json:"baseCostMicros"`
+	MarginPercent          int    `json:"marginPercent"`
+	PriceMicros            int64  `json:"priceMicros"`
+	EstimatedCalls         int64  `json:"estimatedCalls"`
+	EstimatedTokensPerCall int64  `json:"estimatedTokensPerCall"`
+	CostSource             string `json:"costSource"`
+}
+
+type nexusCoinPlanInput struct {
+	Slug          string `json:"slug"`
+	Name          string `json:"name"`
+	Subtitle      string `json:"subtitle"`
+	Description   string `json:"description"`
+	Status        string `json:"status"`
+	Position      int    `json:"position"`
+	TokenBudget   int64  `json:"tokenBudget"`
+	NexusCoins    int64  `json:"nexusCoins"`
+	MarginPercent int    `json:"marginPercent"`
+}
+
 type generatedBattleQuest struct {
 	Title   string         `json:"title"`
 	Content string         `json:"content"`
@@ -262,6 +306,13 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.GET("/usage", server.usageAPI)
 	api.GET("/quests", server.questsAPI)
 	api.GET("/live", server.liveAPI)
+	api.GET("/nexus-coin", server.nexusCoinAPI)
+	api.POST("/nexus-coin/plans", server.createNexusCoinPlanAPI)
+	api.PUT("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
+	api.PATCH("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
+	api.DELETE("/nexus-coin/plans/:id", server.deleteNexusCoinPlanAPI)
+
+	router.GET("/api/v1/nexus-coin/plans", server.publicNexusCoinPlansAPI)
 
 	group := router.Group("/admin")
 	group.Use(server.requireAdmin())
@@ -491,6 +542,78 @@ func (s *Server) liveAPI(c *gin.Context) {
 		"stats":        data.Stats,
 		"liveSessions": data.Recent.LiveSessions,
 	})
+}
+
+func (s *Server) nexusCoinAPI(c *gin.Context) {
+	data, err := s.nexusCoinData(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+func (s *Server) createNexusCoinPlanAPI(c *gin.Context) {
+	var input nexusCoinPlanInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid nexus coin plan payload"})
+		return
+	}
+	plan, err := s.saveNexusCoinPlan(c.Request.Context(), nil, input)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, plan)
+}
+
+func (s *Server) updateNexusCoinPlanAPI(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid nexus coin plan id"})
+		return
+	}
+	var input nexusCoinPlanInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid nexus coin plan payload"})
+		return
+	}
+	planID := uint(id)
+	plan, err := s.saveNexusCoinPlan(c.Request.Context(), &planID, input)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, plan)
+}
+
+func (s *Server) deleteNexusCoinPlanAPI(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid nexus coin plan id"})
+		return
+	}
+	if err := s.db.WithContext(c.Request.Context()).Delete(&models.NexusCoinPlan{}, uint(id)).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) publicNexusCoinPlansAPI(c *gin.Context) {
+	if err := s.ensureDefaultNexusCoinPlans(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var plans []models.NexusCoinPlan
+	if err := s.db.WithContext(c.Request.Context()).
+		Where("status = ?", "active").
+		Order("position ASC, id ASC").
+		Find(&plans).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"plans": plans})
 }
 
 func (s *Server) createBattleQuest(c *gin.Context) {
@@ -824,6 +947,201 @@ func (s *Server) systemData(c *gin.Context) systemData {
 	return data
 }
 
+func (s *Server) nexusCoinData(ctx context.Context) (nexusCoinResponse, error) {
+	if err := s.ensureDefaultNexusCoinPlans(ctx); err != nil {
+		return nexusCoinResponse{}, err
+	}
+	var plans []models.NexusCoinPlan
+	if err := s.db.WithContext(ctx).Order("position ASC, id ASC").Find(&plans).Error; err != nil {
+		return nexusCoinResponse{}, err
+	}
+	stats := s.nexusCoinStats(ctx)
+	return nexusCoinResponse{
+		Stats:       stats,
+		Estimations: nexusCoinEstimations(stats),
+		Plans:       plans,
+	}, nil
+}
+
+func (s *Server) ensureDefaultNexusCoinPlans(ctx context.Context) error {
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&models.NexusCoinPlan{}).Count(&count).Error; err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	stats := s.nexusCoinStats(ctx)
+	estimations := nexusCoinEstimations(stats)
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for index, estimate := range estimations {
+			plan := models.NexusCoinPlan{
+				Slug:                   estimate.Slug,
+				Position:               index + 1,
+				Name:                   estimate.Name,
+				Subtitle:               estimate.Subtitle,
+				Description:            estimate.Description,
+				Status:                 "active",
+				TokenBudget:            estimate.TokenBudget,
+				NexusCoins:             estimate.NexusCoins,
+				BaseCostMicros:         estimate.BaseCostMicros,
+				MarginPercent:          estimate.MarginPercent,
+				PriceMicros:            estimate.PriceMicros,
+				EstimatedCalls:         estimate.EstimatedCalls,
+				EstimatedTokensPerCall: estimate.EstimatedTokensPerCall,
+			}
+			if err := tx.Create(&plan).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (s *Server) saveNexusCoinPlan(ctx context.Context, id *uint, input nexusCoinPlanInput) (models.NexusCoinPlan, error) {
+	input.Name = strings.TrimSpace(input.Name)
+	input.Slug = strings.TrimSpace(input.Slug)
+	input.Status = defaultValue(strings.TrimSpace(input.Status), "active")
+	if input.Name == "" {
+		return models.NexusCoinPlan{}, fmt.Errorf("le nom du plan est requis")
+	}
+	if input.Slug == "" {
+		input.Slug = defaultSlug("", input.Name)
+	}
+	if input.TokenBudget <= 0 {
+		return models.NexusCoinPlan{}, fmt.Errorf("le budget tokens doit etre positif")
+	}
+	if input.NexusCoins <= 0 {
+		input.NexusCoins = input.TokenBudget / 1000
+	}
+	if input.MarginPercent < 0 {
+		return models.NexusCoinPlan{}, fmt.Errorf("la marge ne peut pas etre negative")
+	}
+	if input.MarginPercent > 1000 {
+		return models.NexusCoinPlan{}, fmt.Errorf("la marge est trop haute")
+	}
+
+	stats := s.nexusCoinStats(ctx)
+	baseCostMicros := estimateNexusBaseCostMicros(input.TokenBudget, stats.AverageCostMicrosPerToken)
+	priceMicros := applyMarginMicros(baseCostMicros, input.MarginPercent)
+	estimatedCalls := int64(0)
+	if stats.AverageTokensPerCall > 0 {
+		estimatedCalls = input.TokenBudget / stats.AverageTokensPerCall
+	}
+
+	plan := models.NexusCoinPlan{}
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if id != nil {
+			if err := tx.Where("id = ?", *id).First(&plan).Error; err != nil {
+				return err
+			}
+		}
+		plan.Slug = input.Slug
+		plan.Position = input.Position
+		plan.Name = input.Name
+		plan.Subtitle = strings.TrimSpace(input.Subtitle)
+		plan.Description = strings.TrimSpace(input.Description)
+		plan.Status = input.Status
+		plan.TokenBudget = input.TokenBudget
+		plan.NexusCoins = input.NexusCoins
+		plan.BaseCostMicros = baseCostMicros
+		plan.MarginPercent = input.MarginPercent
+		plan.PriceMicros = priceMicros
+		plan.EstimatedCalls = estimatedCalls
+		plan.EstimatedTokensPerCall = stats.AverageTokensPerCall
+
+		if id == nil {
+			return tx.Create(&plan).Error
+		}
+		return tx.Save(&plan).Error
+	})
+	return plan, err
+}
+
+func (s *Server) nexusCoinStats(ctx context.Context) nexusCoinStats {
+	var stats nexusCoinStats
+	_ = s.db.WithContext(ctx).
+		Model(&models.AIUsageRecord{}).
+		Select(`
+			COUNT(*) AS call_count,
+			COALESCE(SUM(total_tokens), 0) AS total_tokens,
+			COALESCE(SUM(estimated_cost_micros), 0) AS total_cost_micros
+		`).
+		Where("total_tokens > 0").
+		Scan(&stats).Error
+
+	if stats.CallCount > 0 {
+		stats.AverageTokensPerCall = stats.TotalTokens / stats.CallCount
+	}
+	if stats.AverageTokensPerCall <= 0 {
+		stats.AverageTokensPerCall = int64(envInt("NEXUS_COIN_FALLBACK_TOKENS_PER_CALL", 4000))
+	}
+	if stats.TotalTokens > 0 && stats.TotalCostMicros > 0 {
+		stats.AverageCostMicrosPerToken = float64(stats.TotalCostMicros) / float64(stats.TotalTokens)
+		stats.CostSource = "ai_usage_records"
+	} else {
+		fallbackUSDPer1M := envFloatDefault("NEXUS_COIN_FALLBACK_USD_PER_1M_TOKENS", 2.5)
+		stats.AverageCostMicrosPerToken = fallbackUSDPer1M
+		stats.CostSource = "fallback:NEXUS_COIN_FALLBACK_USD_PER_1M_TOKENS"
+	}
+	stats.MarginPercent = envInt("NEXUS_COIN_DEFAULT_MARGIN_PERCENT", 50)
+	return stats
+}
+
+func nexusCoinEstimations(stats nexusCoinStats) []nexusCoinEstimate {
+	templates := []struct {
+		slug        string
+		name        string
+		subtitle    string
+		description string
+		tokens      int64
+	}{
+		{"starter", "Starter", "Premiers credits Nexus Coin", "Pack d'entree pour tester les fonctions IA du jeu.", 100_000},
+		{"adventurer", "Aventurier", "Credit confortable pour jouer regulierement", "Pack equilibre pour plusieurs sessions Battle IA ou RolePlay IA.", 350_000},
+		{"champion", "Champion", "Gros volume de credits IA", "Pack pense pour les joueurs actifs et les longues sessions.", 1_000_000},
+		{"legend", "Legende", "Reserve maximale de Nexus Coin", "Pack haut volume pour les gros consommateurs de generation IA.", 3_000_000},
+	}
+
+	estimates := make([]nexusCoinEstimate, 0, len(templates))
+	for _, item := range templates {
+		baseCost := estimateNexusBaseCostMicros(item.tokens, stats.AverageCostMicrosPerToken)
+		price := applyMarginMicros(baseCost, stats.MarginPercent)
+		estimatedCalls := int64(0)
+		if stats.AverageTokensPerCall > 0 {
+			estimatedCalls = item.tokens / stats.AverageTokensPerCall
+		}
+		estimates = append(estimates, nexusCoinEstimate{
+			Slug:                   item.slug,
+			Name:                   item.name,
+			Subtitle:               item.subtitle,
+			Description:            item.description,
+			TokenBudget:            item.tokens,
+			NexusCoins:             item.tokens / 1000,
+			BaseCostMicros:         baseCost,
+			MarginPercent:          stats.MarginPercent,
+			PriceMicros:            price,
+			EstimatedCalls:         estimatedCalls,
+			EstimatedTokensPerCall: stats.AverageTokensPerCall,
+			CostSource:             stats.CostSource,
+		})
+	}
+	return estimates
+}
+
+func estimateNexusBaseCostMicros(tokenBudget int64, averageCostMicrosPerToken float64) int64 {
+	if tokenBudget <= 0 || averageCostMicrosPerToken <= 0 {
+		return 0
+	}
+	return int64(math.Round(float64(tokenBudget) * averageCostMicrosPerToken))
+}
+
+func applyMarginMicros(baseCostMicros int64, marginPercent int) int64 {
+	if baseCostMicros <= 0 {
+		return 0
+	}
+	return int64(math.Round(float64(baseCostMicros) * (1 + float64(marginPercent)/100)))
+}
+
 func runtimeSnapshot() runtimeStatsData {
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
@@ -1110,6 +1428,14 @@ func adminRolePlayGenerationBatchSize() int {
 
 func envInt(key string, fallback int) int {
 	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
+}
+
+func envFloatDefault(key string, fallback float64) float64 {
+	value, err := strconv.ParseFloat(strings.TrimSpace(os.Getenv(key)), 64)
 	if err != nil || value <= 0 {
 		return fallback
 	}

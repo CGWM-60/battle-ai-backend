@@ -638,3 +638,27 @@ type AIUsageRecord struct {
 	EstimatedCostMicros  int64
 	PricingConfiguration string `gorm:"size:120"`
 }
+
+// NexusCoinPlan = pack commercial de credits IA expose plus tard au client Flutter.
+// Les prix sont stockes en micro-USD pour rester alignes avec AIUsageRecord.EstimatedCostMicros.
+type NexusCoinPlan struct {
+	Id        uint `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	Slug        string `gorm:"size:80;uniqueIndex" json:"slug"`
+	Position    int    `gorm:"index" json:"position"`
+	Name        string `gorm:"size:120" json:"name"`
+	Subtitle    string `gorm:"size:180" json:"subtitle"`
+	Description string `gorm:"type:text" json:"description"`
+	Status      string `gorm:"size:32;index" json:"status"`
+
+	TokenBudget            int64 `json:"tokenBudget"`
+	NexusCoins             int64 `json:"nexusCoins"`
+	BaseCostMicros         int64 `json:"baseCostMicros"`
+	MarginPercent          int   `json:"marginPercent"`
+	PriceMicros            int64 `json:"priceMicros"`
+	EstimatedCalls         int64 `json:"estimatedCalls"`
+	EstimatedTokensPerCall int64 `json:"estimatedTokensPerCall"`
+}
