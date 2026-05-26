@@ -544,6 +544,8 @@ func providerKeyEnvForHour(now time.Time) string {
 		return "MISTRAL_AI_KEY"
 	case "claude", "anthropic":
 		return "ANTHROPIC_AI_KEY"
+	case "gemini", "google", "google_ai", "google-ai":
+		return "GEMINI_AI_KEY"
 	default:
 		return "OPEN_AI_KEY"
 	}
@@ -555,6 +557,8 @@ func providerModelEnvForHour(now time.Time) string {
 		return "MISTRAL_AI_MODEL"
 	case "claude", "anthropic":
 		return "ANTHROPIC_AI_MODEL"
+	case "gemini", "google", "google_ai", "google-ai":
+		return "GEMINI_AI_MODEL"
 	default:
 		return "OPEN_AI_MODEL"
 	}
@@ -567,9 +571,12 @@ func cronProviderRotation() []string {
 	for _, part := range parts {
 		name := strings.ToLower(strings.TrimSpace(part))
 		switch name {
-		case "mistral", "openai", "claude", "anthropic":
+		case "mistral", "openai", "claude", "anthropic", "gemini", "google", "google_ai", "google-ai":
 			if name == "anthropic" {
 				name = "claude"
+			}
+			if name == "google" || name == "google_ai" || name == "google-ai" {
+				name = "gemini"
 			}
 			rotation = append(rotation, name)
 		}

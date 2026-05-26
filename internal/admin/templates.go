@@ -245,6 +245,7 @@ const adminHTML = `
               <option value="openrouter">openrouter</option>
               <option value="xia">xia</option>
               <option value="claude">claude</option>
+              <option value="gemini">gemini</option>
             </select>
             <input name="model" placeholder="Modele" required>
             <input name="count" type="number" value="10" min="1" max="20">
@@ -264,6 +265,7 @@ const adminHTML = `
               <option value="openrouter">openrouter</option>
               <option value="xia">xia</option>
               <option value="claude">claude</option>
+              <option value="gemini">gemini</option>
             </select>
             <input name="model" placeholder="Modele" required>
             <input name="count" type="number" value="10" min="1" max="20">

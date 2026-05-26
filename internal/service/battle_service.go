@@ -849,6 +849,8 @@ func ProviderURL(name string) (string, error) {
 		return "https://api.x.ai/v1/chat/completions", nil
 	case "claude", "anthropic":
 		return "https://api.anthropic.com/v1/messages", nil
+	case "gemini", "google", "google_ai", "google-ai":
+		return "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", nil
 	default:
 		return "", fmt.Errorf("unknown provider")
 	}
@@ -885,6 +887,12 @@ func SupportedAIProviders() []AIProviderInfo {
 			DisplayName:               "Claude",
 			Aliases:                   []string{"claude", "anthropic"},
 			ChatCompletionsCompatible: false,
+		},
+		{
+			Name:                      "gemini",
+			DisplayName:               "Gemini",
+			Aliases:                   []string{"gemini", "google", "google_ai", "google-ai"},
+			ChatCompletionsCompatible: true,
 		},
 	}
 }
