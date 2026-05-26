@@ -14,12 +14,12 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 
 const navItems = [
-  { href: "/admin/", label: "Vue generale", icon: Gauge },
-  { href: "/admin/accounts/", label: "Comptes", icon: Users },
-  { href: "/admin/system/", label: "Systeme", icon: Activity },
-  { href: "/admin/usage/", label: "IA & couts", icon: BrainCircuit },
-  { href: "/admin/quests/", label: "Quetes", icon: ListChecks },
-  { href: "/admin/live/", label: "Live", icon: Radio },
+  { href: "/", path: "/admin/", label: "Vue generale", icon: Gauge },
+  { href: "/accounts/", path: "/admin/accounts/", label: "Comptes", icon: Users },
+  { href: "/system/", path: "/admin/system/", label: "Systeme", icon: Activity },
+  { href: "/usage/", path: "/admin/usage/", label: "IA & couts", icon: BrainCircuit },
+  { href: "/quests/", path: "/admin/quests/", label: "Quetes", icon: ListChecks },
+  { href: "/live/", path: "/admin/live/", label: "Live", icon: Radio },
 ];
 
 export function AdminShell({
@@ -56,9 +56,9 @@ export function AdminShell({
           {navItems.map((item) => {
             const Icon = item.icon;
             const active =
-              item.href === "/admin/"
+              item.path === "/admin/"
                 ? locationState.pathname === "/admin" || locationState.pathname === "/admin/"
-                : locationState.pathname.startsWith(item.href);
+                : locationState.pathname.startsWith(item.path);
             return (
               <Link className={active ? "nav-link active" : "nav-link"} href={item.href} key={item.href}>
                 <Icon size={18} aria-hidden />
