@@ -10,6 +10,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -32,6 +34,19 @@ type ProviderChatRequest struct {
 	Stream   bool              `json:"stream"`
 	Messages []ProviderMessage `json:"messages"`
 	Model    string            `json:"model"`
+}
+
+type AnthropicMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type AnthropicChatRequest struct {
+	Model     string             `json:"model"`
+	MaxTokens int                `json:"max_tokens"`
+	System    string             `json:"system,omitempty"`
+	Stream    bool               `json:"stream,omitempty"`
+	Messages  []AnthropicMessage `json:"messages"`
 }
 
 type UsageMetadata struct {
@@ -84,6 +99,39 @@ type ProviderCompletionResponse struct {
 		PromptTokens     int `json:"prompt_tokens"`
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
+	} `json:"usage,omitempty"`
+}
+
+type AnthropicCompletionResponse struct {
+	Content []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"content"`
+	Error *ProviderError `json:"error,omitempty"`
+	Usage *struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage,omitempty"`
+}
+
+type AnthropicStreamResponse struct {
+	Type  string `json:"type"`
+	Error *struct {
+		Type    string `json:"type"`
+		Message string `json:"message"`
+	} `json:"error,omitempty"`
+	Message *struct {
+		Usage *struct {
+			InputTokens  int `json:"input_tokens"`
+			OutputTokens int `json:"output_tokens"`
+		} `json:"usage,omitempty"`
+	} `json:"message,omitempty"`
+	Delta *struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"delta,omitempty"`
+	Usage *struct {
+		OutputTokens int `json:"output_tokens"`
 	} `json:"usage,omitempty"`
 }
 
@@ -202,6 +250,10 @@ func (p *Provider) chatCompletion(
 	stream bool,
 	onChunk func(chunk string),
 ) (providerCallResult, error) {
+	if p.isAnthropic() {
+		return p.anthropicChatCompletion(ctx, messages, stream, onChunk)
+	}
+
 	request := ProviderChatRequest{
 		Stream:   stream,
 		Messages: messages,
@@ -256,6 +308,129 @@ func (p *Provider) chatCompletion(
 	return readStreamResponse(resp.Body, p.host(), p.model, onChunk)
 }
 
+func (p *Provider) anthropicChatCompletion(
+	ctx context.Context,
+	messages []ProviderMessage,
+	stream bool,
+	onChunk func(chunk string),
+) (providerCallResult, error) {
+	system, anthropicMessages := toAnthropicMessages(messages)
+	request := AnthropicChatRequest{
+		Model:     p.model,
+		MaxTokens: anthropicMaxTokens(),
+		System:    system,
+		Stream:    stream,
+		Messages:  anthropicMessages,
+	}
+	if len(request.Messages) == 0 {
+		request.Messages = []AnthropicMessage{{Role: "user", Content: "Continue."}}
+	}
+
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return providerCallResult{}, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return providerCallResult{}, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if stream {
+		req.Header.Set("Accept", "text/event-stream")
+	} else {
+		req.Header.Set("Accept", "application/json")
+	}
+	req.Header.Set("x-api-key", cleanProviderAPIKey(p.apiKey))
+	req.Header.Set("anthropic-version", anthropicVersion())
+
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		return providerCallResult{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return providerCallResult{}, fmt.Errorf("provider error: status=%s body=%s", resp.Status, string(body))
+	}
+
+	if !stream {
+		return readAnthropicCompletionResponse(resp.Body)
+	}
+	return readAnthropicStreamResponse(resp.Body, p.host(), p.model, onChunk)
+}
+
+func (p *Provider) isAnthropic() bool {
+	return strings.Contains(p.url, "api.anthropic.com")
+}
+
+func toAnthropicMessages(messages []ProviderMessage) (string, []AnthropicMessage) {
+	var system strings.Builder
+	out := make([]AnthropicMessage, 0, len(messages))
+	for _, message := range messages {
+		content := strings.TrimSpace(providerMessageContent(message))
+		if content == "" {
+			continue
+		}
+		role := strings.ToLower(strings.TrimSpace(message.Role))
+		if role == "system" {
+			if system.Len() > 0 {
+				system.WriteString("\n\n")
+			}
+			system.WriteString(content)
+			continue
+		}
+		if role != "assistant" {
+			role = "user"
+		}
+		out = appendAnthropicMessage(out, role, content)
+	}
+	return system.String(), out
+}
+
+func providerMessageContent(message ProviderMessage) string {
+	if strings.TrimSpace(message.Content) != "" {
+		return message.Content
+	}
+	var out strings.Builder
+	for _, block := range message.Content2 {
+		if strings.TrimSpace(block.Text) == "" {
+			continue
+		}
+		if out.Len() > 0 {
+			out.WriteString("\n")
+		}
+		out.WriteString(block.Text)
+	}
+	return out.String()
+}
+
+func appendAnthropicMessage(messages []AnthropicMessage, role string, content string) []AnthropicMessage {
+	lastIndex := len(messages) - 1
+	if lastIndex >= 0 && messages[lastIndex].Role == role {
+		messages[lastIndex].Content += "\n\n" + content
+		return messages
+	}
+	return append(messages, AnthropicMessage{Role: role, Content: content})
+}
+
+func anthropicVersion() string {
+	if value := strings.TrimSpace(os.Getenv("ANTHROPIC_VERSION")); value != "" {
+		return value
+	}
+	return "2023-06-01"
+}
+
+func anthropicMaxTokens() int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv("ANTHROPIC_MAX_TOKENS")))
+	if err != nil || value <= 0 {
+		return 8192
+	}
+	return value
+}
+
 func cleanProviderAPIKey(apiKey string) string {
 	cleaned := strings.TrimSpace(apiKey)
 	cleaned = strings.Trim(cleaned, `"'`)
@@ -263,6 +438,94 @@ func cleanProviderAPIKey(apiKey string) string {
 		cleaned = strings.TrimSpace(cleaned[len("bearer "):])
 	}
 	return strings.Trim(cleaned, `"'`)
+}
+
+func readAnthropicCompletionResponse(body io.Reader) (providerCallResult, error) {
+	bodyBytes, err := io.ReadAll(body)
+	if err != nil {
+		return providerCallResult{}, err
+	}
+
+	var completion AnthropicCompletionResponse
+	if err := json.Unmarshal(bodyBytes, &completion); err != nil {
+		return providerCallResult{}, fmt.Errorf("parse anthropic completion JSON: %w body=%s", err, preview(bodyBytes, 600))
+	}
+	if completion.Error != nil {
+		return providerCallResult{}, fmt.Errorf("provider error: type=%s code=%v message=%s", completion.Error.Type, completion.Error.Code, completion.Error.Message)
+	}
+
+	var fullResponse strings.Builder
+	for _, block := range completion.Content {
+		if block.Type == "text" && block.Text != "" {
+			fullResponse.WriteString(block.Text)
+		}
+	}
+	result := providerCallResult{Content: fullResponse.String(), Estimated: true}
+	if completion.Usage != nil {
+		result.PromptTokens = completion.Usage.InputTokens
+		result.CompletionTokens = completion.Usage.OutputTokens
+		result.TotalTokens = completion.Usage.InputTokens + completion.Usage.OutputTokens
+		result.Estimated = false
+	}
+	return result, nil
+}
+
+func readAnthropicStreamResponse(body io.Reader, host string, model string, onChunk func(chunk string)) (providerCallResult, error) {
+	var fullResponse strings.Builder
+	result := providerCallResult{Estimated: true}
+	chunkCount := 0
+	lastData := ""
+
+	scanner := bufio.NewScanner(body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" || !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		lastData = data
+		if data == "[DONE]" {
+			break
+		}
+
+		var streamResp AnthropicStreamResponse
+		if err := json.Unmarshal([]byte(data), &streamResp); err != nil {
+			return providerCallResult{}, fmt.Errorf("parse anthropic stream JSON: %w data=%s", err, preview([]byte(data), 600))
+		}
+		if streamResp.Type == "error" && streamResp.Error != nil {
+			return providerCallResult{}, fmt.Errorf("provider stream error: type=%s message=%s", streamResp.Error.Type, streamResp.Error.Message)
+		}
+		if streamResp.Type == "message_start" && streamResp.Message != nil && streamResp.Message.Usage != nil {
+			result.PromptTokens = streamResp.Message.Usage.InputTokens
+			result.CompletionTokens = streamResp.Message.Usage.OutputTokens
+			result.Estimated = false
+		}
+		if streamResp.Type == "message_delta" && streamResp.Usage != nil {
+			result.CompletionTokens = streamResp.Usage.OutputTokens
+			result.Estimated = false
+		}
+		if streamResp.Type == "content_block_delta" && streamResp.Delta != nil && streamResp.Delta.Text != "" {
+			chunk := streamResp.Delta.Text
+			chunkCount++
+			fullResponse.WriteString(chunk)
+			if onChunk != nil {
+				onChunk(chunk)
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return providerCallResult{}, err
+	}
+	if fullResponse.Len() == 0 {
+		log.Printf("[provider] anthropic stream completed without content host=%s model=%s chunks=%d last_data=%s", host, model, chunkCount, preview([]byte(lastData), 600))
+	}
+	result.Content = fullResponse.String()
+	if result.TotalTokens <= 0 && (result.PromptTokens > 0 || result.CompletionTokens > 0) {
+		result.TotalTokens = result.PromptTokens + result.CompletionTokens
+	}
+	return result, nil
 }
 
 func readCompletionResponse(body io.Reader) (providerCallResult, error) {

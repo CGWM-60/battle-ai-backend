@@ -847,6 +847,8 @@ func ProviderURL(name string) (string, error) {
 		return "https://openrouter.ai/api/v1/chat/completions", nil
 	case "xia", "xai", "x-ai":
 		return "https://api.x.ai/v1/chat/completions", nil
+	case "claude", "anthropic":
+		return "https://api.anthropic.com/v1/messages", nil
 	default:
 		return "", fmt.Errorf("unknown provider")
 	}
@@ -877,6 +879,12 @@ func SupportedAIProviders() []AIProviderInfo {
 			DisplayName:               "xAI",
 			Aliases:                   []string{"xia", "xai", "x-ai"},
 			ChatCompletionsCompatible: true,
+		},
+		{
+			Name:                      "claude",
+			DisplayName:               "Claude",
+			Aliases:                   []string{"claude", "anthropic"},
+			ChatCompletionsCompatible: false,
 		},
 	}
 }

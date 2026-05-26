@@ -514,16 +514,14 @@ func providerForHour(now time.Time) (aiProviderConfig, bool) {
 }
 
 func providerNameForHour(now time.Time) string {
+	rotation := cronProviderRotation()
 	slotIndex, ok := scheduledCronSlotIndex(now.Hour())
 	if !ok {
 		slotIndex = 0
 	}
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 	dayIndex := int(midnight.Unix() / int64((24 * time.Hour).Seconds()))
-	if (dayIndex*len(cronScheduleHours)+slotIndex)%2 == 0 {
-		return "mistral"
-	}
-	return "openai"
+	return rotation[(dayIndex*len(cronScheduleHours)+slotIndex)%len(rotation)]
 }
 
 func isScheduledCronHour(hour int) bool {
@@ -541,17 +539,45 @@ func scheduledCronSlotIndex(hour int) (int, bool) {
 }
 
 func providerKeyEnvForHour(now time.Time) string {
-	if providerNameForHour(now) == "mistral" {
+	switch providerNameForHour(now) {
+	case "mistral":
 		return "MISTRAL_AI_KEY"
+	case "claude", "anthropic":
+		return "ANTHROPIC_AI_KEY"
+	default:
+		return "OPEN_AI_KEY"
 	}
-	return "OPEN_AI_KEY"
 }
 
 func providerModelEnvForHour(now time.Time) string {
-	if providerNameForHour(now) == "mistral" {
+	switch providerNameForHour(now) {
+	case "mistral":
 		return "MISTRAL_AI_MODEL"
+	case "claude", "anthropic":
+		return "ANTHROPIC_AI_MODEL"
+	default:
+		return "OPEN_AI_MODEL"
 	}
-	return "OPEN_AI_MODEL"
+}
+
+func cronProviderRotation() []string {
+	raw := strings.TrimSpace(env("AI_QUEST_PROVIDER_ROTATION", "mistral,openai"))
+	parts := strings.Split(raw, ",")
+	rotation := make([]string, 0, len(parts))
+	for _, part := range parts {
+		name := strings.ToLower(strings.TrimSpace(part))
+		switch name {
+		case "mistral", "openai", "claude", "anthropic":
+			if name == "anthropic" {
+				name = "claude"
+			}
+			rotation = append(rotation, name)
+		}
+	}
+	if len(rotation) == 0 {
+		return []string{"mistral", "openai"}
+	}
+	return rotation
 }
 
 func questCronTimeout() time.Duration {

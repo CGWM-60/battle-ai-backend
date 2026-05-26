@@ -244,6 +244,7 @@ const adminHTML = `
               <option value="openai">openai</option>
               <option value="openrouter">openrouter</option>
               <option value="xia">xia</option>
+              <option value="claude">claude</option>
             </select>
             <input name="model" placeholder="Modele" required>
             <input name="count" type="number" value="10" min="1" max="20">
@@ -262,6 +263,7 @@ const adminHTML = `
               <option value="openai">openai</option>
               <option value="openrouter">openrouter</option>
               <option value="xia">xia</option>
+              <option value="claude">claude</option>
             </select>
             <input name="model" placeholder="Modele" required>
             <input name="count" type="number" value="10" min="1" max="20">
