@@ -13,8 +13,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"cgwm/battle/internal/app/constants"
@@ -35,6 +38,20 @@ const adminCookieName = "go_battle_admin"
 type Server struct {
 	db        *gorm.DB
 	templates *template.Template
+	uiDir     string
+}
+
+var adminProcessStartedAt = time.Now()
+
+var adminRequestStats struct {
+	totalRequests  int64
+	activeRequests int64
+	status2xx      int64
+	status3xx      int64
+	status4xx      int64
+	status5xx      int64
+	totalLatencyNS int64
+	maxLatencyNS   int64
 }
 
 type dashboardData struct {
@@ -98,6 +115,89 @@ type usageSummary struct {
 	EstimatedCostMicros int64
 }
 
+type adminAccountData struct {
+	Id               uint      `json:"id"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+	Pseudo           string    `json:"pseudo"`
+	Email            string    `json:"email"`
+	Avatar           string    `json:"avatar"`
+	Xp               int       `json:"xp"`
+	Coin             int       `json:"coin"`
+	BattleCount      int64     `json:"battleCount"`
+	RolePlayCount    int64     `json:"rolePlayCount"`
+	IAProfileCount   int64     `json:"iaProfileCount"`
+	LiveSessionCount int64     `json:"liveSessionCount"`
+}
+
+type accountSummaryData struct {
+	TotalAccounts     int64 `json:"totalAccounts"`
+	UpdatedLast7Days  int64 `json:"updatedLast7Days"`
+	UpdatedLast30Days int64 `json:"updatedLast30Days"`
+	TotalXP           int64 `json:"totalXp"`
+	TotalCoins        int64 `json:"totalCoins"`
+}
+
+type adminAccountsResponse struct {
+	Summary  accountSummaryData `json:"summary"`
+	Accounts []adminAccountData `json:"accounts"`
+}
+
+type systemData struct {
+	Health   healthData        `json:"health"`
+	Config   configData        `json:"config"`
+	Runtime  runtimeStatsData  `json:"runtime"`
+	Requests requestStatsData  `json:"requests"`
+	Database databaseStatsData `json:"database"`
+	Network  networkStatsData  `json:"network"`
+}
+
+type runtimeStatsData struct {
+	StartedAt      string `json:"startedAt"`
+	UptimeSeconds  int64  `json:"uptimeSeconds"`
+	GoVersion      string `json:"goVersion"`
+	GOOS           string `json:"goos"`
+	GOARCH         string `json:"goarch"`
+	NumCPU         int    `json:"numCpu"`
+	NumGoroutine   int    `json:"numGoroutine"`
+	AllocBytes     uint64 `json:"allocBytes"`
+	HeapAllocBytes uint64 `json:"heapAllocBytes"`
+	SysBytes       uint64 `json:"sysBytes"`
+	NumGC          uint32 `json:"numGc"`
+}
+
+type requestStatsData struct {
+	TotalRequests    int64   `json:"totalRequests"`
+	ActiveRequests   int64   `json:"activeRequests"`
+	Status2xx        int64   `json:"status2xx"`
+	Status3xx        int64   `json:"status3xx"`
+	Status4xx        int64   `json:"status4xx"`
+	Status5xx        int64   `json:"status5xx"`
+	AverageLatencyMS float64 `json:"averageLatencyMs"`
+	MaxLatencyMS     float64 `json:"maxLatencyMs"`
+}
+
+type databaseStatsData struct {
+	MaxOpenConnections int           `json:"maxOpenConnections"`
+	OpenConnections    int           `json:"openConnections"`
+	InUse              int           `json:"inUse"`
+	Idle               int           `json:"idle"`
+	WaitCount          int64         `json:"waitCount"`
+	WaitDuration       time.Duration `json:"waitDuration"`
+	MaxIdleClosed      int64         `json:"maxIdleClosed"`
+	MaxIdleTimeClosed  int64         `json:"maxIdleTimeClosed"`
+	MaxLifetimeClosed  int64         `json:"maxLifetimeClosed"`
+}
+
+type networkStatsData struct {
+	LiveSessions  int64 `json:"liveSessions"`
+	LiveStreaming int64 `json:"liveStreaming"`
+	LiveEnded     int64 `json:"liveEnded"`
+	LiveViewers   int64 `json:"liveViewers"`
+	Arenas        int64 `json:"arenas"`
+	CoopParties   int64 `json:"coopParties"`
+}
+
 type generatedBattleQuest struct {
 	Title   string         `json:"title"`
 	Content string         `json:"content"`
@@ -147,20 +247,63 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	server := &Server{
 		db:        db,
 		templates: template.Must(template.New("admin").Funcs(adminTemplateFuncs()).Parse(adminHTML)),
+		uiDir:     env("ADMIN_UI_DIR", "admin/out"),
 	}
 
 	router.GET("/admin/login", server.loginPage)
 	router.POST("/admin/login", server.login)
 	router.POST("/admin/logout", server.requireAdmin(), server.logout)
 
+	api := router.Group("/admin/api")
+	api.Use(server.requireAdminAPI())
+	api.GET("/dashboard", server.dashboardAPI)
+	api.GET("/accounts", server.accountsAPI)
+	api.GET("/system", server.systemAPI)
+	api.GET("/usage", server.usageAPI)
+	api.GET("/quests", server.questsAPI)
+	api.GET("/live", server.liveAPI)
+
 	group := router.Group("/admin")
 	group.Use(server.requireAdmin())
-	group.GET("", server.dashboard)
+	group.GET("", server.adminAppPage)
 	group.POST("/quests/battle", server.createBattleQuest)
 	group.POST("/quests/rp", server.createRolePlayQuest)
 	group.POST("/generate/battle", server.generateBattleQuests)
 	group.POST("/generate/rp", server.generateRolePlayQuests)
 	group.POST("/live/:id/end", server.endLiveSession)
+
+	router.NoRoute(server.adminNoRoute)
+}
+
+func RequestMetricsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		atomic.AddInt64(&adminRequestStats.totalRequests, 1)
+		atomic.AddInt64(&adminRequestStats.activeRequests, 1)
+		defer atomic.AddInt64(&adminRequestStats.activeRequests, -1)
+
+		c.Next()
+
+		duration := time.Since(start).Nanoseconds()
+		atomic.AddInt64(&adminRequestStats.totalLatencyNS, duration)
+		for {
+			current := atomic.LoadInt64(&adminRequestStats.maxLatencyNS)
+			if duration <= current || atomic.CompareAndSwapInt64(&adminRequestStats.maxLatencyNS, current, duration) {
+				break
+			}
+		}
+
+		switch status := c.Writer.Status(); {
+		case status >= 200 && status < 300:
+			atomic.AddInt64(&adminRequestStats.status2xx, 1)
+		case status >= 300 && status < 400:
+			atomic.AddInt64(&adminRequestStats.status3xx, 1)
+		case status >= 400 && status < 500:
+			atomic.AddInt64(&adminRequestStats.status4xx, 1)
+		case status >= 500:
+			atomic.AddInt64(&adminRequestStats.status5xx, 1)
+		}
+	}
 }
 
 func adminTemplateFuncs() template.FuncMap {
@@ -168,6 +311,9 @@ func adminTemplateFuncs() template.FuncMap {
 }
 
 func (s *Server) loginPage(c *gin.Context) {
+	if s.serveAdminUI(c, "/admin/login") {
+		return
+	}
 	s.render(c, "login", gin.H{
 		"Error": c.Query("error"),
 	})
@@ -253,6 +399,98 @@ func (s *Server) dashboard(c *gin.Context) {
 	data.Flash = c.Query("flash")
 	data.Error = c.Query("error")
 	s.render(c, "dashboard", data)
+}
+
+func (s *Server) adminAppPage(c *gin.Context) {
+	if s.serveAdminUI(c, "/admin") {
+		return
+	}
+	s.dashboard(c)
+}
+
+func (s *Server) adminNoRoute(c *gin.Context) {
+	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	if !strings.HasPrefix(c.Request.URL.Path, "/admin/") {
+		c.Status(http.StatusNotFound)
+		return
+	}
+
+	path := c.Request.URL.Path
+	publicAsset := strings.HasPrefix(path, "/admin/_next/") || strings.Contains(filepath.Base(path), ".")
+	if path != "/admin/login" && !publicAsset {
+		if !s.ensureAdminOrRedirect(c) {
+			return
+		}
+	}
+	if s.serveAdminUI(c, path) {
+		return
+	}
+	c.Status(http.StatusNotFound)
+}
+
+func (s *Server) serveAdminUI(c *gin.Context, requestPath string) bool {
+	if strings.TrimSpace(s.uiDir) == "" {
+		return false
+	}
+
+	rel := strings.TrimPrefix(requestPath, "/admin")
+	rel = strings.TrimPrefix(rel, "/")
+	if rel == "" {
+		rel = "index.html"
+	} else if !strings.Contains(filepath.Base(rel), ".") {
+		rel = strings.TrimSuffix(rel, "/") + "/index.html"
+	}
+	rel = filepath.Clean(filepath.FromSlash(rel))
+	if rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return false
+	}
+
+	fullPath := filepath.Join(s.uiDir, rel)
+	if info, err := os.Stat(fullPath); err != nil || info.IsDir() {
+		return false
+	}
+	http.ServeFile(c.Writer, c.Request, fullPath)
+	return true
+}
+
+func (s *Server) dashboardAPI(c *gin.Context) {
+	c.JSON(http.StatusOK, s.dashboardData(c))
+}
+
+func (s *Server) accountsAPI(c *gin.Context) {
+	accounts, err := s.accountsData(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, accounts)
+}
+
+func (s *Server) systemAPI(c *gin.Context) {
+	c.JSON(http.StatusOK, s.systemData(c))
+}
+
+func (s *Server) usageAPI(c *gin.Context) {
+	c.JSON(http.StatusOK, s.usageDashboardData(c.Request.Context()))
+}
+
+func (s *Server) questsAPI(c *gin.Context) {
+	data := s.dashboardData(c)
+	c.JSON(http.StatusOK, gin.H{
+		"stats":  data.Stats,
+		"recent": gin.H{"battleQuests": data.Recent.BattleQuests, "rolePlayQuests": data.Recent.RolePlayQuests},
+	})
+}
+
+func (s *Server) liveAPI(c *gin.Context) {
+	data := s.dashboardData(c)
+	c.JSON(http.StatusOK, gin.H{
+		"stats":        data.Stats,
+		"liveSessions": data.Recent.LiveSessions,
+	})
 }
 
 func (s *Server) createBattleQuest(c *gin.Context) {
@@ -486,6 +724,143 @@ func (s *Server) dashboardData(c *gin.Context) dashboardData {
 	return data
 }
 
+func (s *Server) accountsData(ctx context.Context) (adminAccountsResponse, error) {
+	response := adminAccountsResponse{}
+	db := s.db.WithContext(ctx)
+
+	if err := db.Model(&models.Users{}).Count(&response.Summary.TotalAccounts).Error; err != nil {
+		return response, err
+	}
+	now := time.Now()
+	_ = db.Model(&models.Users{}).Where("updated_at >= ?", now.AddDate(0, 0, -7)).Count(&response.Summary.UpdatedLast7Days).Error
+	_ = db.Model(&models.Users{}).Where("updated_at >= ?", now.AddDate(0, 0, -30)).Count(&response.Summary.UpdatedLast30Days).Error
+	_ = db.Model(&models.Users{}).Select("COALESCE(SUM(xp), 0)").Scan(&response.Summary.TotalXP).Error
+	_ = db.Model(&models.Users{}).Select("COALESCE(SUM(coin), 0)").Scan(&response.Summary.TotalCoins).Error
+
+	var users []models.Users
+	if err := db.Order("created_at DESC").Limit(200).Find(&users).Error; err != nil {
+		return response, err
+	}
+
+	battleCounts := s.countByUser(ctx, &models.BattleSave{}, "owner_id")
+	rolePlayCounts := s.countByUser(ctx, &models.RolePlaySession{}, "owner_id")
+	profileCounts := s.countByUser(ctx, &models.IAProfile{}, "owner_id")
+	liveCounts := s.countByUser(ctx, &models.LiveSession{}, "owner_id")
+
+	response.Accounts = make([]adminAccountData, 0, len(users))
+	for _, user := range users {
+		response.Accounts = append(response.Accounts, adminAccountData{
+			Id:               user.Id,
+			CreatedAt:        user.CreatedAt,
+			UpdatedAt:        user.UpdatedAt,
+			Pseudo:           user.Pseudo,
+			Email:            user.Email,
+			Avatar:           user.Avatar,
+			Xp:               user.Xp,
+			Coin:             user.Coin,
+			BattleCount:      battleCounts[user.Id],
+			RolePlayCount:    rolePlayCounts[user.Id],
+			IAProfileCount:   profileCounts[user.Id],
+			LiveSessionCount: liveCounts[user.Id],
+		})
+	}
+
+	return response, nil
+}
+
+func (s *Server) countByUser(ctx context.Context, model any, userColumn string) map[uint]int64 {
+	type userCount struct {
+		UserID uint
+		Count  int64
+	}
+	rows := []userCount{}
+	_ = s.db.WithContext(ctx).
+		Model(model).
+		Select(userColumn + " AS user_id, COUNT(*) AS count").
+		Group(userColumn).
+		Scan(&rows).Error
+
+	counts := make(map[uint]int64, len(rows))
+	for _, row := range rows {
+		counts[row.UserID] = row.Count
+	}
+	return counts
+}
+
+func (s *Server) systemData(c *gin.Context) systemData {
+	dashboard := s.dashboardData(c)
+	data := systemData{
+		Health:   dashboard.Health,
+		Config:   dashboard.Config,
+		Runtime:  runtimeSnapshot(),
+		Requests: requestSnapshot(),
+		Network: networkStatsData{
+			LiveSessions:  dashboard.Stats.LiveSessions,
+			LiveStreaming: dashboard.Stats.LiveStreaming,
+			LiveEnded:     dashboard.Stats.LiveEnded,
+		},
+	}
+
+	if sqlDB, err := s.db.DB(); err == nil {
+		stats := sqlDB.Stats()
+		data.Database = databaseStatsData{
+			MaxOpenConnections: stats.MaxOpenConnections,
+			OpenConnections:    stats.OpenConnections,
+			InUse:              stats.InUse,
+			Idle:               stats.Idle,
+			WaitCount:          stats.WaitCount,
+			WaitDuration:       stats.WaitDuration,
+			MaxIdleClosed:      stats.MaxIdleClosed,
+			MaxIdleTimeClosed:  stats.MaxIdleTimeClosed,
+			MaxLifetimeClosed:  stats.MaxLifetimeClosed,
+		}
+	}
+
+	db := s.db.WithContext(c.Request.Context())
+	_ = db.Model(&models.LiveSession{}).Select("COALESCE(SUM(viewer_count), 0)").Scan(&data.Network.LiveViewers).Error
+	_ = db.Model(&models.BattleArena{}).Count(&data.Network.Arenas).Error
+	_ = db.Model(&models.CoopParty{}).Count(&data.Network.CoopParties).Error
+
+	return data
+}
+
+func runtimeSnapshot() runtimeStatsData {
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+	return runtimeStatsData{
+		StartedAt:      adminProcessStartedAt.Format(time.RFC3339),
+		UptimeSeconds:  int64(time.Since(adminProcessStartedAt).Seconds()),
+		GoVersion:      runtime.Version(),
+		GOOS:           runtime.GOOS,
+		GOARCH:         runtime.GOARCH,
+		NumCPU:         runtime.NumCPU(),
+		NumGoroutine:   runtime.NumGoroutine(),
+		AllocBytes:     mem.Alloc,
+		HeapAllocBytes: mem.HeapAlloc,
+		SysBytes:       mem.Sys,
+		NumGC:          mem.NumGC,
+	}
+}
+
+func requestSnapshot() requestStatsData {
+	total := atomic.LoadInt64(&adminRequestStats.totalRequests)
+	totalLatency := atomic.LoadInt64(&adminRequestStats.totalLatencyNS)
+	avg := 0.0
+	if total > 0 {
+		avg = float64(totalLatency) / float64(total) / float64(time.Millisecond)
+	}
+	return requestStatsData{
+		TotalRequests:    total,
+		ActiveRequests:   atomic.LoadInt64(&adminRequestStats.activeRequests),
+		Status2xx:        atomic.LoadInt64(&adminRequestStats.status2xx),
+		Status3xx:        atomic.LoadInt64(&adminRequestStats.status3xx),
+		Status4xx:        atomic.LoadInt64(&adminRequestStats.status4xx),
+		Status5xx:        atomic.LoadInt64(&adminRequestStats.status5xx),
+		AverageLatencyMS: avg,
+		MaxLatencyMS:     float64(atomic.LoadInt64(&adminRequestStats.maxLatencyNS)) / float64(time.Millisecond),
+	}
+}
+
 func (s *Server) usageDashboardData(ctx context.Context) usageData {
 	data := usageData{
 		PricingHint: "Configure AI_PRICE_*_USD_PER_1M pour estimer les couts plateforme. A 0, seuls les tokens sont collectes.",
@@ -518,24 +893,46 @@ func (s *Server) usageDashboardData(ctx context.Context) usageData {
 
 func (s *Server) requireAdmin() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		cookie, err := c.Cookie(adminCookieName)
-		if err != nil {
-			adminAuthLog("requireAdmin: missing/invalid cookie ip=%s path=%s err=%v", c.ClientIP(), c.Request.URL.Path, err)
-			c.Redirect(http.StatusSeeOther, "/admin/login")
-			c.Abort()
-			return
+		if s.ensureAdminOrRedirect(c) {
+			c.Next()
 		}
+	}
+}
 
-		ok, reason := verifyAdminSession(cookie)
-		if !ok {
-			adminAuthLog("requireAdmin: session rejected ip=%s path=%s reason=%s", c.ClientIP(), c.Request.URL.Path, reason)
-			c.Redirect(http.StatusSeeOther, "/admin/login")
+func (s *Server) requireAdminAPI() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !s.hasAdminSession(c) {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "admin authentication required"})
 			c.Abort()
 			return
 		}
-		adminAuthLog("requireAdmin: session accepted ip=%s path=%s", c.ClientIP(), c.Request.URL.Path)
 		c.Next()
 	}
+}
+
+func (s *Server) ensureAdminOrRedirect(c *gin.Context) bool {
+	if !s.hasAdminSession(c) {
+		c.Redirect(http.StatusSeeOther, "/admin/login")
+		c.Abort()
+		return false
+	}
+	return true
+}
+
+func (s *Server) hasAdminSession(c *gin.Context) bool {
+	cookie, err := c.Cookie(adminCookieName)
+	if err != nil {
+		adminAuthLog("requireAdmin: missing/invalid cookie ip=%s path=%s err=%v", c.ClientIP(), c.Request.URL.Path, err)
+		return false
+	}
+
+	ok, reason := verifyAdminSession(cookie)
+	if !ok {
+		adminAuthLog("requireAdmin: session rejected ip=%s path=%s reason=%s", c.ClientIP(), c.Request.URL.Path, reason)
+		return false
+	}
+	adminAuthLog("requireAdmin: session accepted ip=%s path=%s", c.ClientIP(), c.Request.URL.Path)
+	return true
 }
 
 func (s *Server) render(c *gin.Context, name string, data any) {

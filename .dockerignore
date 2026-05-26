@@ -1,9 +1,13 @@
-.git
 .gitignore
 .DS_Store
 compose*.yml
 Dockerfile*
 README*
+.next
+node_modules
+admin/node_modules
+admin/.next
+admin/out
 tmp
 vendor
 *.log

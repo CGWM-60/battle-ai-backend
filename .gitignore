@@ -1,0 +1,8 @@
+.DS_Store
+tmp/
+*.log
+*.out
+
+admin/node_modules/
+admin/.next/
+admin/out/

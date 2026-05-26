@@ -1,3 +1,13 @@
+FROM node:22-alpine AS admin-builder
+
+WORKDIR /src/admin
+
+COPY admin/package*.json ./
+RUN npm ci
+
+COPY admin ./
+RUN npm run build
+
 FROM golang:1.25-bookworm AS builder
 
 WORKDIR /src
@@ -16,6 +26,7 @@ RUN apk add --no-cache ca-certificates
 WORKDIR /app
 
 COPY --from=builder /out/go-battle-ia /app/go-battle-ia
+COPY --from=admin-builder /src/admin/out /app/admin/out
 
 ENV APP_HOST=0.0.0.0
 ENV APP_PORT=8080

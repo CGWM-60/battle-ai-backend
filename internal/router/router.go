@@ -34,6 +34,7 @@ func RouterApp(database *gorm.DB) {
 	router := gin.Default()
 	router.Use(securityHeaders())
 	router.Use(requestBodyLimit(maxBodyBytes()))
+	router.Use(admin.RequestMetricsMiddleware())
 
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
