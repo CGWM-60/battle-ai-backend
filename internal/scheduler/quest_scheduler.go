@@ -396,11 +396,17 @@ func generateRolePlayQuestsBatch(ctx context.Context, cfg aiProviderConfig, trac
 	prompt := fmt.Sprintf(`Genere exactement %d quetes de jeu de role.
 Reponds uniquement en JSON valide, sans markdown.
 Les quetes doivent etre variees, jouables, immersives et differentes les unes des autres.
-Chaque quete doit avoir au minimum 2 arcs narratifs.
-Chaque arc doit avoir au minimum 2 chapitres jouables.
+Les quetes doivent avoir une longueur variable selon leur niveau.
+Tu dois varier les niveaux dans le batch: environ 35%% facile, 40%% moyen, 25%% difficile quand le count le permet.
+Regles de structure obligatoires:
+- level "facile": 2 ou 3 arcs; chaque arc a 2 ou 3 chapitres; total 4 a 7 chapitres.
+- level "moyen": 3 ou 4 arcs; chaque arc a 2 a 4 chapitres; total 7 a 12 chapitres.
+- level "difficile": 4 a 6 arcs; chaque arc a 3 a 5 chapitres; total 12 a 24 chapitres.
+Ne genere pas toujours la structure minimale. Dans un meme batch, alterne le nombre d'arcs et de chapitres.
+Ajoute exactement un chapitre boss pour les quetes difficiles, et zero ou un chapitre boss pour les autres.
 Les arcs et chapitres doivent etre clairement identifies et ordonnes par leur position dans le tableau JSON.
 Format:
-[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"metadata":{"ton":"..."},"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, cronQuestLimit)
+[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"metadata":{"ton":"..."},"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, count)
 
 	response, err := callProvider(ctx, cfg, prompt, trace)
 	if err != nil {
@@ -472,20 +478,37 @@ func generatedRolePlayChapterInputs(items []generatedRolePlayChapter) []service.
 }
 
 func hasGeneratedRolePlayStructure(item generatedRolePlayQuest) bool {
-	if len(item.Arcs) < 2 {
+	minArcs, maxArcs, minChapters, maxChapters := rolePlayStructureBounds(item.Level)
+	if len(item.Arcs) < minArcs || len(item.Arcs) > maxArcs {
 		return false
 	}
+	totalChapters := 0
 	for _, arc := range item.Arcs {
 		if strings.TrimSpace(arc.Title) == "" || len(arc.Chapters) < 2 {
 			return false
 		}
+		totalChapters += len(arc.Chapters)
 		for _, chapter := range arc.Chapters {
 			if strings.TrimSpace(chapter.Title) == "" || strings.TrimSpace(chapter.Objective) == "" {
 				return false
 			}
 		}
 	}
+	if totalChapters < minChapters || totalChapters > maxChapters {
+		return false
+	}
 	return true
+}
+
+func rolePlayStructureBounds(level string) (minArcs int, maxArcs int, minChapters int, maxChapters int) {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "difficile", "hard":
+		return 4, 6, 12, 24
+	case "moyen", "medium", "normal":
+		return 3, 4, 7, 12
+	default:
+		return 2, 3, 4, 7
+	}
 }
 
 func callProvider(ctx context.Context, cfg aiProviderConfig, prompt string, trace cronTrace) (string, error) {
