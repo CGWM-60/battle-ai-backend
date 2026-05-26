@@ -81,9 +81,46 @@ func (r *RolePlayRepository) CreateQuestRun(ctx context.Context, run *models.Rol
 	return r.db.WithContext(ctx).Create(run).Error
 }
 
+func (r *RolePlayRepository) GetQuestRunBySession(ctx context.Context, sessionID uint) (*models.RolePlayQuestRun, error) {
+	var run models.RolePlayQuestRun
+	err := r.db.WithContext(ctx).
+		Preload("Template").
+		Where("session_id = ?", sessionID).
+		First(&run).Error
+	if err != nil {
+		return nil, err
+	}
+	return &run, nil
+}
+
 func (r *RolePlayRepository) UpdateQuestRunBySession(ctx context.Context, sessionID uint, fields map[string]any) error {
 	return r.db.WithContext(ctx).
 		Model(&models.RolePlayQuestRun{}).
 		Where("session_id = ?", sessionID).
 		Updates(fields).Error
+}
+
+func (r *RolePlayRepository) CompleteQuestRunAndSession(ctx context.Context, sessionID uint, ownerID uint, runFields map[string]any, sessionFields map[string]any, xpReward int, coinReward int) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&models.RolePlayQuestRun{}).
+			Where("session_id = ? AND status <> ?", sessionID, "finished").
+			Updates(runFields)
+		if result.Error != nil {
+			return result.Error
+		}
+		if err := tx.Model(&models.RolePlaySession{}).
+			Where("id = ? AND owner_id = ?", sessionID, ownerID).
+			Updates(sessionFields).Error; err != nil {
+			return err
+		}
+		if result.RowsAffected > 0 && (xpReward > 0 || coinReward > 0) {
+			return tx.Model(&models.Users{}).
+				Where("id = ?", ownerID).
+				Updates(map[string]any{
+					"xp":   gorm.Expr("COALESCE(xp, 0) + ?", xpReward),
+					"coin": gorm.Expr("COALESCE(coin, 0) + ?", coinReward),
+				}).Error
+		}
+		return nil
+	})
 }

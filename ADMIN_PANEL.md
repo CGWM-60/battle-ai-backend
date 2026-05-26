@@ -18,12 +18,16 @@ GET  /admin/accounts
 GET  /admin/system
 GET  /admin/usage
 GET  /admin/nexus-coin
+GET  /admin/roleplay-quests
 GET  /admin/quests
 GET  /admin/live
 GET  /admin/api/dashboard
 GET  /admin/api/accounts
 GET  /admin/api/system
 GET  /admin/api/usage
+GET  /admin/api/roleplay-quests
+PATCH /admin/api/roleplay-quests/:id
+PUT  /admin/api/roleplay-quests/:id
 GET  /admin/api/nexus-coin
 POST /admin/api/nexus-coin/plans
 PUT  /admin/api/nexus-coin/plans/:id
@@ -76,6 +80,7 @@ Le dashboard admin permet de :
 - consulter les comptes actuels avec progression et activite
 - suivre les connexions DB, les requetes HTTP, la charge runtime Go et les stats reseau applicatives
 - gerer les packs Nexus Coin pour les credits IA avec estimation token + marge
+- lire les quetes RP, voir leurs arcs/chapitres et modifier leurs recompenses XP/coins
 - creer des quetes Battle manuellement
 - creer des quetes RolePlay manuellement
 - generer des quetes Battle avec un provider IA

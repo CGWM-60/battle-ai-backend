@@ -20,6 +20,7 @@ const navItems = [
   { href: "/system/", path: "/admin/system/", label: "Systeme", icon: Activity },
   { href: "/usage/", path: "/admin/usage/", label: "IA & couts", icon: BrainCircuit },
   { href: "/nexus-coin/", path: "/admin/nexus-coin/", label: "Nexus Coin", icon: Coins },
+  { href: "/roleplay-quests/", path: "/admin/roleplay-quests/", label: "Quetes RP", icon: ListChecks },
   { href: "/quests/", path: "/admin/quests/", label: "Quetes", icon: ListChecks },
   { href: "/live/", path: "/admin/live/", label: "Live", icon: Radio },
 ];

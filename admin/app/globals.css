@@ -444,6 +444,98 @@ dd {
   margin-top: 14px;
 }
 
+.rp-quest-list {
+  display: grid;
+  gap: 14px;
+}
+
+.rp-quest-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 16px;
+}
+
+.rp-quest-card header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  gap: 16px;
+}
+
+.rp-quest-card h3 {
+  margin: 10px 0 8px;
+  font-size: 18px;
+}
+
+.rp-quest-card p {
+  color: var(--muted);
+  margin: 0 0 10px;
+}
+
+.rp-reward-row {
+  display: grid;
+  grid-template-columns: 120px 120px 160px auto;
+  gap: 10px;
+  align-items: end;
+  margin: 12px 0;
+}
+
+.rp-reward-row label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+details {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.rp-arc-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.rp-arc {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #f9fafb;
+}
+
+.rp-arc h4 {
+  margin: 0 0 6px;
+}
+
+.rp-arc ul {
+  list-style: none;
+  padding: 0;
+  margin: 10px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.rp-arc li {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.rp-arc li strong,
+.rp-arc li span,
+.rp-arc li small {
+  display: block;
+}
+
+.rp-arc li span {
+  color: var(--muted);
+}
+
 .login-body {
   min-height: 100vh;
   display: grid;
@@ -499,7 +591,9 @@ dd {
   }
 
   .nav-list,
-  .row {
+  .row,
+  .rp-quest-card header,
+  .rp-reward-row {
     grid-template-columns: 1fr;
   }
 

@@ -331,13 +331,20 @@ func (s *RolePlayService) updateQuestRunProgressFromPayload(ctx context.Context,
 	if session == nil || len(payload) == 0 {
 		return
 	}
+	run, err := s.roleplay.GetQuestRunBySession(ctx, session.Id)
+	if err != nil {
+		return
+	}
 	fields := map[string]any{
 		"last_activity_at": &now,
 	}
+	currentStep := run.CurrentStep
 	if step := intFromPayload(payload["nextStep"]); step > 0 {
 		fields["current_step"] = step
+		currentStep = step
 	} else if step := intFromPayload(payload["step"]); step > 0 {
 		fields["current_step"] = step
+		currentStep = step
 	}
 	if id := uintFromPayload(payload["nextArcId"]); id != nil {
 		fields["current_arc_id"] = id
@@ -349,14 +356,68 @@ func (s *RolePlayService) updateQuestRunProgressFromPayload(ctx context.Context,
 	} else if id := uintFromPayload(payload["currentChapterId"]); id != nil {
 		fields["current_chapter_id"] = id
 	}
+	completed := completedChapterSet(run.CompletedChapters)
 	if ids := uintSliceFromPayload(payload["completedChapterIds"]); len(ids) > 0 {
-		data, _ := json.Marshal(ids)
+		for _, id := range ids {
+			completed[id] = true
+		}
+		data, _ := json.Marshal(sortedChapterIDs(completed))
 		fields["completed_chapters"] = datatypes.JSON(data)
 	} else if id := uintFromPayload(payload["completedChapterId"]); id != nil {
-		data, _ := json.Marshal([]uint{*id})
+		completed[*id] = true
+		data, _ := json.Marshal(sortedChapterIDs(completed))
 		fields["completed_chapters"] = datatypes.JSON(data)
 	}
-	_ = s.roleplay.UpdateQuestRunBySession(ctx, session.Id, fields)
+	completedCount := len(completed)
+	questDone := run.TotalSteps > 0 && (currentStep > run.TotalSteps || completedCount >= run.TotalSteps)
+	if !questDone {
+		_ = s.roleplay.UpdateQuestRunBySession(ctx, session.Id, fields)
+		return
+	}
+
+	fields["status"] = constants.RolePlayStatusFinished
+	fields["finished_at"] = &now
+	sessionFields := map[string]any{
+		"status":           constants.RolePlayStatusFinished,
+		"finished_at":      &now,
+		"last_activity_at": &now,
+	}
+	xpReward := 0
+	coinReward := 0
+	if run.Template != nil {
+		xpReward = run.Template.Xp
+		coinReward = run.Template.Coin
+	}
+	_ = s.roleplay.CompleteQuestRunAndSession(ctx, session.Id, session.OwnerID, fields, sessionFields, xpReward, coinReward)
+}
+
+func completedChapterSet(raw datatypes.JSON) map[uint]bool {
+	completed := map[uint]bool{}
+	var ids []uint
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &ids)
+	}
+	for _, id := range ids {
+		if id > 0 {
+			completed[id] = true
+		}
+	}
+	return completed
+}
+
+func sortedChapterIDs(completed map[uint]bool) []uint {
+	ids := make([]uint, 0, len(completed))
+	for id := range completed {
+		ids = append(ids, id)
+	}
+	for i := 0; i < len(ids); i++ {
+		for j := i + 1; j < len(ids); j++ {
+			if ids[j] < ids[i] {
+				ids[i], ids[j] = ids[j], ids[i]
+			}
+		}
+	}
+	return ids
 }
 
 func intFromPayload(value any) int {

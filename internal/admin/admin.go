@@ -242,6 +242,66 @@ type nexusCoinPlanInput struct {
 	MarginPercent int    `json:"marginPercent"`
 }
 
+type adminRolePlayQuestsResponse struct {
+	Stats  adminRolePlayQuestStats  `json:"stats"`
+	Quests []adminRolePlayQuestData `json:"quests"`
+}
+
+type adminRolePlayQuestStats struct {
+	TotalQuests   int64 `json:"totalQuests"`
+	Published     int64 `json:"published"`
+	Draft         int64 `json:"draft"`
+	Archived      int64 `json:"archived"`
+	TotalArcs     int64 `json:"totalArcs"`
+	TotalChapters int64 `json:"totalChapters"`
+}
+
+type adminRolePlayQuestData struct {
+	Id           uint                   `json:"id"`
+	CreatedAt    time.Time              `json:"createdAt"`
+	UpdatedAt    time.Time              `json:"updatedAt"`
+	Slug         string                 `json:"slug"`
+	Title        string                 `json:"title"`
+	Summary      string                 `json:"summary"`
+	Prompt       string                 `json:"prompt"`
+	Theme        string                 `json:"theme"`
+	Level        string                 `json:"level"`
+	Xp           int                    `json:"xp"`
+	Coin         int                    `json:"coin"`
+	Source       string                 `json:"source"`
+	Status       string                 `json:"status"`
+	ArcCount     int                    `json:"arcCount"`
+	ChapterCount int                    `json:"chapterCount"`
+	Arcs         []adminRolePlayArcData `json:"arcs"`
+}
+
+type adminRolePlayArcData struct {
+	Id           uint                       `json:"id"`
+	Position     int                        `json:"position"`
+	Title        string                     `json:"title"`
+	Summary      string                     `json:"summary"`
+	Objective    string                     `json:"objective"`
+	ChapterCount int                        `json:"chapterCount"`
+	Chapters     []adminRolePlayChapterData `json:"chapters"`
+}
+
+type adminRolePlayChapterData struct {
+	Id        uint   `json:"id"`
+	Position  int    `json:"position"`
+	Title     string `json:"title"`
+	Summary   string `json:"summary"`
+	Objective string `json:"objective"`
+	IsBoss    bool   `json:"isBoss"`
+	Xp        int    `json:"xp"`
+	Coin      int    `json:"coin"`
+}
+
+type adminRolePlayQuestUpdateInput struct {
+	Xp     int    `json:"xp"`
+	Coin   int    `json:"coin"`
+	Status string `json:"status"`
+}
+
 type generatedBattleQuest struct {
 	Title   string         `json:"title"`
 	Content string         `json:"content"`
@@ -306,6 +366,9 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.GET("/usage", server.usageAPI)
 	api.GET("/quests", server.questsAPI)
 	api.GET("/live", server.liveAPI)
+	api.GET("/roleplay-quests", server.rolePlayQuestsAdminAPI)
+	api.PATCH("/roleplay-quests/:id", server.updateRolePlayQuestAdminAPI)
+	api.PUT("/roleplay-quests/:id", server.updateRolePlayQuestAdminAPI)
 	api.GET("/nexus-coin", server.nexusCoinAPI)
 	api.POST("/nexus-coin/plans", server.createNexusCoinPlanAPI)
 	api.PUT("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
@@ -542,6 +605,43 @@ func (s *Server) liveAPI(c *gin.Context) {
 		"stats":        data.Stats,
 		"liveSessions": data.Recent.LiveSessions,
 	})
+}
+
+func (s *Server) rolePlayQuestsAdminAPI(c *gin.Context) {
+	data, err := s.rolePlayQuestsAdminData(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
+func (s *Server) updateRolePlayQuestAdminAPI(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay quest id"})
+		return
+	}
+	var input adminRolePlayQuestUpdateInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay quest payload"})
+		return
+	}
+	updates := map[string]any{
+		"xp":   input.Xp,
+		"coin": input.Coin,
+	}
+	if strings.TrimSpace(input.Status) != "" {
+		updates["status"] = strings.TrimSpace(input.Status)
+	}
+	if err := s.db.WithContext(c.Request.Context()).
+		Model(&models.RolePlayQuestTemplate{}).
+		Where("id = ?", uint(id)).
+		Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": true})
 }
 
 func (s *Server) nexusCoinAPI(c *gin.Context) {
@@ -945,6 +1045,81 @@ func (s *Server) systemData(c *gin.Context) systemData {
 	_ = db.Model(&models.CoopParty{}).Count(&data.Network.CoopParties).Error
 
 	return data
+}
+
+func (s *Server) rolePlayQuestsAdminData(ctx context.Context) (adminRolePlayQuestsResponse, error) {
+	response := adminRolePlayQuestsResponse{}
+	db := s.db.WithContext(ctx)
+	if err := db.Model(&models.RolePlayQuestTemplate{}).Count(&response.Stats.TotalQuests).Error; err != nil {
+		return response, err
+	}
+	_ = db.Model(&models.RolePlayQuestTemplate{}).Where("status = ?", constants.QuestStatusPublished).Count(&response.Stats.Published).Error
+	_ = db.Model(&models.RolePlayQuestTemplate{}).Where("status = ?", constants.QuestStatusDraft).Count(&response.Stats.Draft).Error
+	_ = db.Model(&models.RolePlayQuestTemplate{}).Where("status = ?", constants.QuestStatusArchived).Count(&response.Stats.Archived).Error
+	_ = db.Model(&models.RolePlayQuestArc{}).Count(&response.Stats.TotalArcs).Error
+	_ = db.Model(&models.RolePlayQuestChapter{}).Count(&response.Stats.TotalChapters).Error
+
+	var quests []models.RolePlayQuestTemplate
+	if err := db.
+		Preload("Arcs", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("position ASC").Order("id ASC")
+		}).
+		Preload("Arcs.Chapters", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("position ASC").Order("id ASC")
+		}).
+		Order("created_at DESC").
+		Limit(200).
+		Find(&quests).Error; err != nil {
+		return response, err
+	}
+
+	response.Quests = make([]adminRolePlayQuestData, 0, len(quests))
+	for _, quest := range quests {
+		item := adminRolePlayQuestData{
+			Id:        quest.Id,
+			CreatedAt: quest.CreatedAt,
+			UpdatedAt: quest.UpdatedAt,
+			Slug:      quest.Slug,
+			Title:     quest.Title,
+			Summary:   quest.Summary,
+			Prompt:    quest.Prompt,
+			Theme:     quest.Theme,
+			Level:     quest.Level,
+			Xp:        quest.Xp,
+			Coin:      quest.Coin,
+			Source:    quest.Source,
+			Status:    quest.Status,
+			ArcCount:  len(quest.Arcs),
+			Arcs:      make([]adminRolePlayArcData, 0, len(quest.Arcs)),
+		}
+		for _, arc := range quest.Arcs {
+			arcData := adminRolePlayArcData{
+				Id:           arc.Id,
+				Position:     arc.Position,
+				Title:        arc.Title,
+				Summary:      arc.Summary,
+				Objective:    arc.Objective,
+				ChapterCount: len(arc.Chapters),
+				Chapters:     make([]adminRolePlayChapterData, 0, len(arc.Chapters)),
+			}
+			item.ChapterCount += len(arc.Chapters)
+			for _, chapter := range arc.Chapters {
+				arcData.Chapters = append(arcData.Chapters, adminRolePlayChapterData{
+					Id:        chapter.Id,
+					Position:  chapter.Position,
+					Title:     chapter.Title,
+					Summary:   chapter.Summary,
+					Objective: chapter.Objective,
+					IsBoss:    chapter.IsBoss,
+					Xp:        chapter.Xp,
+					Coin:      chapter.Coin,
+				})
+			}
+			item.Arcs = append(item.Arcs, arcData)
+		}
+		response.Quests = append(response.Quests, item)
+	}
+	return response, nil
 }
 
 func (s *Server) nexusCoinData(ctx context.Context) (nexusCoinResponse, error) {

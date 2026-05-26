@@ -267,3 +267,55 @@ export type NexusCoinResponse = {
   estimations: NexusCoinEstimate[];
   plans: NexusCoinPlan[];
 };
+
+export type AdminRolePlayChapter = {
+  id: number;
+  position: number;
+  title: string;
+  summary: string;
+  objective: string;
+  isBoss: boolean;
+  xp: number;
+  coin: number;
+};
+
+export type AdminRolePlayArc = {
+  id: number;
+  position: number;
+  title: string;
+  summary: string;
+  objective: string;
+  chapterCount: number;
+  chapters: AdminRolePlayChapter[];
+};
+
+export type AdminRolePlayQuest = {
+  id: number;
+  createdAt: string;
+  updatedAt: string;
+  slug: string;
+  title: string;
+  summary: string;
+  prompt: string;
+  theme: string;
+  level: string;
+  xp: number;
+  coin: number;
+  source: string;
+  status: string;
+  arcCount: number;
+  chapterCount: number;
+  arcs: AdminRolePlayArc[];
+};
+
+export type AdminRolePlayQuestsResponse = {
+  stats: {
+    totalQuests: number;
+    published: number;
+    draft: number;
+    archived: number;
+    totalArcs: number;
+    totalChapters: number;
+  };
+  quests: AdminRolePlayQuest[];
+};
