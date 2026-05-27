@@ -78,6 +78,8 @@ func DbConnect() *gorm.DB {
 		&models.GameEventClaim{},
 		&models.DailyAIMessage{},
 		&models.AIWorldDecision{},
+		&models.WorldRoutineSnapshot{},
+		&models.PlayerWorldMetric{},
 		&models.BuildingDefinition{},
 		&models.BuildingAsset{},
 		&models.BuildingCatalogVersion{},

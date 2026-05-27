@@ -67,11 +67,31 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 		state, err := world.PlayerState(c.Request.Context(), currentUserID(c))
 		writeWorldResponse(c, state, err)
 	})
+	private.GET("/world/routine", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		routine, err := world.LatestWorldFourPageRoutine(c.Request.Context(), save.WorldID)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			routine, _, err = world.GenerateWorldFourPageRoutine(c.Request.Context(), save.WorldID, "player-api")
+		}
+		writeWorldResponse(c, routine, err)
+	})
+	private.GET("/player/metrics", func(c *gin.Context) {
+		metrics, err := world.PlayerFourPillarMetrics(c.Request.Context(), currentUserID(c))
+		writeWorldResponse(c, metrics, err)
+	})
 	private.GET("/world/events", playerScopedList(curryPlayerScope(world, func(ctxUser playerScope) (any, error) {
 		return world.ListWorldEvents(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID, ctxUser.Limit)
 	})))
 	private.GET("/world/conflicts", playerScopedList(curryPlayerScope(world, func(ctxUser playerScope) (any, error) {
-		return world.ListWorldConflicts(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID, ctxUser.Limit)
+		conflicts, err := world.ListWorldConflicts(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID, ctxUser.Limit)
+		if err != nil {
+			return nil, err
+		}
+		return gin.H{"items": formatConflictItems(database, ctxUser.Context, conflicts)}, nil
 	})))
 	private.GET("/world/weather", playerScopedList(curryPlayerScope(world, func(ctxUser playerScope) (any, error) {
 		return world.ListActiveWeather(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID)
@@ -83,7 +103,7 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 		messages, err := world.ListDailyMessages(c.Request.Context(), currentUserID(c), limitFromQuery(c))
 		writeWorldResponse(c, gin.H{"messages": messages}, err)
 	})
-	registerWorldModuleRoutes(private, world)
+	registerWorldModuleRoutes(private, database, world)
 	private.POST("/world/messages/:id/read", func(c *gin.Context) {
 		id, err := parseUintParam(c, "id")
 		if err != nil {
@@ -128,7 +148,7 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	registerConstructionContractRoutes(private, database, world)
 }
 
-func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGameService) {
+func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, world *service.WorldGameService) {
 	private.GET("/world/conflicts/report", func(c *gin.Context) {
 		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
 		if err != nil {
@@ -146,8 +166,9 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 		if total > 0 {
 			sum := 0
 			for _, conflict := range conflicts {
-				sum += conflict.Intensity
-				if conflict.Intensity >= 70 {
+				intensity := clamp(conflict.Intensity, 0, 100)
+				sum += intensity
+				if intensity >= 70 {
 					high++
 				}
 			}
@@ -178,10 +199,11 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		var conflict *models.Conflict
-		for i := range conflicts {
-			if conflicts[i].Id == id {
-				conflict = &conflicts[i]
+		items := formatConflictItems(database, c.Request.Context(), conflicts)
+		var conflict gin.H
+		for _, item := range items {
+			if itemID, _ := item["id"].(string); itemID == strconv.FormatUint(uint64(id), 10) {
+				conflict = item
 				break
 			}
 		}
@@ -209,26 +231,24 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		conflicts, err := world.ListWorldConflicts(c.Request.Context(), save.WorldID, save.ContinentID, limitFromQuery(c))
-		if err != nil {
+		relations := make([]gin.H, 0)
+		var continents []models.Continent
+		if err := database.WithContext(c.Request.Context()).Where("world_id = ?", save.WorldID).Order("`index` ASC").Find(&continents).Error; err != nil {
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		relations := make([]gin.H, 0)
-		for _, conflict := range conflicts {
-			score := clamp(100-conflict.Intensity, 0, 100)
-			stance := "neutre"
-			if conflict.Intensity >= 80 {
-				stance = "hostile"
-			} else if conflict.Intensity >= 60 {
-				stance = "tendue"
-			} else if conflict.Intensity < 30 {
-				stance = "bonne"
+		for _, continent := range continents {
+			if continent.Id == save.ContinentID {
+				continue
 			}
+			score := clamp(100-continent.TensionLevel, 0, 100)
 			relations = append(relations, gin.H{
-				"faction": conflict.Title,
-				"score":   score,
-				"stance":  stance,
+				"id":             strconv.FormatUint(uint64(continent.Id), 10),
+				"faction":        defaultText(continent.Name, "Non disponible"),
+				"continentId":    continent.Id,
+				"score":          score,
+				"stance":         diplomacyStance(score),
+				"politicalState": defaultText(continent.PoliticalState, "Non disponible"),
 			})
 		}
 		writeWorldResponse(c, gin.H{"relations": relations}, nil)
@@ -293,11 +313,18 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 	})
 
 	private.POST("/world/diplomacy/negotiations/open", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		payload := bindOptionalMap(c)
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_negotiation_open", "diplomacy", stableActionID(payload), "accepted", "", payload)
 		writeWorldResponse(c, gin.H{
 			"opened":    true,
 			"status":    "pending",
 			"serverNow": time.Now().UTC(),
-		}, nil)
+		}, err)
 	})
 
 	private.GET("/world/diplomacy/emissaries/status", func(c *gin.Context) {
@@ -310,8 +337,14 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 	})
 
 	private.POST("/world/diplomacy/emissaries/send", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
 		available, total := emissaryAvailability()
 		if available <= 0 {
+			_ = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_emissary_send", "emissary", "none", "rejected", "no emissary available", nil)
 			c.JSON(http.StatusConflict, gin.H{
 				"error":     "no emissary available",
 				"available": available,
@@ -319,13 +352,15 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 			})
 			return
 		}
+		payload := bindOptionalMap(c)
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_emissary_send", "emissary", stableActionID(payload), "accepted", "", payload)
 		writeWorldResponse(c, gin.H{
 			"sent":      true,
 			"status":    "en_route",
 			"serverNow": time.Now().UTC(),
 			"available": available - 1,
 			"total":     total,
-		}, nil)
+		}, err)
 	})
 
 	private.GET("/world/commerce/routes", func(c *gin.Context) {
@@ -339,25 +374,12 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		routes := make([]gin.H, 0, len(conflicts))
-		for _, conflict := range conflicts {
-			volume := int64(1000000 * (100 - clamp(conflict.Intensity, 0, 100)) / 100)
-			status := "active"
-			if conflict.Intensity >= 70 {
-				status = "perturbe"
-			}
-			routes = append(routes, gin.H{
-				"route":  conflict.Title,
-				"cargo":  "Flux inter-régions",
-				"volume": volume,
-				"status": status,
-			})
-		}
+		routes := commerceRoutesFromConflicts(database, c.Request.Context(), conflicts)
 		writeWorldResponse(c, gin.H{"routes": routes}, nil)
 	})
 
 	private.GET("/world/commerce/details", func(c *gin.Context) {
-		routesJSON, err := fetchCommerceRoutes(world, c)
+		routesJSON, err := fetchCommerceRoutes(database, world, c)
 		if err != nil {
 			writeWorldResponse(c, nil, err)
 			return
@@ -378,29 +400,42 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 	})
 
 	private.POST("/world/commerce/agreements", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{
-			"created":   true,
-			"status":    "draft",
-			"serverNow": time.Now().UTC(),
-		}, nil)
-	})
-
-	private.POST("/world/commerce/routes/optimize", func(c *gin.Context) {
-		routesJSON, err := fetchCommerceRoutes(world, c)
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
 		if err != nil {
 			writeWorldResponse(c, nil, err)
 			return
 		}
+		payload := bindOptionalMap(c)
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "commerce_agreement_create", "commerce_agreement", stableActionID(payload), "accepted", "", payload)
+		writeWorldResponse(c, gin.H{
+			"created":   true,
+			"status":    "draft",
+			"serverNow": time.Now().UTC(),
+		}, err)
+	})
+
+	private.POST("/world/commerce/routes/optimize", func(c *gin.Context) {
+		routesJSON, err := fetchCommerceRoutes(database, world, c)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "commerce_routes_optimize", "commerce_routes", "optimize", "accepted", "", gin.H{"routesCount": len(routesJSON)})
 		writeWorldResponse(c, gin.H{
 			"optimized":      true,
 			"routesCount":    len(routesJSON),
 			"serverNow":      time.Now().UTC(),
-			"recommendation": "Prioriser routes actives à fort volume",
-		}, nil)
+			"recommendation": commerceRecommendation(routesJSON),
+		}, err)
 	})
 
 	private.GET("/world/commerce/report", func(c *gin.Context) {
-		routesJSON, err := fetchCommerceRoutes(world, c)
+		routesJSON, err := fetchCommerceRoutes(database, world, c)
 		if err != nil {
 			writeWorldResponse(c, nil, err)
 			return
@@ -439,9 +474,11 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 		for _, event := range weather {
 			forecast = append(forecast, gin.H{
 				"id":          event.Id,
+				"type":        defaultText(event.Type, "Non disponible"),
 				"title":       event.Title,
 				"description": event.Description,
-				"severity":    event.Severity,
+				"severity":    clamp(event.Severity, 0, 100),
+				"startsAt":    event.StartsAt,
 				"endsAt":      event.EndsAt,
 			})
 		}
@@ -462,8 +499,8 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 		zones := make([]gin.H, 0, len(weather))
 		for _, event := range weather {
 			zones = append(zones, gin.H{
-				"region":   defaultText(event.Type, "Zone inconnue"),
-				"severity": event.Severity,
+				"region":   weatherRegionName(database, c.Request.Context(), event.ContinentID),
+				"severity": clamp(event.Severity, 0, 100),
 				"risk":     riskLabel(event.Severity),
 			})
 		}
@@ -476,11 +513,28 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action"})
 			return
 		}
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		allowed := map[string]bool{"deploy-aid": true, "preposition-resources": true, "activate-defense-protocol": true}
+		if !allowed[actionKey] {
+			err := world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "weather_action", "weather_action", actionKey, "rejected", "invalid action", nil)
+			if err != nil {
+				writeWorldResponse(c, nil, err)
+				return
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action"})
+			return
+		}
+		payload := bindOptionalMap(c)
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "weather_action", "weather_action", actionKey, "accepted", "", payload)
 		writeWorldResponse(c, gin.H{
 			"accepted":  true,
 			"actionKey": actionKey,
 			"serverNow": time.Now().UTC(),
-		}, nil)
+		}, err)
 	})
 
 	private.GET("/world/weather/report", func(c *gin.Context) {
@@ -513,7 +567,7 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 	})
 }
 
-func fetchCommerceRoutes(world *service.WorldGameService, c *gin.Context) ([]gin.H, error) {
+func fetchCommerceRoutes(database *gorm.DB, world *service.WorldGameService, c *gin.Context) ([]gin.H, error) {
 	save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
 	if err != nil {
 		return nil, err
@@ -522,21 +576,168 @@ func fetchCommerceRoutes(world *service.WorldGameService, c *gin.Context) ([]gin
 	if err != nil {
 		return nil, err
 	}
+	return commerceRoutesFromConflicts(database, c.Request.Context(), conflicts), nil
+}
+
+func formatConflictItems(database *gorm.DB, ctx contextLike, conflicts []models.Conflict) []gin.H {
+	items := make([]gin.H, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		attackerName := conflictEntityName(database, ctx, conflict.AttackerType, conflict.AttackerID)
+		defenderName := conflictEntityName(database, ctx, conflict.DefenderType, conflict.DefenderID)
+		items = append(items, gin.H{
+			"id":           strconv.FormatUint(uint64(conflict.Id), 10),
+			"title":        defaultText(conflict.Title, "Non disponible"),
+			"description":  defaultText(conflict.Description, "Non disponible"),
+			"attackerName": attackerName,
+			"defenderName": defenderName,
+			"intensity":    clamp(conflict.Intensity, 0, 100),
+			"riskLevel":    normalizeRiskLevel(conflict.RiskLevel, conflict.Intensity),
+			"status":       defaultText(conflict.Status, "Non disponible"),
+			"startsAt":     conflict.StartsAt,
+			"endsAt":       conflict.EndsAt,
+		})
+	}
+	return items
+}
+
+func conflictEntityName(database *gorm.DB, ctx contextLike, entityType string, entityID uint) string {
+	if database == nil || entityID == 0 {
+		return "Non disponible"
+	}
+	switch strings.ToLower(strings.TrimSpace(entityType)) {
+	case "continent":
+		var continent models.Continent
+		if err := database.WithContext(ctx).First(&continent, entityID).Error; err == nil {
+			return defaultText(continent.Name, "Non disponible")
+		}
+	case "ai_faction", "faction":
+		var faction models.AIWorldFaction
+		if err := database.WithContext(ctx).First(&faction, entityID).Error; err == nil {
+			return defaultText(faction.Name, "Non disponible")
+		}
+	case "guild":
+		var guild models.Guild
+		if err := database.WithContext(ctx).First(&guild, entityID).Error; err == nil {
+			return defaultText(guild.Name, "Non disponible")
+		}
+	case "player":
+		var save models.PlayerSave
+		if err := database.WithContext(ctx).First(&save, "player_id = ?", entityID).Error; err == nil {
+			return defaultText(save.CityName, "Non disponible")
+		}
+	}
+	return "Non disponible"
+}
+
+func commerceRoutesFromConflicts(database *gorm.DB, ctx contextLike, conflicts []models.Conflict) []gin.H {
 	routes := make([]gin.H, 0, len(conflicts))
 	for _, conflict := range conflicts {
+		attackerName := conflictEntityName(database, ctx, conflict.AttackerType, conflict.AttackerID)
+		defenderName := conflictEntityName(database, ctx, conflict.DefenderType, conflict.DefenderID)
 		volume := int64(1000000 * (100 - clamp(conflict.Intensity, 0, 100)) / 100)
 		status := "active"
 		if conflict.Intensity >= 70 {
 			status = "perturbe"
 		}
+		route := "Non disponible"
+		if attackerName != "Non disponible" && defenderName != "Non disponible" {
+			route = attackerName + " -> " + defenderName
+		}
 		routes = append(routes, gin.H{
-			"route":  conflict.Title,
-			"cargo":  "Flux inter-régions",
-			"volume": volume,
-			"status": status,
+			"id":         strconv.FormatUint(uint64(conflict.Id), 10),
+			"route":      route,
+			"cargo":      "Flux inter-regions",
+			"volume":     volume,
+			"status":     status,
+			"efficiency": clamp(100-conflict.Intensity, 0, 100),
 		})
 	}
-	return routes, nil
+	return routes
+}
+
+func normalizeRiskLevel(value string, score int) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "surveille", "modere", "eleve", "critique":
+		return strings.ToLower(strings.TrimSpace(value))
+	case "low":
+		return "surveille"
+	case "medium":
+		return "modere"
+	case "high":
+		return "eleve"
+	case "critical":
+		return "critique"
+	default:
+		return riskLabel(score)
+	}
+}
+
+func diplomacyStance(score int) string {
+	if score >= 80 {
+		return "allie"
+	}
+	if score >= 60 {
+		return "neutre"
+	}
+	if score >= 35 {
+		return "independant"
+	}
+	return "hostile"
+}
+
+func bindOptionalMap(c *gin.Context) gin.H {
+	var payload map[string]any
+	if err := c.ShouldBindJSON(&payload); err != nil || payload == nil {
+		return gin.H{}
+	}
+	return gin.H(payload)
+}
+
+func stableActionID(payload gin.H) string {
+	for _, key := range []string{"id", "targetId", "target", "faction", "route"} {
+		if value, ok := payload[key]; ok && strings.TrimSpace(toString(value)) != "" {
+			return toString(value)
+		}
+	}
+	return "manual"
+}
+
+func toString(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case float64:
+		return strconv.FormatInt(int64(typed), 10)
+	case int:
+		return strconv.Itoa(typed)
+	case uint:
+		return strconv.FormatUint(uint64(typed), 10)
+	default:
+		return strings.TrimSpace(defaultText("", ""))
+	}
+}
+
+func commerceRecommendation(routes []gin.H) string {
+	if len(routes) == 0 {
+		return "Non disponible"
+	}
+	for _, route := range routes {
+		if status, _ := route["status"].(string); status == "perturbe" {
+			return "Stabiliser les routes perturbees avant expansion"
+		}
+	}
+	return "Maintenir les routes actives a fort volume"
+}
+
+func weatherRegionName(database *gorm.DB, ctx contextLike, continentID uint) string {
+	if database == nil || continentID == 0 {
+		return "Non disponible"
+	}
+	var continent models.Continent
+	if err := database.WithContext(ctx).First(&continent, continentID).Error; err != nil {
+		return "Non disponible"
+	}
+	return defaultText(continent.Name, "Non disponible")
 }
 
 func riskLabel(severity int) string {
@@ -596,6 +797,14 @@ func registerAdminWorldGameRoutesAt(admin *gin.RouterGroup, database *gorm.DB) {
 	admin.POST("/worlds", func(c *gin.Context) {
 		item, err := world.CreateWorld(c.Request.Context())
 		writeWorldResponse(c, item, err)
+	})
+	admin.POST("/worlds/reconcile-counts", func(c *gin.Context) {
+		result, err := world.ReconcileWorldPopulationCounts(c.Request.Context())
+		writeWorldResponse(c, result, err)
+	})
+	admin.POST("/worlds/archive-empty", func(c *gin.Context) {
+		result, err := world.ArchiveEmptyWorlds(c.Request.Context())
+		writeWorldResponse(c, result, err)
 	})
 	admin.GET("/worlds/:id", adminGet[models.World](database, true))
 	admin.PATCH("/worlds/:id", adminPatch[models.World](database, "world"))

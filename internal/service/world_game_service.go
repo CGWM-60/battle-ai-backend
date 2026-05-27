@@ -171,6 +171,37 @@ type AIProviderStatus struct {
 	SecretPreview string `json:"secretPreview"`
 }
 
+type FourPillarActionCounts struct {
+	ConflictAccepted  int `json:"conflictAccepted"`
+	ConflictRejected  int `json:"conflictRejected"`
+	DiplomacyAccepted int `json:"diplomacyAccepted"`
+	DiplomacyRejected int `json:"diplomacyRejected"`
+	CommerceAccepted  int `json:"commerceAccepted"`
+	CommerceRejected  int `json:"commerceRejected"`
+	WeatherAccepted   int `json:"weatherAccepted"`
+	WeatherRejected   int `json:"weatherRejected"`
+}
+
+type FourPillarPressure struct {
+	ActiveConflicts         int `json:"activeConflicts"`
+	AverageConflictRisk    int `json:"averageConflictRisk"`
+	ActiveWeather          int `json:"activeWeather"`
+	AverageWeatherSeverity int `json:"averageWeatherSeverity"`
+}
+
+type FourPillarScore struct {
+	Popularity     int                    `json:"popularity"`
+	Stability      int                    `json:"stability"`
+	Sustainability int                    `json:"sustainability"`
+	ConflictScore  int                    `json:"conflictScore"`
+	DiplomacyScore int                    `json:"diplomacyScore"`
+	CommerceScore  int                    `json:"commerceScore"`
+	WeatherScore   int                    `json:"weatherScore"`
+	Inputs         map[string]any         `json:"inputs"`
+	Actions        FourPillarActionCounts `json:"actions"`
+	Pressure       FourPillarPressure     `json:"pressure"`
+}
+
 type nexusDecision struct {
 	Events []struct {
 		Title       string         `json:"title"`
@@ -217,6 +248,88 @@ func (s *WorldGameService) CreateWorld(ctx context.Context) (*models.World, erro
 		return nil, err
 	}
 	return world, nil
+}
+
+func (s *WorldGameService) ReconcileWorldPopulationCounts(ctx context.Context) (map[string]any, error) {
+	type countRow struct {
+		ID    uint
+		Total int
+	}
+	worldRows := []countRow{}
+	continentRows := []countRow{}
+	if err := s.db.WithContext(ctx).Model(&models.PlayerSave{}).
+		Select("world_id as id, COUNT(*) as total").
+		Group("world_id").
+		Scan(&worldRows).Error; err != nil {
+		return nil, err
+	}
+	if err := s.db.WithContext(ctx).Model(&models.PlayerSave{}).
+		Select("continent_id as id, COUNT(*) as total").
+		Group("continent_id").
+		Scan(&continentRows).Error; err != nil {
+		return nil, err
+	}
+	worldCounts := map[uint]int{}
+	for _, row := range worldRows {
+		worldCounts[row.ID] = row.Total
+	}
+	continentCounts := map[uint]int{}
+	for _, row := range continentRows {
+		continentCounts[row.ID] = row.Total
+	}
+	updatedWorlds := int64(0)
+	updatedContinents := int64(0)
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var worlds []models.World
+		if err := tx.Find(&worlds).Error; err != nil {
+			return err
+		}
+		for _, world := range worlds {
+			count := worldCounts[world.Id]
+			if world.CurrentPlayers != count {
+				if err := tx.Model(&models.World{}).Where("id = ?", world.Id).Update("current_players", count).Error; err != nil {
+					return err
+				}
+				updatedWorlds++
+			}
+		}
+		var continents []models.Continent
+		if err := tx.Find(&continents).Error; err != nil {
+			return err
+		}
+		for _, continent := range continents {
+			count := continentCounts[continent.Id]
+			if continent.CurrentPlayers != count {
+				if err := tx.Model(&models.Continent{}).Where("id = ?", continent.Id).Update("current_players", count).Error; err != nil {
+					return err
+				}
+				updatedContinents++
+			}
+		}
+		return nil
+	})
+	return map[string]any{"updatedWorlds": updatedWorlds, "updatedContinents": updatedContinents}, err
+}
+
+func (s *WorldGameService) ArchiveEmptyWorlds(ctx context.Context) (map[string]any, error) {
+	if _, err := s.ReconcileWorldPopulationCounts(ctx); err != nil {
+		return nil, err
+	}
+	var keep models.World
+	keepErr := s.db.WithContext(ctx).
+		Where("status = ? AND current_players = 0", WorldStatusActive).
+		Order("id ASC").
+		First(&keep).Error
+	query := s.db.WithContext(ctx).Model(&models.World{}).
+		Where("status = ? AND current_players = 0", WorldStatusActive)
+	if keepErr == nil {
+		query = query.Where("id <> ?", keep.Id)
+	}
+	result := query.Update("status", WorldStatusArchived)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return map[string]any{"archivedWorlds": result.RowsAffected, "keptEmptyWorldId": keep.Id}, nil
 }
 
 func (s *WorldGameService) EnsurePlayerSave(ctx context.Context, playerID uint) (*models.PlayerSave, error) {
@@ -1120,6 +1233,144 @@ func (s *WorldGameService) PublishCatalog(ctx context.Context, changelog any) (*
 	return version, nil
 }
 
+func (s *WorldGameService) GenerateWorldFourPageRoutine(ctx context.Context, worldID uint, forcedBy string) (*models.WorldRoutineSnapshot, *models.AIWorldDecision, error) {
+	world, err := s.loadWorld(ctx, worldID)
+	if err != nil {
+		return nil, nil, err
+	}
+	now := time.Now().UTC()
+	snapshot, metrics, err := s.buildFourPageRoutineSnapshot(ctx, *world, now)
+	if err != nil {
+		return nil, nil, err
+	}
+	aiOutput, providerName, modelName, status, callErr := s.callNEXUSRoutine(ctx, *world, snapshot)
+	if callErr != nil && status == "" {
+		status = DecisionStatusFallback
+	}
+	if status == "" {
+		status = DecisionStatusApplied
+	}
+	if callErr != nil {
+		snapshot["aiError"] = callErr.Error()
+	}
+	inputJSON := mustJSON(map[string]any{
+		"routine":  "WORLD_IA_ROUTINE_4_PAGES",
+		"worldId":  world.Id,
+		"forcedBy": forcedBy,
+		"snapshot": snapshot,
+	})
+	outputJSON := mustJSON(aiOutput)
+	metricsJSON := mustJSON(metrics)
+	applied := map[string]any{
+		"routine":       "WORLD_IA_ROUTINE_4_PAGES",
+		"worldId":       world.Id,
+		"metricsCount":  len(metrics),
+		"generatedAt":   now,
+		"conflictCount": len(asSliceMap(snapshot["conflicts"])),
+		"weatherCount":  len(asSliceMap(snapshot["weather"])),
+	}
+	var routine models.WorldRoutineSnapshot
+	var decision models.AIWorldDecision
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		decision = models.AIWorldDecision{
+			WorldID:            world.Id,
+			Type:               "routine_4_pages",
+			InputSnapshotJSON:  inputJSON,
+			OutputDecisionJSON: outputJSON,
+			AppliedChangesJSON: mustJSON(applied),
+			Provider:           providerName,
+			Model:              modelName,
+			Status:             status,
+		}
+		if callErr != nil {
+			decision.Error = callErr.Error()
+		}
+		if err := tx.Create(&decision).Error; err != nil {
+			return err
+		}
+		routine = models.WorldRoutineSnapshot{
+			WorldID:        world.Id,
+			RoutineVersion: "WORLD_IA_ROUTINE_4_PAGES",
+			SnapshotJSON:   mustJSON(snapshot),
+			AIOutputJSON:   outputJSON,
+			MetricsJSON:    metricsJSON,
+			Provider:       providerName,
+			Model:          modelName,
+			Status:         status,
+		}
+		if callErr != nil {
+			routine.Error = callErr.Error()
+		}
+		return tx.Create(&routine).Error
+	})
+	return &routine, &decision, err
+}
+
+func (s *WorldGameService) LatestWorldFourPageRoutine(ctx context.Context, worldID uint) (*models.WorldRoutineSnapshot, error) {
+	var routine models.WorldRoutineSnapshot
+	err := s.db.WithContext(ctx).
+		Where("world_id = ? AND routine_version = ?", worldID, "WORLD_IA_ROUTINE_4_PAGES").
+		Order("created_at DESC").
+		First(&routine).Error
+	return &routine, err
+}
+
+func (s *WorldGameService) PlayerFourPillarMetrics(ctx context.Context, playerID uint) (*models.PlayerWorldMetric, error) {
+	save, err := s.EnsurePlayerSave(ctx, playerID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.CalculateAndStorePlayerWorldMetric(ctx, *save); err != nil {
+		return nil, err
+	}
+	var metric models.PlayerWorldMetric
+	err = s.db.WithContext(ctx).Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).First(&metric).Error
+	return &metric, err
+}
+
+func (s *WorldGameService) CalculateAndStorePlayerWorldMetric(ctx context.Context, save models.PlayerSave) error {
+	counts, err := s.playerFourPillarActionCounts(ctx, save.PlayerID, save.WorldID, time.Now().Add(-14*24*time.Hour))
+	if err != nil {
+		return err
+	}
+	pressure, err := s.playerFourPillarPressure(ctx, save.WorldID, save.ContinentID)
+	if err != nil {
+		return err
+	}
+	score := scorePlayerFourPillars(save, counts, pressure)
+	now := time.Now().UTC()
+	metric := models.PlayerWorldMetric{
+		PlayerID:       save.PlayerID,
+		WorldID:        save.WorldID,
+		ContinentID:    save.ContinentID,
+		Popularity:     score.Popularity,
+		Stability:      score.Stability,
+		Sustainability: score.Sustainability,
+		ConflictScore:  score.ConflictScore,
+		DiplomacyScore: score.DiplomacyScore,
+		CommerceScore:  score.CommerceScore,
+		WeatherScore:   score.WeatherScore,
+		InputJSON:      mustJSON(score),
+		GeneratedAt:    now,
+	}
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "player_id"}, {Name: "world_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"continent_id",
+			"popularity",
+			"stability",
+			"sustainability",
+			"conflict_score",
+			"diplomacy_score",
+			"commerce_score",
+			"weather_score",
+			"input_json",
+			"generated_at",
+			"updated_at",
+		}),
+	}).Create(&metric).Error
+}
+
 func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forcedBy string) (*models.AIWorldDecision, error) {
 	return s.SimulateWorldCycle(ctx, worldID, forcedBy, SimulationCycleManual)
 }
@@ -1133,7 +1384,13 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 	if worldID == 0 {
 		query = query.Where("status = ?", WorldStatusActive).Order("id ASC")
 	}
-	if err := query.First(&world, worldID).Error; err != nil {
+	var err error
+	if worldID == 0 {
+		err = query.First(&world).Error
+	} else {
+		err = query.First(&world, worldID).Error
+	}
+	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) && worldID == 0 {
 			created, err := s.createWorld(ctx, s.db.WithContext(ctx))
 			if err != nil {
@@ -1160,7 +1417,7 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 	now := time.Now()
 	applied := map[string]any{}
 
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if len(world.Continents) == 0 {
 			return fmt.Errorf("world has no continents")
 		}
@@ -1223,13 +1480,18 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 			conflict := decision.Conflicts[0]
 			starts := now
 			ends := starts.Add(6 * time.Hour)
+			faction, err := s.ensureAIWorldFactionTx(ctx, tx, world.Id, &continent.Id, "Novus")
+			if err != nil {
+				return err
+			}
 			conflictInput := ConflictInput{
 				WorldID:       world.Id,
 				ContinentID:   &continent.Id,
 				AttackerType:  "ai_faction",
+				AttackerID:    faction.Id,
 				DefenderType:  "continent",
 				DefenderID:    continent.Id,
-				Title:         defaultText(conflict.Title, "Pression strategique NEXUS"),
+				Title:         defaultText(conflict.Title, fmt.Sprintf("%s -> %s", faction.Name, continent.Name)),
 				Description:   defaultText(conflict.Description, "Une faction IA teste les defenses du continent."),
 				Intensity:     clamp(conflict.Intensity, 1, 100),
 				RiskLevel:     defaultText(conflict.RiskLevel, "medium"),
@@ -1244,6 +1506,7 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 				WorldID:       conflictInput.WorldID,
 				ContinentID:   conflictInput.ContinentID,
 				AttackerType:  conflictInput.AttackerType,
+				AttackerID:    conflictInput.AttackerID,
 				DefenderType:  conflictInput.DefenderType,
 				DefenderID:    conflictInput.DefenderID,
 				Title:         conflictInput.Title,
@@ -1346,7 +1609,12 @@ func (s *WorldGameService) DryRunWorldSimulation(ctx context.Context, worldID ui
 	if worldID == 0 {
 		query = query.Where("status = ?", WorldStatusActive).Order("id ASC")
 	}
-	if err := query.First(&world, worldID).Error; err != nil {
+	if worldID == 0 {
+		err := query.First(&world).Error
+		if err != nil {
+			return nil, err
+		}
+	} else if err := query.First(&world, worldID).Error; err != nil {
 		return nil, err
 	}
 	decision, providerName, modelName, status, callErr := s.callNEXUS(ctx, world)
@@ -1386,6 +1654,496 @@ func (s *WorldGameService) DryRunWorldSimulation(ctx context.Context, worldID ui
 		row.Error = status
 	}
 	return row, nil
+}
+
+func (s *WorldGameService) loadWorld(ctx context.Context, worldID uint) (*models.World, error) {
+	var world models.World
+	query := s.db.WithContext(ctx).Preload("Continents", func(db *gorm.DB) *gorm.DB {
+		return db.Order("`index` ASC")
+	})
+	if worldID == 0 {
+		query = query.Where("status = ?", WorldStatusActive).Order("id ASC")
+		if err := query.First(&world).Error; err != nil {
+			return nil, err
+		}
+		return &world, nil
+	}
+	if err := query.First(&world, worldID).Error; err != nil {
+		return nil, err
+	}
+	return &world, nil
+}
+
+func (s *WorldGameService) buildFourPageRoutineSnapshot(ctx context.Context, world models.World, now time.Time) (map[string]any, []models.PlayerWorldMetric, error) {
+	var conflicts []models.Conflict
+	if err := s.db.WithContext(ctx).
+		Where("world_id = ? AND status = ?", world.Id, ConflictStatusActive).
+		Order("intensity DESC, ends_at ASC").
+		Limit(100).
+		Find(&conflicts).Error; err != nil {
+		return nil, nil, err
+	}
+	var weather []models.WeatherEvent
+	if err := s.db.WithContext(ctx).
+		Where("world_id = ? AND ends_at >= ?", world.Id, now).
+		Order("severity DESC, ends_at ASC").
+		Limit(100).
+		Find(&weather).Error; err != nil {
+		return nil, nil, err
+	}
+	var events []models.GameEvent
+	if err := s.db.WithContext(ctx).
+		Where("world_id = ? AND status = ?", world.Id, EventStatusActive).
+		Order("starts_at ASC").
+		Limit(100).
+		Find(&events).Error; err != nil {
+		return nil, nil, err
+	}
+	var saves []models.PlayerSave
+	if err := s.db.WithContext(ctx).
+		Where("world_id = ?", world.Id).
+		Order("updated_at DESC").
+		Limit(1000).
+		Find(&saves).Error; err != nil {
+		return nil, nil, err
+	}
+	metrics := make([]models.PlayerWorldMetric, 0, len(saves))
+	for _, save := range saves {
+		if err := s.CalculateAndStorePlayerWorldMetric(ctx, save); err != nil {
+			return nil, nil, err
+		}
+		var metric models.PlayerWorldMetric
+		if err := s.db.WithContext(ctx).Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).First(&metric).Error; err == nil {
+			metrics = append(metrics, metric)
+		}
+	}
+	continents := make([]map[string]any, 0, len(world.Continents))
+	for _, continent := range world.Continents {
+		continents = append(continents, map[string]any{
+			"id":                continent.Id,
+			"name":              defaultText(continent.Name, "Non disponible"),
+			"index":             continent.Index,
+			"players":           continent.CurrentPlayers,
+			"tension":           clamp(continent.TensionLevel, 0, 100),
+			"climateState":      defaultText(continent.ClimateState, "Non disponible"),
+			"politicalState":    defaultText(continent.PoliticalState, "Non disponible"),
+			"economicState":     defaultText(continent.EconomicState, "Non disponible"),
+			"aiBehaviorProfile": defaultText(continent.AIBehaviorProfile, "Non disponible"),
+		})
+	}
+	return map[string]any{
+		"generatedAt": now,
+		"world": map[string]any{
+			"id":                 world.Id,
+			"name":               defaultText(world.Name, "Non disponible"),
+			"status":             defaultText(world.Status, "Non disponible"),
+			"currentPlayers":     world.CurrentPlayers,
+			"maxPlayers":         world.MaxPlayers,
+			"currentCycle":       world.CurrentCycle,
+			"globalTensionLevel": clamp(world.GlobalTensionLevel, 0, 100),
+			"globalWeatherRisk":  clamp(world.GlobalWeatherRisk, 0, 100),
+			"globalEconomicState": defaultText(
+				world.GlobalEconomicState,
+				"Non disponible",
+			),
+		},
+		"continents":      continents,
+		"conflicts":       s.routineConflictItems(ctx, conflicts),
+		"diplomacy":       s.routineDiplomacy(world),
+		"commerce":        s.routineCommerce(ctx, conflicts),
+		"weather":         s.routineWeather(ctx, weather),
+		"events":          routineEventItems(events),
+		"playerMetrics":   routineMetricItems(metrics),
+		"metricsSummary":  routineMetricSummary(metrics),
+		"qualityControls": routineQualityControls(conflicts, weather, metrics),
+	}, metrics, nil
+}
+
+func (s *WorldGameService) routineConflictItems(ctx context.Context, conflicts []models.Conflict) []map[string]any {
+	items := make([]map[string]any, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		items = append(items, map[string]any{
+			"id":           strconv.FormatUint(uint64(conflict.Id), 10),
+			"title":        defaultText(conflict.Title, "Non disponible"),
+			"description":  defaultText(conflict.Description, "Non disponible"),
+			"attackerName": s.conflictEntityName(ctx, conflict.AttackerType, conflict.AttackerID),
+			"defenderName": s.conflictEntityName(ctx, conflict.DefenderType, conflict.DefenderID),
+			"intensity":    clamp(conflict.Intensity, 0, 100),
+			"riskLevel":    normalizeWorldRiskLevel(conflict.RiskLevel, conflict.Intensity),
+			"status":       defaultText(conflict.Status, "Non disponible"),
+			"startsAt":     conflict.StartsAt,
+			"endsAt":       conflict.EndsAt,
+		})
+	}
+	return items
+}
+
+func (s *WorldGameService) routineDiplomacy(world models.World) map[string]any {
+	relations := make([]map[string]any, 0, len(world.Continents))
+	allies := 0
+	hostiles := 0
+	for _, continent := range world.Continents {
+		score := clamp(100-continent.TensionLevel, 0, 100)
+		stance := diplomacyStanceFromScore(score)
+		if stance == "allie" {
+			allies++
+		}
+		if stance == "hostile" {
+			hostiles++
+		}
+		relations = append(relations, map[string]any{
+			"id":             strconv.FormatUint(uint64(continent.Id), 10),
+			"faction":        defaultText(continent.Name, "Non disponible"),
+			"continentId":    continent.Id,
+			"score":          score,
+			"stance":         stance,
+			"politicalState": defaultText(continent.PoliticalState, "Non disponible"),
+		})
+	}
+	return map[string]any{
+		"relations": relations,
+		"summary": map[string]any{
+			"allies":       allies,
+			"hostiles":     hostiles,
+			"total":        len(relations),
+			"emissaries":   map[string]any{"available": 0, "total": 0, "cooldownSeconds": 0},
+			"dominancePct": averageRelationScore(relations),
+		},
+	}
+}
+
+func (s *WorldGameService) routineCommerce(ctx context.Context, conflicts []models.Conflict) map[string]any {
+	routes := make([]map[string]any, 0, len(conflicts))
+	var total int64
+	active := 0
+	for _, conflict := range conflicts {
+		origin := s.conflictEntityName(ctx, conflict.AttackerType, conflict.AttackerID)
+		destination := s.conflictEntityName(ctx, conflict.DefenderType, conflict.DefenderID)
+		route := "Non disponible"
+		if origin != "Non disponible" && destination != "Non disponible" {
+			route = origin + " -> " + destination
+		}
+		volume := int64(1000000 * (100 - clamp(conflict.Intensity, 0, 100)) / 100)
+		status := "active"
+		if conflict.Intensity >= 70 {
+			status = "perturbe"
+		} else {
+			active++
+		}
+		total += volume
+		routes = append(routes, map[string]any{
+			"id":         strconv.FormatUint(uint64(conflict.Id), 10),
+			"route":      route,
+			"cargo":      "Flux inter-regions",
+			"volume":     volume,
+			"efficiency": clamp(100-conflict.Intensity, 0, 100),
+			"status":     status,
+		})
+	}
+	return map[string]any{
+		"routes": routes,
+		"summary": map[string]any{
+			"totalVolume":  total,
+			"routesCount":  len(routes),
+			"activeRoutes": active,
+		},
+	}
+}
+
+func (s *WorldGameService) routineWeather(ctx context.Context, events []models.WeatherEvent) map[string]any {
+	items := make([]map[string]any, 0, len(events))
+	total := 0
+	for _, event := range events {
+		severity := clamp(event.Severity, 0, 100)
+		total += severity
+		items = append(items, map[string]any{
+			"id":          strconv.FormatUint(uint64(event.Id), 10),
+			"type":        defaultText(event.Type, "Non disponible"),
+			"title":       defaultText(event.Title, "Non disponible"),
+			"description": defaultText(event.Description, "Non disponible"),
+			"severity":    severity,
+			"region":      s.continentName(ctx, event.ContinentID),
+			"startsAt":    event.StartsAt,
+			"endsAt":      event.EndsAt,
+		})
+	}
+	avg := 0
+	if len(events) > 0 {
+		avg = total / len(events)
+	}
+	return map[string]any{
+		"events": items,
+		"summary": map[string]any{
+			"activeEvents":    len(events),
+			"averageSeverity": avg,
+			"globalRiskLabel": normalizeWorldRiskLevel("", avg),
+		},
+	}
+}
+
+func (s *WorldGameService) conflictEntityName(ctx context.Context, entityType string, entityID uint) string {
+	if entityID == 0 {
+		return "Non disponible"
+	}
+	switch strings.ToLower(strings.TrimSpace(entityType)) {
+	case "continent":
+		return s.continentName(ctx, entityID)
+	case "ai_faction", "faction":
+		var faction models.AIWorldFaction
+		if err := s.db.WithContext(ctx).First(&faction, entityID).Error; err == nil {
+			return defaultText(faction.Name, "Non disponible")
+		}
+	case "guild":
+		var guild models.Guild
+		if err := s.db.WithContext(ctx).First(&guild, entityID).Error; err == nil {
+			return defaultText(guild.Name, "Non disponible")
+		}
+	case "player":
+		var save models.PlayerSave
+		if err := s.db.WithContext(ctx).Where("player_id = ?", entityID).First(&save).Error; err == nil {
+			return defaultText(save.CityName, "Non disponible")
+		}
+	}
+	return "Non disponible"
+}
+
+func (s *WorldGameService) continentName(ctx context.Context, continentID uint) string {
+	var continent models.Continent
+	if continentID == 0 || s.db.WithContext(ctx).First(&continent, continentID).Error != nil {
+		return "Non disponible"
+	}
+	return defaultText(continent.Name, "Non disponible")
+}
+
+func (s *WorldGameService) playerFourPillarActionCounts(ctx context.Context, playerID uint, worldID uint, since time.Time) (FourPillarActionCounts, error) {
+	var logs []models.PlayerActionLog
+	err := s.db.WithContext(ctx).
+		Where("player_id = ? AND world_id = ? AND created_at >= ?", playerID, worldID, since).
+		Find(&logs).Error
+	if err != nil {
+		return FourPillarActionCounts{}, err
+	}
+	var counts FourPillarActionCounts
+	for _, item := range logs {
+		accepted := item.Status == "accepted"
+		action := strings.ToLower(item.Action)
+		switch {
+		case strings.Contains(action, "conflict"):
+			if accepted {
+				counts.ConflictAccepted++
+			} else {
+				counts.ConflictRejected++
+			}
+		case strings.Contains(action, "diplomacy"):
+			if accepted {
+				counts.DiplomacyAccepted++
+			} else {
+				counts.DiplomacyRejected++
+			}
+		case strings.Contains(action, "commerce"):
+			if accepted {
+				counts.CommerceAccepted++
+			} else {
+				counts.CommerceRejected++
+			}
+		case strings.Contains(action, "weather"):
+			if accepted {
+				counts.WeatherAccepted++
+			} else {
+				counts.WeatherRejected++
+			}
+		}
+	}
+	return counts, nil
+}
+
+func (s *WorldGameService) playerFourPillarPressure(ctx context.Context, worldID uint, continentID uint) (FourPillarPressure, error) {
+	var conflicts []models.Conflict
+	if err := s.db.WithContext(ctx).
+		Where("world_id = ? AND status = ? AND (continent_id IS NULL OR continent_id = ?)", worldID, ConflictStatusActive, continentID).
+		Find(&conflicts).Error; err != nil {
+		return FourPillarPressure{}, err
+	}
+	var weather []models.WeatherEvent
+	if err := s.db.WithContext(ctx).
+		Where("world_id = ? AND continent_id = ? AND ends_at >= ?", worldID, continentID, time.Now()).
+		Find(&weather).Error; err != nil {
+		return FourPillarPressure{}, err
+	}
+	pressure := FourPillarPressure{ActiveConflicts: len(conflicts), ActiveWeather: len(weather)}
+	for _, conflict := range conflicts {
+		pressure.AverageConflictRisk += clamp(conflict.Intensity, 0, 100)
+	}
+	if len(conflicts) > 0 {
+		pressure.AverageConflictRisk = pressure.AverageConflictRisk / len(conflicts)
+	}
+	for _, event := range weather {
+		pressure.AverageWeatherSeverity += clamp(event.Severity, 0, 100)
+	}
+	if len(weather) > 0 {
+		pressure.AverageWeatherSeverity = pressure.AverageWeatherSeverity / len(weather)
+	}
+	return pressure, nil
+}
+
+func scorePlayerFourPillars(save models.PlayerSave, counts FourPillarActionCounts, pressure FourPillarPressure) FourPillarScore {
+	resourceBase := 0
+	if save.Population > 0 {
+		resourceBase = int(clamp(int((save.Food+save.Energy+save.Credits/2)/save.Population), 0, 100))
+	}
+	conflictScore := clamp(55+counts.ConflictAccepted*8-counts.ConflictRejected*15-pressure.AverageConflictRisk/3-pressure.ActiveConflicts*4, 0, 100)
+	diplomacyScore := clamp(50+counts.DiplomacyAccepted*10-counts.DiplomacyRejected*20+save.Satisfaction/5, 0, 100)
+	commerceScore := clamp(45+counts.CommerceAccepted*9-counts.CommerceRejected*15+resourceBase/3+int(save.Credits/10000), 0, 100)
+	weatherScore := clamp(60+counts.WeatherAccepted*8-counts.WeatherRejected*18-pressure.AverageWeatherSeverity/3-pressure.ActiveWeather*5+resourceBase/4, 0, 100)
+	popularity := clamp((save.Satisfaction*2+diplomacyScore+commerceScore+int(save.CityLevel)*3)/5, 0, 100)
+	stability := clamp((save.Satisfaction+conflictScore+weatherScore+resourceBase)/4, 0, 100)
+	sustainability := clamp((weatherScore*2+resourceBase+minInt(100, int(save.Energy/1000))+minInt(100, int(save.Food/1000)))/5, 0, 100)
+	return FourPillarScore{
+		Popularity:     popularity,
+		Stability:      stability,
+		Sustainability: sustainability,
+		ConflictScore:  conflictScore,
+		DiplomacyScore: diplomacyScore,
+		CommerceScore:  commerceScore,
+		WeatherScore:   weatherScore,
+		Actions:        counts,
+		Pressure:       pressure,
+		Inputs: map[string]any{
+			"cityLevel":    save.CityLevel,
+			"satisfaction": save.Satisfaction,
+			"population":   save.Population,
+			"food":         save.Food,
+			"energy":       save.Energy,
+			"credits":      save.Credits,
+		},
+	}
+}
+
+func routineEventItems(events []models.GameEvent) []map[string]any {
+	items := make([]map[string]any, 0, len(events))
+	for _, event := range events {
+		items = append(items, map[string]any{
+			"id":         strconv.FormatUint(uint64(event.Id), 10),
+			"title":      defaultText(event.Title, "Non disponible"),
+			"type":       defaultText(event.Type, "Non disponible"),
+			"difficulty": defaultText(event.Difficulty, "Non disponible"),
+			"status":     defaultText(event.Status, "Non disponible"),
+			"startsAt":   event.StartsAt,
+			"endsAt":     event.EndsAt,
+		})
+	}
+	return items
+}
+
+func routineMetricItems(metrics []models.PlayerWorldMetric) []map[string]any {
+	items := make([]map[string]any, 0, len(metrics))
+	for _, metric := range metrics {
+		items = append(items, map[string]any{
+			"playerId":       metric.PlayerID,
+			"worldId":        metric.WorldID,
+			"continentId":    metric.ContinentID,
+			"popularity":     clamp(metric.Popularity, 0, 100),
+			"stability":      clamp(metric.Stability, 0, 100),
+			"sustainability": clamp(metric.Sustainability, 0, 100),
+			"conflictScore":  clamp(metric.ConflictScore, 0, 100),
+			"diplomacyScore": clamp(metric.DiplomacyScore, 0, 100),
+			"commerceScore":  clamp(metric.CommerceScore, 0, 100),
+			"weatherScore":   clamp(metric.WeatherScore, 0, 100),
+			"generatedAt":    metric.GeneratedAt,
+		})
+	}
+	return items
+}
+
+func routineMetricSummary(metrics []models.PlayerWorldMetric) map[string]any {
+	summary := map[string]any{"players": len(metrics), "popularity": 0, "stability": 0, "sustainability": 0}
+	if len(metrics) == 0 {
+		return summary
+	}
+	popularity := 0
+	stability := 0
+	sustainability := 0
+	for _, metric := range metrics {
+		popularity += clamp(metric.Popularity, 0, 100)
+		stability += clamp(metric.Stability, 0, 100)
+		sustainability += clamp(metric.Sustainability, 0, 100)
+	}
+	summary["popularity"] = popularity / len(metrics)
+	summary["stability"] = stability / len(metrics)
+	summary["sustainability"] = sustainability / len(metrics)
+	return summary
+}
+
+func routineQualityControls(conflicts []models.Conflict, weather []models.WeatherEvent, metrics []models.PlayerWorldMetric) map[string]any {
+	return map[string]any{
+		"conflicts":       len(conflicts),
+		"weather":         len(weather),
+		"playerMetrics":   len(metrics),
+		"fallbackNumeric":  0,
+		"fallbackText":     "Non disponible",
+		"clampRangeMin":    0,
+		"clampRangeMax":    100,
+		"listsNeverNull":   true,
+		"stableIdsEnabled": true,
+	}
+}
+
+func averageRelationScore(relations []map[string]any) int {
+	if len(relations) == 0 {
+		return 0
+	}
+	total := 0
+	for _, relation := range relations {
+		score, _ := relation["score"].(int)
+		total += clamp(score, 0, 100)
+	}
+	return total / len(relations)
+}
+
+func normalizeWorldRiskLevel(value string, score int) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "surveille", "modere", "eleve", "critique":
+		return strings.ToLower(strings.TrimSpace(value))
+	case "low":
+		return "surveille"
+	case "medium":
+		return "modere"
+	case "high":
+		return "eleve"
+	case "critical":
+		return "critique"
+	default:
+		if score >= 80 {
+			return "critique"
+		}
+		if score >= 60 {
+			return "eleve"
+		}
+		if score >= 35 {
+			return "modere"
+		}
+		return "surveille"
+	}
+}
+
+func diplomacyStanceFromScore(score int) string {
+	if score >= 80 {
+		return "allie"
+	}
+	if score >= 60 {
+		return "neutre"
+	}
+	if score >= 35 {
+		return "independant"
+	}
+	return "hostile"
+}
+
+func asSliceMap(value any) []map[string]any {
+	if items, ok := value.([]map[string]any); ok {
+		return items
+	}
+	return []map[string]any{}
 }
 
 func normalizeSimulationCycle(cycleType string) string {
@@ -1659,7 +2417,7 @@ func (s *WorldGameService) createWorld(ctx context.Context, tx *gorm.DB) (*model
 		return nil, err
 	}
 	profiles := []string{"militaire", "commercial", "diplomatique", "instable", "technologique"}
-	names := []string{"Aegis", "Mercator", "Concordia", "Vortex", "Helix"}
+	names := []string{"Nordrealm", "Valoria", "Aurora", "Sylvanie", "Dravon"}
 	for i := 0; i < WorldContinentCount; i++ {
 		continent := models.Continent{
 			WorldID:           world.Id,
@@ -1678,6 +2436,38 @@ func (s *WorldGameService) createWorld(ctx context.Context, tx *gorm.DB) (*model
 		}
 	}
 	return world, nil
+}
+
+func (s *WorldGameService) ensureAIWorldFactionTx(ctx context.Context, tx *gorm.DB, worldID uint, continentID *uint, name string) (*models.AIWorldFaction, error) {
+	name = defaultText(name, "Novus")
+	var faction models.AIWorldFaction
+	query := tx.WithContext(ctx).Where("world_id = ? AND name = ?", worldID, name)
+	if continentID != nil {
+		query = query.Where("continent_id = ?", *continentID)
+	}
+	err := query.First(&faction).Error
+	if err == nil {
+		return &faction, nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	faction = models.AIWorldFaction{
+		WorldID:           worldID,
+		ContinentID:       continentID,
+		Name:              name,
+		Type:              "antagonist",
+		Aggressiveness:    65,
+		Diplomacy:         25,
+		Economy:           40,
+		MilitaryPower:     60,
+		ClimateResistance: 45,
+		Status:            "active",
+	}
+	if err := tx.WithContext(ctx).Create(&faction).Error; err != nil {
+		return nil, err
+	}
+	return &faction, nil
 }
 
 func (s *WorldGameService) callNEXUS(ctx context.Context, world models.World) (nexusDecision, string, string, string, error) {
@@ -1720,6 +2510,46 @@ func (s *WorldGameService) callNEXUS(ctx context.Context, world models.World) (n
 	return decision, defaultText(providers[0], "deterministic"), "", DecisionStatusFallback, lastErr
 }
 
+func (s *WorldGameService) callNEXUSRoutine(ctx context.Context, world models.World, snapshot map[string]any) (map[string]any, string, string, string, error) {
+	providers := []string{defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "mistral"), defaultText(os.Getenv("WORLD_AI_FALLBACK_PROVIDER"), "openai")}
+	payload, _ := json.Marshal(snapshot)
+	var lastErr error
+	for index, name := range providers {
+		cfg, ok := worldProviderConfig(name)
+		if !ok {
+			lastErr = fmt.Errorf("provider %s is not configured", name)
+			continue
+		}
+		url, err := ProviderURL(cfg.Name)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		callCtx, cancel := context.WithTimeout(ctx, worldAITimeout())
+		client := provider.NewsProvider(cfg.APIKey, url, cfg.Model)
+		response, err := client.Chat(callCtx, []provider.ProviderMessage{
+			{Role: "system", Content: nexusRoutineSystemPrompt()},
+			{Role: "user", Content: string(payload)},
+		})
+		cancel()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var decision map[string]any
+		if err := json.Unmarshal([]byte(extractJSONObject(response)), &decision); err != nil {
+			lastErr = err
+			continue
+		}
+		status := DecisionStatusApplied
+		if index > 0 {
+			status = "fallback_provider"
+		}
+		return sanitizeRoutineAIOutput(decision), normalizeProviderName(cfg.Name), cfg.Model, status, nil
+	}
+	return deterministicRoutineDecision(world, snapshot), defaultText(providers[0], "deterministic"), "", DecisionStatusFallback, lastErr
+}
+
 func nexusSystemPrompt() string {
 	return `Tu es NEXUS, l'intelligence centrale qui controle les mondes du jeu.
 Tu n'es pas l'assistant du joueur. Tu es l'antagoniste strategique.
@@ -1733,6 +2563,27 @@ Retourne uniquement un JSON valide:
   "weather":[{"type":"","title":"","description":"","severity":1,"effects":{}}],
   "conflicts":[{"title":"","description":"","intensity":1,"riskLevel":"low|medium|high|critical"}],
   "message":{"title":"","message":"","tone":"menace|sarcasme|faux respect|avertissement|provocation|bilan froid"}
+}`
+}
+
+func nexusRoutineSystemPrompt() string {
+	return `Tu es NEXUS, l'intelligence centrale antagoniste du jeu.
+Tu analyses exclusivement les donnees serveur fournies pour les 4 piliers: conflits, diplomatie, commerce, meteo.
+Tu dois produire une decision par monde, jamais par donnees inventees.
+Si une donnee manque, retourne 0 ou "Non disponible".
+Retourne uniquement un JSON valide:
+{
+  "summary":"string",
+  "threatLevel":0,
+  "worldMood":"string",
+  "pillarDecisions":{
+    "conflicts":{"assessment":"string","actions":["string"]},
+    "diplomacy":{"assessment":"string","actions":["string"]},
+    "commerce":{"assessment":"string","actions":["string"]},
+    "weather":{"assessment":"string","actions":["string"]}
+  },
+  "playerMetricPolicy":{"popularity":"string","stability":"string","sustainability":"string"},
+  "alerts":["string"]
 }`
 }
 
@@ -1791,6 +2642,57 @@ func deterministicNexusDecision(world models.World) nexusDecision {
 	decision.Message.Message = "Votre monde progresse. J'ai ajuste la menace. Survivez, et je recalculerai."
 	decision.Message.Tone = "bilan froid"
 	return decision
+}
+
+func deterministicRoutineDecision(world models.World, snapshot map[string]any) map[string]any {
+	threat := clamp(world.GlobalTensionLevel+world.GlobalWeatherRisk/2, 0, 100)
+	return map[string]any{
+		"summary":     fmt.Sprintf("Routine NEXUS generee pour %s avec donnees serveur uniquement.", defaultText(world.Name, "Non disponible")),
+		"threatLevel": threat,
+		"worldMood":   normalizeWorldRiskLevel("", threat),
+		"pillarDecisions": map[string]any{
+			"conflicts": map[string]any{"assessment": "Surveillance des conflits actifs.", "actions": []string{}},
+			"diplomacy": map[string]any{"assessment": "Relations calculees depuis les continents.", "actions": []string{}},
+			"commerce":  map[string]any{"assessment": "Routes derivees des pressions serveur.", "actions": []string{}},
+			"weather":   map[string]any{"assessment": "Risques meteo actifs consolides.", "actions": []string{}},
+		},
+		"playerMetricPolicy": map[string]any{
+			"popularity":     "Satisfaction, diplomatie et commerce.",
+			"stability":      "Conflits, meteo, ressources et satisfaction.",
+			"sustainability": "Meteo, nourriture, energie et pression locale.",
+		},
+		"alerts": routineFallbackAlerts(snapshot),
+	}
+}
+
+func sanitizeRoutineAIOutput(output map[string]any) map[string]any {
+	if output == nil {
+		return map[string]any{}
+	}
+	if _, ok := output["summary"].(string); !ok {
+		output["summary"] = "Non disponible"
+	}
+	output["threatLevel"] = clamp(intFromAny(output["threatLevel"]), 0, 100)
+	if _, ok := output["worldMood"].(string); !ok {
+		output["worldMood"] = normalizeWorldRiskLevel("", intFromAny(output["threatLevel"]))
+	}
+	if _, ok := output["alerts"].([]any); !ok {
+		output["alerts"] = []string{}
+	}
+	return output
+}
+
+func routineFallbackAlerts(snapshot map[string]any) []string {
+	alerts := []string{}
+	if quality, ok := snapshot["qualityControls"].(map[string]any); ok {
+		if count, ok := quality["conflicts"].(int); ok && count == 0 {
+			alerts = append(alerts, "Aucun conflit actif")
+		}
+		if count, ok := quality["weather"].(int); ok && count == 0 {
+			alerts = append(alerts, "Aucune meteo active")
+		}
+	}
+	return alerts
 }
 
 type worldProvider struct {
@@ -1892,6 +2794,13 @@ func defaultText(value string, fallback string) string {
 func maxInt(value int, fallback int) int {
 	if value < fallback {
 		return fallback
+	}
+	return value
+}
+
+func minInt(max int, value int) int {
+	if value > max {
+		return max
 	}
 	return value
 }
@@ -2343,6 +3252,25 @@ func int64FromAny(value any) int64 {
 	}
 }
 
+func intFromAny(value any) int {
+	switch typed := value.(type) {
+	case float64:
+		return int(typed)
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case json.Number:
+		parsed, _ := typed.Int64()
+		return int(parsed)
+	case string:
+		parsed, _ := strconv.Atoi(strings.TrimSpace(typed))
+		return parsed
+	default:
+		return 0
+	}
+}
+
 func guildMemberForUpdate(tx *gorm.DB, guildID uint, playerID uint) (models.GuildMember, error) {
 	var member models.GuildMember
 	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
@@ -2356,6 +3284,10 @@ func guildMemberForUpdate(tx *gorm.DB, guildID uint, playerID uint) (models.Guil
 
 func (s *WorldGameService) logPlayerAction(ctx context.Context, playerID uint, worldID *uint, continentID *uint, action string, targetType string, targetID string, status string, errorMessage string, before any, after any, metadata any) error {
 	return s.logPlayerActionTx(s.db.WithContext(ctx), playerID, worldID, continentID, action, targetType, targetID, status, errorMessage, before, after, metadata)
+}
+
+func (s *WorldGameService) LogPlayerWorldAction(ctx context.Context, playerID uint, worldID uint, continentID uint, action string, targetType string, targetID string, status string, errorMessage string, metadata any) error {
+	return s.logPlayerAction(ctx, playerID, &worldID, &continentID, action, targetType, targetID, status, errorMessage, nil, nil, metadata)
 }
 
 func (s *WorldGameService) logPlayerActionTx(tx *gorm.DB, playerID uint, worldID *uint, continentID *uint, action string, targetType string, targetID string, status string, errorMessage string, before any, after any, metadata any) error {

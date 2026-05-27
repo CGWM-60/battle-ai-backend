@@ -197,3 +197,39 @@ Pour que le front fonctionne parfaitement sur les 4 pages:
 - inclure des noms de continents reconnus pour les connexions cartes
 - refuser côté backend les actions impossibles (ex: émissaire indisponible)
 - maintenir une routine IA périodique avec validation stricte
+
+==================================================
+7) ÉTAT D'IMPLÉMENTATION BACKEND
+==================================================
+
+Statut vérifié et mis à jour le 2026-05-27
+
+- GET /api/v1/world/conflicts: OK, renvoie des items contractuels avec attackerName/defenderName.
+- GET /api/v1/world/conflicts/report: OK, agrège uniquement les conflits réels.
+- GET /api/v1/world/conflicts/:id/detail: OK, détail contractuel.
+- POST /api/v1/world/conflicts/:id/intervene: OK, action persistée via ConflictAction/PlayerActionLog.
+
+- GET /api/v1/world/diplomacy/relations: OK, calculé depuis les continents réels du monde.
+- GET /api/v1/world/diplomacy/treaties: OK, calculé depuis les événements diplomatiques réels.
+- GET /api/v1/world/diplomacy/reports: OK, calculé depuis les messages IA réels.
+- GET /api/v1/world/diplomacy/report: OK, dernier rapport réel ou null.
+- POST /api/v1/world/diplomacy/negotiations/open: OK, action journalisée.
+- GET /api/v1/world/diplomacy/emissaries/status: OK, 0/0 tant qu'aucun modèle d'émissaire n'existe.
+- POST /api/v1/world/diplomacy/emissaries/send: OK, refus 409 si aucun émissaire disponible.
+
+- GET /api/v1/world/commerce/routes: OK, routes dérivées des conflits réels.
+- GET /api/v1/world/commerce/details?type=export|import: OK, détails filtrés depuis routes réelles.
+- POST /api/v1/world/commerce/agreements: OK, action journalisée.
+- POST /api/v1/world/commerce/routes/optimize: OK, action journalisée et recommandation calculée.
+- GET /api/v1/world/commerce/report: OK, agrégation depuis routes réelles.
+
+- GET /api/v1/world/weather/forecast: OK, événements météo réels avec type/severity/startsAt/endsAt.
+- GET /api/v1/world/weather/zones: OK, zones calculées depuis continents réels.
+- POST /api/v1/world/weather/actions/:actionKey: OK, actions whitelistées et journalisées.
+- GET /api/v1/world/weather/report: OK, agrégation depuis météo réelle.
+
+Correctifs associés:
+- Correction du bug de simulation worldID=0 qui pouvait créer des mondes vides à répétition.
+- Nouveaux mondes créés avec continents nommés pour le mapping front: Nordrealm, Valoria, Aurora, Sylvanie, Dravon.
+- Conflits IA NEXUS reliés à une vraie faction IA persistée au lieu d'un attackerID vide.
+- Admin /game/worlds enrichi avec détail par monde, continents, réconciliation des compteurs et archivage des mondes vides.

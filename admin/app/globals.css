@@ -240,6 +240,10 @@ select {
   background: #2563eb;
 }
 
+.selected-row {
+  background: #eef4ff;
+}
+
 input,
 textarea,
 select {

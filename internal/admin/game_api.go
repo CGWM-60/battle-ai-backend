@@ -23,10 +23,15 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.GET("/stats", s.gameDashboardAPI)
 	game.GET("/worlds", s.gameListWorldsAPI)
 	game.POST("/worlds", s.gameCreateWorldAPI)
+	game.POST("/worlds/reconcile-counts", s.gameReconcileWorldCountsAPI(world))
+	game.POST("/worlds/archive-empty", s.gameArchiveEmptyWorldsAPI(world))
 	game.GET("/worlds/:id", s.gameGetWorldAPI)
 	game.PATCH("/worlds/:id", s.gamePatchModelAPI(&models.World{}, "world"))
 	game.POST("/worlds/:id/simulate", s.gameSimulateWorldAPI(world))
+	game.GET("/worlds/:id/routine", s.gameWorldRoutineAPI(world, false))
+	game.POST("/worlds/:id/routine/generate", s.gameWorldRoutineAPI(world, true))
 	game.POST("/world/simulate", s.gameSimulateWorldAPI(world))
+	game.POST("/world/routine/generate", s.gameWorldRoutineAPI(world, true))
 	game.POST("/world/message", s.gameCreateModelAPI(&models.DailyAIMessage{}, "ai_message"))
 	game.GET("/worlds/:id/continents", s.gameWorldContinentsAPI)
 	game.GET("/continents", s.gameListModelAPI(&[]models.Continent{}, "`world_id` ASC, `index` ASC"))
@@ -39,6 +44,8 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.GET("/players/:id/save", s.gamePlayerSaveAPI)
 	game.PATCH("/players/:id/save", s.gamePatchPlayerSaveAPI)
 	game.POST("/players/:id/resync", s.gameResyncPlayerAPI(world))
+	game.GET("/player-metrics", s.gameListModelAPI(&[]models.PlayerWorldMetric{}, "generated_at DESC"))
+	game.POST("/players/:id/metrics/recalculate", s.gameRecalculatePlayerMetricsAPI(world))
 
 	game.GET("/events", s.gameListModelAPI(&[]models.GameEvent{}, "starts_at DESC"))
 	game.POST("/events", s.gameCreateEventAPI(world))
@@ -70,6 +77,7 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.GET("/ai/decisions", s.gameListModelAPI(&[]models.AIWorldDecision{}, "created_at DESC"))
 	game.GET("/ai/decisions/:id", s.gameGetModelAPI(&models.AIWorldDecision{}))
 	game.POST("/ai/decisions/:id/replay-dry-run", s.gameDecisionDryRunAPI)
+	game.GET("/ai/routines", s.gameListModelAPI(&[]models.WorldRoutineSnapshot{}, "created_at DESC"))
 	game.GET("/ai/providers", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"providers": world.AIProviderStatuses()})
 	})
@@ -238,6 +246,26 @@ func (s *Server) gameCreateWorldAPI(c *gin.Context) {
 		s.gameAudit(c, "create", "world", strconv.FormatUint(uint64(world.Id), 10), nil, world)
 	}
 	gameJSON(c, world, err)
+}
+
+func (s *Server) gameReconcileWorldCountsAPI(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		result, err := world.ReconcileWorldPopulationCounts(c.Request.Context())
+		if err == nil {
+			s.gameAudit(c, "reconcile_counts", "world", "all", nil, result)
+		}
+		gameJSON(c, result, err)
+	}
+}
+
+func (s *Server) gameArchiveEmptyWorldsAPI(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		result, err := world.ArchiveEmptyWorlds(c.Request.Context())
+		if err == nil {
+			s.gameAudit(c, "archive_empty", "world", "all", nil, result)
+		}
+		gameJSON(c, result, err)
+	}
 }
 
 func (s *Server) gameGetWorldAPI(c *gin.Context) {
