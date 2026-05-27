@@ -124,6 +124,7 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	registerChatRoutes(private, world)
 	registerGuildRoutes(private, database, world)
 	registerBuildingRoutes(private, world)
+	registerConstructionContractRoutes(private)
 }
 
 func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
