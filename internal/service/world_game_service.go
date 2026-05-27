@@ -45,6 +45,8 @@ const (
 	DecisionStatusApplied  = "applied"
 	DecisionStatusFallback = "fallback"
 	DecisionStatusDryRun   = "dry_run"
+	DecisionStatusEnabled  = "enabled"
+	DecisionStatusDisabled = "disabled"
 	SimulationCycleManual  = "manual"
 	SimulationCycleLight   = "light"
 	SimulationCycleHourly  = "continental"
@@ -183,7 +185,7 @@ type FourPillarActionCounts struct {
 }
 
 type FourPillarPressure struct {
-	ActiveConflicts         int `json:"activeConflicts"`
+	ActiveConflicts        int `json:"activeConflicts"`
 	AverageConflictRisk    int `json:"averageConflictRisk"`
 	ActiveWeather          int `json:"activeWeather"`
 	AverageWeatherSeverity int `json:"averageWeatherSeverity"`
@@ -1281,6 +1283,7 @@ func (s *WorldGameService) GenerateWorldFourPageRoutine(ctx context.Context, wor
 			Provider:           providerName,
 			Model:              modelName,
 			Status:             status,
+			IsActive:           true,
 		}
 		if callErr != nil {
 			decision.Error = callErr.Error()
@@ -1587,6 +1590,7 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 		Provider:           providerName,
 		Model:              modelName,
 		Status:             status,
+		IsActive:           true,
 	}
 	if callErr != nil {
 		decisionRow.Error = callErr.Error()
@@ -1647,6 +1651,7 @@ func (s *WorldGameService) DryRunWorldSimulation(ctx context.Context, worldID ui
 		Provider:           providerName,
 		Model:              modelName,
 		Status:             DecisionStatusDryRun,
+		IsActive:           true,
 	}
 	if callErr != nil {
 		row.Error = callErr.Error()
@@ -2076,9 +2081,9 @@ func routineMetricSummary(metrics []models.PlayerWorldMetric) map[string]any {
 
 func routineQualityControls(conflicts []models.Conflict, weather []models.WeatherEvent, metrics []models.PlayerWorldMetric) map[string]any {
 	return map[string]any{
-		"conflicts":       len(conflicts),
-		"weather":         len(weather),
-		"playerMetrics":   len(metrics),
+		"conflicts":        len(conflicts),
+		"weather":          len(weather),
+		"playerMetrics":    len(metrics),
 		"fallbackNumeric":  0,
 		"fallbackText":     "Non disponible",
 		"clampRangeMin":    0,

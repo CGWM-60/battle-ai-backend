@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cgwm/battle/internal/models"
+	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -76,8 +77,14 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.POST("/ai/messages/send", s.gameCreateModelAPI(&models.DailyAIMessage{}, "ai_message"))
 	game.GET("/ai/decisions", s.gameListModelAPI(&[]models.AIWorldDecision{}, "created_at DESC"))
 	game.GET("/ai/decisions/:id", s.gameGetModelAPI(&models.AIWorldDecision{}))
+	game.PATCH("/ai/decisions/:id", s.gamePatchModelAPI(&models.AIWorldDecision{}, "ai_decision"))
+	game.POST("/ai/decisions/:id/enable", s.gameDecisionActivationAPI(true))
+	game.POST("/ai/decisions/:id/disable", s.gameDecisionActivationAPI(false))
 	game.POST("/ai/decisions/:id/replay-dry-run", s.gameDecisionDryRunAPI)
 	game.GET("/ai/routines", s.gameListModelAPI(&[]models.WorldRoutineSnapshot{}, "created_at DESC"))
+	game.GET("/ai/cron", s.gameWorldCronAPI)
+	game.POST("/ai/cron/enable", s.gameWorldCronToggleAPI(true))
+	game.POST("/ai/cron/disable", s.gameWorldCronToggleAPI(false))
 	game.GET("/ai/providers", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"providers": world.AIProviderStatuses()})
 	})
@@ -655,6 +662,50 @@ func (s *Server) gameDecisionDryRunAPI(c *gin.Context) {
 	gameJSON(c, gin.H{"dryRun": true, "source": item, "decision": replay}, err)
 }
 
+func (s *Server) gameDecisionActivationAPI(active bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := gameParam(c, "id")
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		var before models.AIWorldDecision
+		if err := s.db.WithContext(c.Request.Context()).First(&before, id).Error; err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		err = s.db.WithContext(c.Request.Context()).Model(&models.AIWorldDecision{}).Where("id = ?", id).Update("is_active", active).Error
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		var after models.AIWorldDecision
+		_ = s.db.WithContext(c.Request.Context()).First(&after, id).Error
+		action := "enable"
+		if !active {
+			action = "disable"
+		}
+		s.gameAudit(c, action, "ai_decision", strconv.FormatUint(uint64(id), 10), before, after)
+		gameJSON(c, gin.H{"id": id, "isActive": active, "decision": after}, nil)
+	}
+}
+
+func (s *Server) gameWorldCronAPI(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"cron": scheduler.WorldSimulationCronSnapshot()})
+}
+
+func (s *Server) gameWorldCronToggleAPI(enabled bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		snapshot := scheduler.SetWorldSimulationCronEnabled(enabled, "admin")
+		action := "enable_world_ai_cron"
+		if !enabled {
+			action = "disable_world_ai_cron"
+		}
+		s.gameAudit(c, action, "world_ai_cron", "runtime", nil, snapshot)
+		c.JSON(http.StatusOK, gin.H{"cron": snapshot})
+	}
+}
+
 func (s *Server) gameListModelAPI(dest any, order string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		query := s.db.WithContext(c.Request.Context()).Order(order).Limit(gameLimit(c))
@@ -754,6 +805,7 @@ func gameApplyFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
 		"guildId":     "guild_id",
 		"playerId":    "player_id",
 		"status":      "status",
+		"isActive":    "is_active",
 		"type":        "type",
 		"channelType": "channel_type",
 	}

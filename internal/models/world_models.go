@@ -314,6 +314,7 @@ type AIWorldDecision struct {
 	Provider           string         `gorm:"size:64;index" json:"provider"`
 	Model              string         `gorm:"size:160;index" json:"model"`
 	Status             string         `gorm:"size:32;index" json:"status"`
+	IsActive           bool           `gorm:"index;default:true" json:"isActive"`
 	Error              string         `gorm:"type:text" json:"error"`
 }
 
@@ -333,21 +334,21 @@ type WorldRoutineSnapshot struct {
 }
 
 type PlayerWorldMetric struct {
-	Id              uint `gorm:"primaryKey" json:"id"`
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-	PlayerID        uint           `gorm:"uniqueIndex:idx_player_world_metric;index" json:"playerId"`
-	WorldID         uint           `gorm:"uniqueIndex:idx_player_world_metric;index" json:"worldId"`
-	ContinentID     uint           `gorm:"index" json:"continentId"`
-	Popularity      int            `gorm:"index" json:"popularity"`
-	Stability       int            `gorm:"index" json:"stability"`
-	Sustainability  int            `gorm:"index" json:"sustainability"`
-	ConflictScore   int            `json:"conflictScore"`
-	DiplomacyScore  int            `json:"diplomacyScore"`
-	CommerceScore   int            `json:"commerceScore"`
-	WeatherScore    int            `json:"weatherScore"`
-	InputJSON       datatypes.JSON `gorm:"type:json" json:"inputJson"`
-	GeneratedAt     time.Time      `gorm:"index" json:"generatedAt"`
+	Id             uint `gorm:"primaryKey" json:"id"`
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	PlayerID       uint           `gorm:"uniqueIndex:idx_player_world_metric;index" json:"playerId"`
+	WorldID        uint           `gorm:"uniqueIndex:idx_player_world_metric;index" json:"worldId"`
+	ContinentID    uint           `gorm:"index" json:"continentId"`
+	Popularity     int            `gorm:"index" json:"popularity"`
+	Stability      int            `gorm:"index" json:"stability"`
+	Sustainability int            `gorm:"index" json:"sustainability"`
+	ConflictScore  int            `json:"conflictScore"`
+	DiplomacyScore int            `json:"diplomacyScore"`
+	CommerceScore  int            `json:"commerceScore"`
+	WeatherScore   int            `json:"weatherScore"`
+	InputJSON      datatypes.JSON `gorm:"type:json" json:"inputJson"`
+	GeneratedAt    time.Time      `gorm:"index" json:"generatedAt"`
 }
 
 type BuildingDefinition struct {

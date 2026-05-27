@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"cgwm/battle/internal/models"
+	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -891,6 +892,9 @@ func registerAdminWorldGameRoutesAt(admin *gin.RouterGroup, database *gorm.DB) {
 	admin.POST("/ai/messages/send", adminSendAIMessage(database))
 	admin.GET("/ai/decisions", adminList[models.AIWorldDecision](database, "created_at DESC"))
 	admin.GET("/ai/decisions/:id", adminGet[models.AIWorldDecision](database, false))
+	admin.PATCH("/ai/decisions/:id", adminPatch[models.AIWorldDecision](database, "ai_decision"))
+	admin.POST("/ai/decisions/:id/enable", adminDecisionActivation(database, true))
+	admin.POST("/ai/decisions/:id/disable", adminDecisionActivation(database, false))
 	admin.POST("/ai/decisions/:id/replay-dry-run", func(c *gin.Context) {
 		item, err := adminFindByID[models.AIWorldDecision](c, database)
 		if err != nil {
@@ -900,6 +904,11 @@ func registerAdminWorldGameRoutesAt(admin *gin.RouterGroup, database *gorm.DB) {
 		replay, err := world.DryRunWorldSimulation(c.Request.Context(), item.WorldID, item.Type)
 		writeWorldResponse(c, gin.H{"dryRun": true, "source": item, "decision": replay}, err)
 	})
+	admin.GET("/ai/cron", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"cron": scheduler.WorldSimulationCronSnapshot()})
+	})
+	admin.POST("/ai/cron/enable", adminWorldCronActivation(database, true))
+	admin.POST("/ai/cron/disable", adminWorldCronActivation(database, false))
 	admin.GET("/ai/providers", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"providers": world.AIProviderStatuses()})
 	})
@@ -1427,6 +1436,46 @@ func adminPatchStatus[T any](database *gorm.DB, status string) gin.HandlerFunc {
 	}
 }
 
+func adminDecisionActivation(database *gorm.DB, active bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+			return
+		}
+		var before models.AIWorldDecision
+		if err := database.WithContext(c.Request.Context()).First(&before, id).Error; err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		err = database.WithContext(c.Request.Context()).Model(&models.AIWorldDecision{}).Where("id = ?", id).Update("is_active", active).Error
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		var after models.AIWorldDecision
+		_ = database.WithContext(c.Request.Context()).First(&after, id).Error
+		action := "enable"
+		if !active {
+			action = "disable"
+		}
+		writeAudit(c, database, action, "ai_decision", strconv.FormatUint(uint64(id), 10), before, after)
+		writeWorldResponse(c, gin.H{"id": id, "isActive": active, "decision": after}, nil)
+	}
+}
+
+func adminWorldCronActivation(database *gorm.DB, enabled bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		snapshot := scheduler.SetWorldSimulationCronEnabled(enabled, "admin-api")
+		action := "enable_world_ai_cron"
+		if !enabled {
+			action = "disable_world_ai_cron"
+		}
+		writeAudit(c, database, action, "world_ai_cron", "runtime", nil, snapshot)
+		writeWorldResponse(c, gin.H{"cron": snapshot}, nil)
+	}
+}
+
 func adminSimulateWorld(world *service.WorldGameService, worldID uint) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		decision, err := world.SimulateWorldCycle(c.Request.Context(), worldID, "admin-api", simulationCycleFromRequest(c))
@@ -1693,7 +1742,7 @@ func adminSendAIMessage(database *gorm.DB) gin.HandlerFunc {
 }
 
 func applyAdminFilters(c *gin.Context, query *gorm.DB) {
-	for _, key := range []string{"world_id", "continent_id", "guild_id", "player_id", "status", "type", "channel_type"} {
+	for _, key := range []string{"world_id", "continent_id", "guild_id", "player_id", "status", "is_active", "type", "channel_type"} {
 		if value := c.Query(key); value != "" {
 			query.Where(key+" = ?", value)
 		}

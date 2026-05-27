@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cgwm/battle/internal/service"
@@ -13,17 +14,40 @@ import (
 	"gorm.io/gorm"
 )
 
-func StartWorldSimulationCron(db *gorm.DB) {
-	if strings.EqualFold(os.Getenv("WORLD_SIMULATION_CRON_ENABLED"), "false") {
-		log.Printf("[world-sim] step=boot status=disabled reason=WORLD_SIMULATION_CRON_ENABLED=false")
-		return
-	}
+type WorldCronSnapshot struct {
+	Enabled             bool   `json:"enabled"`
+	Started             bool   `json:"started"`
+	LightInterval       string `json:"lightInterval"`
+	ContinentalInterval string `json:"continentalInterval"`
+	DailyInterval       string `json:"dailyInterval"`
+	RoutineInterval     string `json:"routineInterval"`
+	LastChangedBy       string `json:"lastChangedBy"`
+	LastChangedAt       string `json:"lastChangedAt"`
+	LastRunType         string `json:"lastRunType"`
+	LastRunStatus       string `json:"lastRunStatus"`
+	LastRunAt           string `json:"lastRunAt"`
+	LastError           string `json:"lastError"`
+}
 
+var worldCronState = struct {
+	sync.RWMutex
+	snapshot WorldCronSnapshot
+}{
+	snapshot: WorldCronSnapshot{},
+}
+
+func StartWorldSimulationCron(db *gorm.DB) {
 	light := worldSimulationInterval("WORLD_SIMULATION_LIGHT_INTERVAL_MINUTES", 15, time.Minute)
 	hourly := worldSimulationInterval("WORLD_SIMULATION_CONTINENT_INTERVAL_MINUTES", 60, time.Minute)
 	daily := worldSimulationInterval("WORLD_SIMULATION_DAILY_INTERVAL_HOURS", 24, time.Hour)
 	routine := worldSimulationInterval("WORLD_ROUTINE_4_PAGES_INTERVAL_SECONDS", 60, time.Second)
-	log.Printf("[world-sim] step=boot status=enabled light=%s continental=%s daily=%s routine4pages=%s", light, hourly, daily, routine)
+	enabled := !strings.EqualFold(os.Getenv("WORLD_SIMULATION_CRON_ENABLED"), "false")
+	setWorldCronRuntime(enabled, "boot", light, hourly, daily, routine)
+	if !enabled {
+		log.Printf("[world-sim] step=boot status=disabled reason=WORLD_SIMULATION_CRON_ENABLED=false loops=paused")
+	} else {
+		log.Printf("[world-sim] step=boot status=enabled light=%s continental=%s daily=%s routine4pages=%s", light, hourly, daily, routine)
+	}
 	go runWorldSimulationLoop(db, service.SimulationCycleLight, light)
 	go runWorldSimulationLoop(db, service.SimulationCycleHourly, hourly)
 	go runWorldSimulationLoop(db, service.SimulationCycleDaily, daily)
@@ -34,13 +58,18 @@ func runWorldSimulationLoop(db *gorm.DB, cycleType string, interval time.Duratio
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
+		if !WorldSimulationCronEnabled() {
+			continue
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), worldSimulationTimeout())
 		_, err := service.NewWorldGameService(db).SimulateWorldCycle(ctx, 0, "cron-"+cycleType, cycleType)
 		cancel()
 		if err != nil {
+			recordWorldCronRun(cycleType, "failed", err.Error())
 			log.Printf("[world-sim] step=run cycle=%s status=failed err=%v", cycleType, err)
 			continue
 		}
+		recordWorldCronRun(cycleType, "completed", "")
 		log.Printf("[world-sim] step=run cycle=%s status=completed", cycleType)
 	}
 }
@@ -49,6 +78,9 @@ func runWorldRoutineLoop(db *gorm.DB, interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
+		if !WorldSimulationCronEnabled() {
+			continue
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), worldSimulationTimeout())
 		var worlds []struct {
 			Id uint
@@ -61,17 +93,63 @@ func runWorldRoutineLoop(db *gorm.DB, interval time.Duration) {
 			for _, world := range worlds {
 				_, _, err = worldService.GenerateWorldFourPageRoutine(ctx, world.Id, "cron-routine-4-pages")
 				if err != nil {
+					recordWorldCronRun("routine_4_pages", "failed", err.Error())
 					log.Printf("[world-sim] step=routine4pages world_id=%d status=failed err=%v", world.Id, err)
 				}
 			}
 		}
 		cancel()
 		if err != nil {
+			recordWorldCronRun("routine_4_pages", "failed", err.Error())
 			log.Printf("[world-sim] step=routine4pages status=failed err=%v", err)
 			continue
 		}
+		recordWorldCronRun("routine_4_pages", "completed", "")
 		log.Printf("[world-sim] step=routine4pages status=completed worlds=%d", len(worlds))
 	}
+}
+
+func WorldSimulationCronEnabled() bool {
+	worldCronState.RLock()
+	defer worldCronState.RUnlock()
+	return worldCronState.snapshot.Enabled
+}
+
+func WorldSimulationCronSnapshot() WorldCronSnapshot {
+	worldCronState.RLock()
+	defer worldCronState.RUnlock()
+	return worldCronState.snapshot
+}
+
+func SetWorldSimulationCronEnabled(enabled bool, changedBy string) WorldCronSnapshot {
+	worldCronState.Lock()
+	defer worldCronState.Unlock()
+	worldCronState.snapshot.Enabled = enabled
+	worldCronState.snapshot.LastChangedBy = changedBy
+	worldCronState.snapshot.LastChangedAt = time.Now().UTC().Format(time.RFC3339)
+	return worldCronState.snapshot
+}
+
+func setWorldCronRuntime(enabled bool, changedBy string, light time.Duration, hourly time.Duration, daily time.Duration, routine time.Duration) {
+	worldCronState.Lock()
+	defer worldCronState.Unlock()
+	worldCronState.snapshot.Enabled = enabled
+	worldCronState.snapshot.Started = true
+	worldCronState.snapshot.LightInterval = light.String()
+	worldCronState.snapshot.ContinentalInterval = hourly.String()
+	worldCronState.snapshot.DailyInterval = daily.String()
+	worldCronState.snapshot.RoutineInterval = routine.String()
+	worldCronState.snapshot.LastChangedBy = changedBy
+	worldCronState.snapshot.LastChangedAt = time.Now().UTC().Format(time.RFC3339)
+}
+
+func recordWorldCronRun(runType string, status string, errorMessage string) {
+	worldCronState.Lock()
+	defer worldCronState.Unlock()
+	worldCronState.snapshot.LastRunType = runType
+	worldCronState.snapshot.LastRunStatus = status
+	worldCronState.snapshot.LastRunAt = time.Now().UTC().Format(time.RFC3339)
+	worldCronState.snapshot.LastError = errorMessage
 }
 
 func worldSimulationInterval(envName string, fallback int, unit time.Duration) time.Duration {

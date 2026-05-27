@@ -412,7 +412,9 @@ dd {
 .status.released,
 .status.running,
 .status.streaming,
-.status.published {
+.status.published,
+.status.applied,
+.status.enabled {
   background: #dcfae6;
   color: #067647;
 }
@@ -421,19 +423,22 @@ dd {
 .status.invalid,
 .status.release_failed,
 .status.ended,
-.status.archived {
+.status.archived,
+.status.disabled {
   background: #fee4e2;
   color: #b42318;
 }
 
 .status.skipped,
-.status.draft {
+.status.draft,
+.status.fallback {
   background: #fef0c7;
   color: #b54708;
 }
 
 .status.started,
-.status.live {
+.status.live,
+.status.dry_run {
   background: #d1e9ff;
   color: #175cd3;
 }
@@ -516,6 +521,44 @@ dd {
   grid-template-columns: repeat(5, minmax(140px, 1fr)) auto;
   gap: 10px;
   align-items: end;
+}
+
+.game-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.game-kpi {
+  margin: 0;
+}
+
+.game-kpi span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.game-kpi strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 24px;
+}
+
+.cron-control {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.cron-control h2 {
+  margin: 0 0 8px;
+}
+
+.cron-control .hint:last-child {
+  margin-bottom: 0;
 }
 
 .game-filters label span {
