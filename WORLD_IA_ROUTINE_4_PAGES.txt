@@ -1,0 +1,199 @@
+ROUTINE IA BACKEND — ALIMENTATION COMPLÈTE DES 4 PAGES MONDE (FRONT FLUTTER)
+Date: 2026-05-27
+
+OBJECTIF
+Fournir des données RÉELLES, cohérentes et stables pour les 4 pages:
+1) Conflits
+2) Diplomatie
+3) Commerce
+4) Météo & Risques
+
+RÈGLES NON NÉGOCIABLES
+- Ne jamais envoyer de données inventées.
+- Si donnée inconnue:
+  - numérique => 0
+  - textuelle/qualitative => "Non disponible"
+- Les champs ID doivent être stables entre deux cycles proches.
+- Toutes les listes doivent être renvoyées (même vides), jamais null.
+
+==================================================
+1) CYCLE DE ROUTINE IA (À EXÉCUTER EN BOUCLE)
+==================================================
+
+Fréquence recommandée
+- Tick global: toutes les 60 secondes
+- Tick critique (conflits/intempéries sévères): toutes les 15 secondes
+
+Pipeline par tick
+A. Charger contexte joueur
+- world_id, continent_id, player_id
+- état du monde courant (events/conflicts/weather/messages)
+
+B. Calculer modules
+- Conflits: intensité, statut, acteurs, fenêtre temporelle
+- Diplomatie: relations, traités, rapports, disponibilité émissaires
+- Commerce: routes, volume, statut perturbation
+- Météo: événements, sévérité, zones, risques agrégés
+
+C. Valider qualité
+- clamp intensité/sévérité/score dans [0..100]
+- champs obligatoires présents
+- dates ISO8601 UTC
+- aucun NaN/infini
+
+D. Persister + exposer API
+- mise à jour DB
+- endpoints publics cohérents
+
+E. Journaliser
+- nombre d’objets générés
+- anomalies (données manquantes, champs invalides)
+
+==================================================
+2) CONTRAT DE DONNÉES PAR PAGE
+==================================================
+
+2.1 PAGE CONFLITS
+Endpoints attendus
+- GET /api/v1/world/conflicts
+- GET /api/v1/world/conflicts/report
+- GET /api/v1/world/conflicts/:id/detail
+- POST /api/v1/world/conflicts/:id/intervene
+
+Schéma minimum conflict item
+{
+  "id": "string",
+  "title": "string",
+  "description": "string",
+  "attackerName": "string",
+  "defenderName": "string",
+  "intensity": 0..100,
+  "riskLevel": "surveille|modere|eleve|critique",
+  "status": "active|resolved|...",
+  "startsAt": "ISO8601|nullable",
+  "endsAt": "ISO8601|nullable"
+}
+
+Règles de rendu carte/lignes
+- Une ligne pointillée n’existe que si attackerName ET defenderName mappent sur 2 continents connus.
+- Si mapping impossible => pas de ligne.
+
+2.2 PAGE DIPLOMATIE
+Endpoints attendus
+- GET /api/v1/world/diplomacy/relations
+- GET /api/v1/world/diplomacy/treaties
+- GET /api/v1/world/diplomacy/reports
+- GET /api/v1/world/diplomacy/report
+- POST /api/v1/world/diplomacy/negotiations/open
+- POST /api/v1/world/diplomacy/emissaries/send
+
+NOUVEAU recommandé (fortement)
+- GET /api/v1/world/diplomacy/emissaries/status
+Réponse:
+{
+  "available": 0,
+  "total": 0,
+  "cooldownSeconds": 0
+}
+
+Règle action émissaire
+- Si available == 0 => backend doit refuser l’envoi avec 400/409 + message explicite.
+
+2.3 PAGE COMMERCE
+Endpoints attendus
+- GET /api/v1/world/commerce/routes
+- GET /api/v1/world/commerce/details?type=export|import
+- POST /api/v1/world/commerce/agreements
+- POST /api/v1/world/commerce/routes/optimize
+- GET /api/v1/world/commerce/report
+
+Schéma minimum route
+{
+  "route": "Origine -> Destination",
+  "cargo": "string",
+  "volume": integer>=0,
+  "status": "active|perturbe|..."
+}
+
+Règles lignes pointillées
+- Afficher une ligne seulement si route contient une paire mappable de continents.
+- Si parsing route impossible => pas de ligne.
+
+2.4 PAGE MÉTÉO & RISQUES
+Endpoints attendus
+- GET /api/v1/world/weather/forecast
+- GET /api/v1/world/weather/zones
+- POST /api/v1/world/weather/actions/:actionKey
+- GET /api/v1/world/weather/report
+
+Schéma minimum weather event
+{
+  "id": "string",
+  "type": "string",
+  "title": "string",
+  "description": "string",
+  "severity": 0..100,
+  "startsAt": "ISO8601|nullable",
+  "endsAt": "ISO8601|nullable"
+}
+
+Règles lignes pointillées
+- Afficher une ligne seulement si au moins 2 continents sont identifiés dans title/description/type.
+- Sinon aucune ligne.
+
+==================================================
+3) MAPPING CONTINENTS (RÉFÉRENCE FRONT)
+==================================================
+
+Noms reconnus (normalisés minuscules)
+- nordrealm
+- valoria
+- aurora
+- sylvanie
+- dravon
+- novus
+
+IMPORTANT
+- Le backend doit utiliser ces tokens dans les champs textes (route, attackerName, defenderName, etc.)
+  pour permettre au front de positionner correctement les lignes inter-continents.
+
+==================================================
+4) GARDE-FOUS ANTI-FAUSSES DONNÉES
+==================================================
+
+Checklist avant réponse API
+- Aucun placeholder marketing ("haussier", "+12%", etc.) sans source calculable.
+- Aucun tableau statique hardcodé.
+- Si source absente:
+  - 0 (numérique)
+  - "Non disponible" (texte)
+- Les champs booléens/actionnables doivent refléter la réalité serveur.
+
+==================================================
+5) OBSERVABILITÉ ET TESTS À METTRE EN PLACE
+==================================================
+
+Tests backend recommandés
+- Contrat JSON de chaque endpoint (types + clés obligatoires)
+- Cas vide (aucune donnée)
+- Cas partiel (données manquantes)
+- Cas erreur action (ex: emissary send avec available=0)
+- Clamps [0..100] pour intensity/severity/score
+
+Logs recommandés
+- tick_id, world_id, continent_id
+- counts: conflicts/relations/routes/weather
+- rejected_actions_count
+- fallback_to_zero_count
+- fallback_non_disponible_count
+
+==================================================
+6) RÉSUMÉ D’IMPLÉMENTATION
+==================================================
+
+Pour que le front fonctionne parfaitement sur les 4 pages:
+- fournir des listes réelles et actionnables
+- renvoyer 0/"Non disponible" quand nécessaire
+- inclure des noms de continents reconnus pour les connexions cartes
+- refuser côté backend les actions impossibles (ex: émissaire indisponible)
+- maintenir une routine IA périodique avec validation stricte

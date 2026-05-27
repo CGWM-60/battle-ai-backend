@@ -300,11 +300,31 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGam
 		}, nil)
 	})
 
+	private.GET("/world/diplomacy/emissaries/status", func(c *gin.Context) {
+		available, total := emissaryAvailability()
+		writeWorldResponse(c, gin.H{
+			"available":       available,
+			"total":           total,
+			"cooldownSeconds": 0,
+		}, nil)
+	})
+
 	private.POST("/world/diplomacy/emissaries/send", func(c *gin.Context) {
+		available, total := emissaryAvailability()
+		if available <= 0 {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":     "no emissary available",
+				"available": available,
+				"total":     total,
+			})
+			return
+		}
 		writeWorldResponse(c, gin.H{
 			"sent":      true,
 			"status":    "en_route",
 			"serverNow": time.Now().UTC(),
+			"available": available - 1,
+			"total":     total,
 		}, nil)
 	})
 
@@ -548,6 +568,12 @@ func clamp(value int, min int, max int) int {
 		return max
 	}
 	return value
+}
+
+func emissaryAvailability() (available int, total int) {
+	// Tant qu'aucun modèle de capacité d'émissaire n'est branché,
+	// on renvoie explicitement 0/0 pour éviter des données fictives.
+	return 0, 0
 }
 
 func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
