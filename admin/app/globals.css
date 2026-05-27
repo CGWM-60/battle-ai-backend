@@ -444,6 +444,36 @@ dd {
   margin-top: 14px;
 }
 
+.game-filters {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(140px, 1fr)) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.game-filters label span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.game-filters input {
+  margin-bottom: 0;
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.row-actions button {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
 .rp-toolbar {
   display: grid;
   grid-template-columns: auto minmax(280px, 1fr) auto;

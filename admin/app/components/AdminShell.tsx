@@ -6,6 +6,7 @@ import {
   BrainCircuit,
   Coins,
   Gauge,
+  Globe2,
   ListChecks,
   LogOut,
   Radio,
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/roleplay-quests/", path: "/admin/roleplay-quests/", label: "Quetes RP", icon: ListChecks },
   { href: "/quests/", path: "/admin/quests/", label: "Quetes", icon: ListChecks },
   { href: "/live/", path: "/admin/live/", label: "Live", icon: Radio },
+  { href: "/game/", path: "/admin/game/", label: "Monde IA", icon: Globe2 },
 ];
 
 export function AdminShell({

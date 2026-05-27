@@ -77,6 +77,7 @@ func RouterApp(database *gorm.DB) {
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())
 	adminAPI.PATCH("/users/:id/progression", updateUserProgression(database))
+	registerAdminWorldGameRoutes(adminAPI, database)
 
 	private.POST("/battle", startBattle(database))
 	private.POST("/battles", startBattle(database))
@@ -139,6 +140,7 @@ func RouterApp(database *gorm.DB) {
 	private.GET("/live/sessions/:id/events", getLiveSessionEvents(database))
 	private.GET("/live/:channel/history", getLiveHistory(database))
 	private.POST("/live/sessions/:id/end", endLiveSession(database))
+	registerWorldGameRoutes(private, database)
 
 	host := getEnv("APP_HOST", "0.0.0.0")
 	port := getEnv("APP_PORT", "8080")

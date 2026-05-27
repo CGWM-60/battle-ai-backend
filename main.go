@@ -9,5 +9,6 @@ import (
 func main() {
 	database := db.DbConnect()
 	scheduler.StartQuestGenerationCron(database)
+	scheduler.StartWorldSimulationCron(database)
 	router.RouterApp(database)
 }
