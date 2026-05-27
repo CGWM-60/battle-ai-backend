@@ -2,7 +2,9 @@ package router
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -77,6 +79,7 @@ func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start construction payload"})
 			return
 		}
+		input.BuildingKey = normalizeBuildingKey(input.BuildingKey)
 
 		var response ConstructionQueueResponse
 		err := database.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
@@ -85,7 +88,7 @@ func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm
 				return err
 			}
 
-			duration, err := resolveConstructionDuration(tx, input.BuildingKey)
+			duration, err := resolveConstructionDuration(tx, input.BuildingKey, input.TargetLevel, save.Satisfaction, activeEffects)
 			if err != nil {
 				return err
 			}
@@ -162,16 +165,15 @@ func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm
 				return fmt.Errorf("cannot upgrade a cancelled job")
 			}
 
-			duration, err := resolveConstructionDuration(tx, job.BuildingKey)
-			if err != nil {
-				return err
-			}
-
 			now := time.Now().UTC()
 			job.Type = "upgrade"
 			job.Status = "in_progress"
 			job.FromLevel = job.TargetLevel
 			job.TargetLevel = job.TargetLevel + 1
+			duration, err := resolveConstructionDuration(tx, job.BuildingKey, job.TargetLevel, save.Satisfaction, activeEffects)
+			if err != nil {
+				return err
+			}
 			job.StartedAt = ptrTime(now)
 			end := now.Add(duration)
 			job.CompletedAt = ptrTime(end)
@@ -326,35 +328,175 @@ func loadSaveBundleForUpdate(c *gin.Context, tx *gorm.DB, world *service.WorldGa
 	return &save, jobs, buildings, activeEffects, nil
 }
 
-func resolveConstructionDuration(tx *gorm.DB, buildingKey string) (time.Duration, error) {
-	key := strings.TrimSpace(buildingKey)
+func resolveConstructionDuration(tx *gorm.DB, buildingKey string, targetLevel int, satisfaction int, activeEffects map[string]any) (time.Duration, error) {
+	key := normalizeBuildingKey(buildingKey)
 	if key == "" {
 		return 0, fmt.Errorf("buildingKey is required")
+	}
+	if targetLevel < 1 {
+		return 0, fmt.Errorf("targetLevel must be greater than zero")
 	}
 
 	var def models.BuildingDefinition
 	err := tx.Where("`key` = ? AND is_active = ?", key, true).First(&def).Error
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, fmt.Errorf("unknown or inactive buildingKey %q: refresh /api/v1/buildings/catalog and use the returned key", key)
+		}
 		return 0, err
 	}
-
-	baseCost, err := decodeObject(def.BaseCostJSON)
-	if err != nil {
-		return 0, fmt.Errorf("invalid base cost for building %s", key)
+	if def.MaxLevel > 0 && targetLevel > def.MaxLevel {
+		return 0, fmt.Errorf("targetLevel %d exceeds max level %d for building %s", targetLevel, def.MaxLevel, key)
 	}
 
-	minutes, ok := intFromAny(baseCost["durationMinutes"])
-	if !ok {
-		minutes, ok = intFromAny(baseCost["buildTimeMinutes"])
-	}
-	if !ok {
-		minutes, ok = intFromAny(baseCost["timeMinutes"])
-	}
-	if !ok || minutes <= 0 {
-		return 0, fmt.Errorf("construction duration is not configured for building %s", key)
-	}
+	return calculateConstructionDuration(key, targetLevel, satisfaction, activeEffects), nil
+}
 
-	return time.Duration(minutes) * time.Minute, nil
+func calculateConstructionDuration(buildingKey string, targetLevel int, satisfaction int, activeEffects map[string]any) time.Duration {
+	minutes := float64(baseConstructionMinutesForLevel(targetLevel))
+	minutes *= buildingConstructionMultiplier(buildingKey)
+	minutes *= satisfactionConstructionMultiplier(satisfaction)
+	minutes *= activeConstructionMultiplier(activeEffects)
+
+	roundedMinutes := int(math.Round(minutes))
+	if roundedMinutes < 1 {
+		roundedMinutes = 1
+	}
+	duration := time.Duration(roundedMinutes) * time.Minute
+	if duration < time.Minute {
+		return time.Minute
+	}
+	maxDuration := 30 * 24 * time.Hour
+	if duration > maxDuration {
+		return maxDuration
+	}
+	return duration
+}
+
+func baseConstructionMinutesForLevel(level int) int {
+	switch {
+	case level <= 1:
+		return 5
+	case level == 2:
+		return 15
+	case level == 3:
+		return 30
+	case level == 4:
+		return 60
+	case level == 5:
+		return 120
+	case level <= 10:
+		return interpolateMinutes(level, 6, 10, 4*60, 12*60)
+	case level <= 15:
+		return interpolateMinutes(level, 11, 15, 12*60, 24*60)
+	case level <= 20:
+		return interpolateMinutes(level, 16, 20, 24*60, 2*24*60)
+	case level <= 25:
+		return interpolateMinutes(level, 21, 25, 2*24*60, 4*24*60)
+	default:
+		if level > 30 {
+			level = 30
+		}
+		return interpolateMinutes(level, 26, 30, 4*24*60, 30*24*60)
+	}
+}
+
+func interpolateMinutes(level int, firstLevel int, lastLevel int, firstMinutes int, lastMinutes int) int {
+	if level <= firstLevel {
+		return firstMinutes
+	}
+	if level >= lastLevel {
+		return lastMinutes
+	}
+	ratio := float64(level-firstLevel) / float64(lastLevel-firstLevel)
+	return int(math.Round(float64(firstMinutes) + ratio*float64(lastMinutes-firstMinutes)))
+}
+
+func buildingConstructionMultiplier(buildingKey string) float64 {
+	switch normalizeBuildingKey(buildingKey) {
+	case "habitation":
+		return 0.85
+	case "solar_park":
+		return 1
+	case "vertical_farm":
+		return 1.10
+	case "research_center":
+		return 1.20
+	case "ai_center":
+		return 1.35
+	default:
+		return 1
+	}
+}
+
+func satisfactionConstructionMultiplier(satisfaction int) float64 {
+	switch {
+	case satisfaction >= 90:
+		return 0.95
+	case satisfaction >= 75:
+		return 1
+	case satisfaction >= 60:
+		return 1.08
+	case satisfaction >= 40:
+		return 1.18
+	case satisfaction >= 20:
+		return 1.35
+	default:
+		return 1.60
+	}
+}
+
+func activeConstructionMultiplier(activeEffects map[string]any) float64 {
+	if len(activeEffects) == 0 {
+		return 1
+	}
+	multiplier := 1.0
+	for _, key := range []string{"constructionDurationMultiplier", "constructionTimeMultiplier", "weatherConstructionMultiplier"} {
+		if value, ok := floatFromAny(activeEffects[key]); ok && value > 0 {
+			multiplier *= value
+		}
+	}
+	for _, key := range []string{"constructionDurationBonusPercent", "constructionTimeReductionPercent"} {
+		if value, ok := floatFromAny(activeEffects[key]); ok {
+			multiplier *= clampFloat(1-(value/100), 0.1, 3)
+		}
+	}
+	for _, key := range []string{"constructionDurationMalusPercent", "constructionTimePenaltyPercent"} {
+		if value, ok := floatFromAny(activeEffects[key]); ok {
+			multiplier *= clampFloat(1+(value/100), 0.1, 3)
+		}
+	}
+	for _, key := range []string{"constructionSpeedMultiplier", "constructionSpeed"} {
+		if value, ok := floatFromAny(activeEffects[key]); ok && value > 0 {
+			multiplier /= value
+		}
+	}
+	if value, ok := floatFromAny(activeEffects["constructionSpeedPercent"]); ok {
+		multiplier /= clampFloat(1+(value/100), 0.1, 10)
+	}
+	return clampFloat(multiplier, 0.1, 10)
+}
+
+func normalizeBuildingKey(buildingKey string) string {
+	key := strings.ToLower(strings.TrimSpace(buildingKey))
+	key = strings.ReplaceAll(key, "-", "_")
+	key = strings.ReplaceAll(key, " ", "_")
+	switch key {
+	case "housing", "house", "home", "residence", "residential", "habitation_basic":
+		return "habitation"
+	case "solar", "solarpark", "solar_panel", "solar_panels", "parc_solaire":
+		return "solar_park"
+	case "farm", "verticalfarm", "verticale_farm", "ferme_verticale":
+		return "vertical_farm"
+	case "research", "researchcenter", "centre_recherche", "centre_de_recherche":
+		return "research_center"
+	case "ai", "aicenter", "centre_ia", "centre_ai":
+		return "ai_center"
+	case "defense", "defence", "defensegrid", "grille_defense":
+		return "defense_grid"
+	default:
+		return key
+	}
 }
 
 func decodeConstructionQueue(raw datatypes.JSON) ([]ConstructionJobDTO, error) {
@@ -714,6 +856,41 @@ func intFromAny(value any) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func floatFromAny(value any) (float64, bool) {
+	switch v := value.(type) {
+	case float64:
+		return v, true
+	case float32:
+		return float64(v), true
+	case int:
+		return float64(v), true
+	case int32:
+		return float64(v), true
+	case int64:
+		return float64(v), true
+	case json.Number:
+		if n, err := v.Float64(); err == nil {
+			return n, true
+		}
+	case string:
+		var n float64
+		if _, err := fmt.Sscanf(strings.TrimSpace(v), "%f", &n); err == nil {
+			return n, true
+		}
+	}
+	return 0, false
+}
+
+func clampFloat(value float64, min float64, max float64) float64 {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func timeFromAny(value any) *time.Time {

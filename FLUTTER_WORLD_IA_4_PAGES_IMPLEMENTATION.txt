@@ -491,6 +491,59 @@ Méthodes minimales:
 - getWeatherReport()
 
 
+Catalogue batiments et construction
+===================================
+
+Flutter ne doit pas coder les batiments en dur pour lancer une construction.
+Avant POST /api/v1/construction/start:
+
+1. Appeler GET /api/v1/buildings/catalog.
+2. Utiliser strictement la valeur building.key retournee par le backend.
+3. Envoyer cette valeur dans buildingKey.
+4. Rafraichir le catalogue si le backend retourne "unknown or inactive buildingKey".
+
+Batiments de base garantis par le backend:
+
+- habitation
+- solar_park
+- vertical_farm
+- research_center
+- ai_center
+- defense_grid
+
+Exemple construction:
+
+POST /api/v1/construction/start
+
+{
+  "buildingKey": "habitation",
+  "targetLevel": 1,
+  "positionX": 4,
+  "positionY": 7
+}
+
+Le backend calcule toujours la duree officielle:
+
+- base par niveau 1 a 30
+- multiplicateur batiment
+- multiplicateur satisfaction
+- bonus/malus actifs serveur
+- minimum 1 minute
+- maximum 30 jours
+
+Multiplicateurs officiels:
+
+- habitation: x0.85
+- solar_park: x1.00
+- vertical_farm: x1.10
+- research_center: x1.20
+- ai_center: x1.35
+
+Flutter peut afficher une previsualisation locale, mais doit remplacer la duree
+par startedAt/completedAt renvoyes par le backend apres construction/start ou
+construction/upgrade.
+
+
 Gestion erreurs
 ===============
 
@@ -519,4 +572,3 @@ Checklist Flutter avant validation
 - Les erreurs backend sont visibles.
 - Le polling critique est activé seulement si risque critique.
 - Aucune valeur fake "+12%" ou "8.76M" n'est affichée sans source backend.
-
