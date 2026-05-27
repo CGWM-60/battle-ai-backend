@@ -11,6 +11,7 @@ export default function ContinentsPage() {
         endpoint: "game/continents",
         columns: ["id", "worldId", "name", "index", "status", "currentPlayers", "aiBehaviorProfile", "tensionLevel", "climateState", "politicalState", "economicState"],
         filters: ["worldId", "status"],
+        editable: true,
       }}
     />
   );

@@ -63,6 +63,7 @@ func DbConnect() *gorm.DB {
 		&models.Continent{},
 		&models.PlayerSave{},
 		&models.PlayerBuilding{},
+		&models.PlayerActionLog{},
 		&models.ChatMessage{},
 		&models.Guild{},
 		&models.GuildMember{},

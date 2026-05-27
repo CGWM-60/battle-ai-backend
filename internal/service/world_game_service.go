@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -65,6 +67,7 @@ type PlayerSaveSyncInput struct {
 	InventoryJSON         datatypes.JSON `json:"inventoryJson"`
 	ActiveEffectsJSON     datatypes.JSON `json:"activeEffectsJson"`
 	Version               int            `json:"version"`
+	ClientSavedAt         *time.Time     `json:"clientSavedAt"`
 }
 
 type ChatInput struct {
@@ -83,6 +86,23 @@ type GuildInput struct {
 type EventActionInput struct {
 	ActionType string         `json:"actionType"`
 	Payload    datatypes.JSON `json:"payload"`
+}
+
+type EventReward struct {
+	XP           int64 `json:"xp"`
+	Food         int64 `json:"food"`
+	Energy       int64 `json:"energy"`
+	Credits      int64 `json:"credits"`
+	Gems         int64 `json:"gems"`
+	Population   int64 `json:"population"`
+	Satisfaction int   `json:"satisfaction"`
+}
+
+type EventRequirements struct {
+	MinCityLevel  int   `json:"minCityLevel"`
+	CityLevel     int   `json:"cityLevel"`
+	MinXP         int64 `json:"minXp"`
+	MinPopulation int64 `json:"minPopulation"`
 }
 
 type BuildingManifest struct {
@@ -262,40 +282,47 @@ func (s *WorldGameService) SyncPlayerSave(ctx context.Context, playerID uint, in
 	if err != nil {
 		return nil, err
 	}
-	if input.Version < save.Version {
-		return save, fmt.Errorf("save conflict: server version %d is newer than client version %d", save.Version, input.Version)
-	}
-	if input.CityLevel < save.CityLevel || input.XP < save.XP || input.Gems < save.Gems {
-		return save, fmt.Errorf("sync rejected by anti-cheat validation")
-	}
-	if negativeInt64(input.Population, input.Food, input.Energy, input.Credits, input.Gems) || input.Satisfaction < 0 || input.Satisfaction > 100 {
-		return save, fmt.Errorf("sync rejected: invalid resource values")
-	}
-	if input.Food-save.Food > 250000 || input.Energy-save.Energy > 250000 || input.Credits-save.Credits > 250000 || input.Gems-save.Gems > 1000 {
-		return save, fmt.Errorf("sync rejected: resource delta too high")
-	}
-
 	now := time.Now()
-	updates := map[string]any{
-		"city_name":               defaultText(input.CityName, save.CityName),
-		"city_level":              maxInt(input.CityLevel, save.CityLevel),
-		"xp":                      input.XP,
-		"population":              input.Population,
-		"satisfaction":            input.Satisfaction,
-		"food":                    input.Food,
-		"energy":                  input.Energy,
-		"credits":                 input.Credits,
-		"gems":                    input.Gems,
-		"buildings_json":          emptyJSON(input.BuildingsJSON),
-		"construction_queue_json": emptyJSON(input.ConstructionQueueJSON),
-		"research_json":           emptyJSON(input.ResearchJSON),
-		"inventory_json":          emptyJSON(input.InventoryJSON),
-		"active_effects_json":     emptyJSON(input.ActiveEffectsJSON),
-		"version":                 save.Version + 1,
-		"last_client_version":     input.Version,
-		"last_synced_at":          &now,
-	}
-	if err := s.db.WithContext(ctx).Model(&models.PlayerSave{}).Where("id = ? AND player_id = ?", save.Id, playerID).Updates(updates).Error; err != nil {
+	var updated models.PlayerSave
+	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var locked models.PlayerSave
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND player_id = ?", save.Id, playerID).
+			First(&locked).Error; err != nil {
+			return err
+		}
+		if err := validateSaveSync(&locked, input, now); err != nil {
+			_ = s.logPlayerActionTx(tx, playerID, &locked.WorldID, &locked.ContinentID, "save_sync", "player_save", strconv.FormatUint(uint64(locked.Id), 10), "rejected", err.Error(), locked, input, nil)
+			return err
+		}
+		updates := map[string]any{
+			"city_name":               defaultText(input.CityName, locked.CityName),
+			"city_level":              maxInt(input.CityLevel, locked.CityLevel),
+			"xp":                      input.XP,
+			"population":              input.Population,
+			"satisfaction":            input.Satisfaction,
+			"food":                    input.Food,
+			"energy":                  input.Energy,
+			"credits":                 input.Credits,
+			"gems":                    input.Gems,
+			"buildings_json":          emptyJSON(input.BuildingsJSON),
+			"construction_queue_json": emptyJSON(input.ConstructionQueueJSON),
+			"research_json":           emptyJSON(input.ResearchJSON),
+			"inventory_json":          emptyJSON(input.InventoryJSON),
+			"active_effects_json":     emptyJSON(input.ActiveEffectsJSON),
+			"version":                 locked.Version + 1,
+			"last_client_version":     input.Version,
+			"last_synced_at":          &now,
+		}
+		if err := tx.Model(&locked).Updates(updates).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id = ?", locked.Id).First(&updated).Error; err != nil {
+			return err
+		}
+		return s.logPlayerActionTx(tx, playerID, &locked.WorldID, &locked.ContinentID, "save_sync", "player_save", strconv.FormatUint(uint64(locked.Id), 10), "accepted", "", locked, updated, map[string]any{"clientVersion": input.Version})
+	})
+	if err != nil {
 		return nil, err
 	}
 	return s.GetPlayerSave(ctx, playerID)
@@ -360,6 +387,32 @@ func (s *WorldGameService) MarkDailyMessageRead(ctx context.Context, playerID ui
 		Update("is_read", true).Error
 }
 
+func (s *WorldGameService) CreateGameEvent(ctx context.Context, event *models.GameEvent) error {
+	if event == nil {
+		return fmt.Errorf("event is required")
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.validateGameEventTx(tx, event, nil); err != nil {
+			return err
+		}
+		return tx.Create(event).Error
+	})
+}
+
+func (s *WorldGameService) UpdateGameEvent(ctx context.Context, eventID uint, fields map[string]any) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var event models.GameEvent
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&event, eventID).Error; err != nil {
+			return err
+		}
+		applyGameEventFields(&event, fields)
+		if err := s.validateGameEventTx(tx, &event, &eventID); err != nil {
+			return err
+		}
+		return tx.Model(&models.GameEvent{}).Where("id = ?", eventID).Updates(normalizeGameEventUpdateFields(fields)).Error
+	})
+}
+
 func (s *WorldGameService) ParticipateEvent(ctx context.Context, playerID uint, eventID uint) error {
 	save, err := s.EnsurePlayerSave(ctx, playerID)
 	if err != nil {
@@ -377,37 +430,94 @@ func (s *WorldGameService) ParticipateEvent(ctx context.Context, playerID uint, 
 	if event.ContinentID != nil && *event.ContinentID != save.ContinentID {
 		return fmt.Errorf("event is not available on this continent")
 	}
-	return s.db.WithContext(ctx).Create(&models.GameEventParticipation{
+	if err := validateEventRequirements(save, event.RequirementsJSON); err != nil {
+		return err
+	}
+	err = s.db.WithContext(ctx).Create(&models.GameEventParticipation{
 		EventID:  eventID,
 		PlayerID: playerID,
 		Status:   "participating",
 		Payload:  emptyJSONObject,
 	}).Error
+	if err == nil {
+		_ = s.logPlayerAction(ctx, playerID, &save.WorldID, &save.ContinentID, "event_participate", "game_event", strconv.FormatUint(uint64(eventID), 10), "accepted", "", nil, event, nil)
+	}
+	return err
 }
 
 func (s *WorldGameService) ClaimEvent(ctx context.Context, playerID uint, eventID uint) error {
 	now := time.Now()
-	var event models.GameEvent
-	if err := s.db.WithContext(ctx).First(&event, eventID).Error; err != nil {
-		return err
-	}
-	if event.EndsAt.After(now) {
-		return fmt.Errorf("event is not finished")
-	}
-	var participation int64
-	if err := s.db.WithContext(ctx).Model(&models.GameEventParticipation{}).
-		Where("event_id = ? AND player_id = ?", eventID, playerID).
-		Count(&participation).Error; err != nil {
-		return err
-	}
-	if participation == 0 {
-		return fmt.Errorf("player did not participate")
-	}
-	return s.db.WithContext(ctx).Create(&models.GameEventClaim{
-		EventID:  eventID,
-		PlayerID: playerID,
-		Reward:   emptyJSON(event.RewardsJSON),
-	}).Error
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var save models.PlayerSave
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("player_id = ?", playerID).
+			First(&save).Error; err != nil {
+			return err
+		}
+		var event models.GameEvent
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&event, eventID).Error; err != nil {
+			return err
+		}
+		if event.WorldID != save.WorldID {
+			return fmt.Errorf("event is not in player world")
+		}
+		if event.PlayerID != nil && *event.PlayerID != playerID {
+			return fmt.Errorf("event is not available for this player")
+		}
+		if event.ContinentID != nil && *event.ContinentID != save.ContinentID {
+			return fmt.Errorf("event is not available on this continent")
+		}
+		if event.EndsAt.After(now) {
+			return fmt.Errorf("event is not finished")
+		}
+		var participation int64
+		if err := tx.Model(&models.GameEventParticipation{}).
+			Where("event_id = ? AND player_id = ?", eventID, playerID).
+			Count(&participation).Error; err != nil {
+			return err
+		}
+		if participation == 0 {
+			return fmt.Errorf("player did not participate")
+		}
+		var existingClaim int64
+		if err := tx.Model(&models.GameEventClaim{}).
+			Where("event_id = ? AND player_id = ?", eventID, playerID).
+			Count(&existingClaim).Error; err != nil {
+			return err
+		}
+		if existingClaim > 0 {
+			return fmt.Errorf("event reward already claimed")
+		}
+		reward, err := parseEventReward(event.RewardsJSON)
+		if err != nil {
+			return err
+		}
+		before := save
+		applyRewardToSave(&save, reward)
+		save.Version++
+		save.LastSyncedAt = &now
+		if err := tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(map[string]any{
+			"xp":             save.XP,
+			"food":           save.Food,
+			"energy":         save.Energy,
+			"credits":        save.Credits,
+			"gems":           save.Gems,
+			"population":     save.Population,
+			"satisfaction":   save.Satisfaction,
+			"version":        save.Version,
+			"last_synced_at": save.LastSyncedAt,
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&models.GameEventClaim{
+			EventID:  eventID,
+			PlayerID: playerID,
+			Reward:   emptyJSON(event.RewardsJSON),
+		}).Error; err != nil {
+			return err
+		}
+		return s.logPlayerActionTx(tx, playerID, &save.WorldID, &save.ContinentID, "event_claim", "game_event", strconv.FormatUint(uint64(eventID), 10), "accepted", "", before, save, reward)
+	})
 }
 
 func (s *WorldGameService) ConflictAction(ctx context.Context, playerID uint, conflictID uint, input EventActionInput) error {
@@ -723,7 +833,7 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 			starts := now
 			ends := starts.Add(2 * time.Hour)
 			rewards := mustJSON(defaultMap(event.Rewards, map[string]any{"credits": 500, "xp": 50}))
-			if err := tx.Create(&models.GameEvent{
+			gameEvent := &models.GameEvent{
 				WorldID:          world.Id,
 				ContinentID:      &continent.Id,
 				Title:            defaultText(event.Title, "Perturbation NEXUS"),
@@ -738,10 +848,14 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 				RequirementsJSON: emptyJSONObject,
 				ConsequencesJSON: emptyJSONObject,
 				CreatedByAI:      true,
-			}).Error; err != nil {
-				return err
 			}
-			applied["event"] = event.Title
+			if err := s.validateGameEventTx(tx, gameEvent, nil); err != nil {
+				applied["eventSkipped"] = err.Error()
+			} else if err := tx.Create(gameEvent).Error; err != nil {
+				return err
+			} else {
+				applied["event"] = event.Title
+			}
 		}
 		if len(decision.Weather) > 0 {
 			weather := decision.Weather[0]
@@ -891,6 +1005,74 @@ func (s *WorldGameService) AIProviderStatuses() []AIProviderStatus {
 func (s *WorldGameService) CreateBuildingAssetHash(imageURL string, level int, version int) string {
 	sum := sha256.Sum256([]byte(fmt.Sprintf("%s:%d:%d", imageURL, level, version)))
 	return hex.EncodeToString(sum[:])
+}
+
+func (s *WorldGameService) SaveBuildingAssetUpload(ctx context.Context, buildingID uint, level int, variant string, version int, originalName string, reader io.Reader) (*models.BuildingAsset, error) {
+	if buildingID == 0 {
+		return nil, fmt.Errorf("building id is required")
+	}
+	if level <= 0 {
+		level = 1
+	}
+	variant = safeAssetSegment(defaultText(variant, "default"))
+	if version <= 0 {
+		var maxVersion int
+		_ = s.db.WithContext(ctx).Model(&models.BuildingAsset{}).
+			Where("building_definition_id = ? AND level = ? AND variant = ?", buildingID, level, variant).
+			Select("COALESCE(MAX(version), 0)").
+			Scan(&maxVersion).Error
+		version = maxVersion + 1
+	}
+
+	assetDir := strings.TrimSpace(os.Getenv("BUILDING_ASSET_PUBLIC_DIR"))
+	if assetDir == "" {
+		assetDir = "storage/assets/buildings"
+	}
+	publicBase := strings.TrimRight(defaultText(os.Getenv("BUILDING_ASSET_PUBLIC_BASE_URL"), "/assets/buildings"), "/")
+	relDir := filepath.Join(strconv.FormatUint(uint64(buildingID), 10))
+	fullDir := filepath.Join(assetDir, relDir)
+	if err := os.MkdirAll(fullDir, 0o755); err != nil {
+		return nil, err
+	}
+
+	ext := strings.ToLower(filepath.Ext(originalName))
+	if !allowedAssetExt(ext) {
+		ext = ".bin"
+	}
+	filename := fmt.Sprintf("lvl_%d_%s_v%d_%d%s", level, variant, version, time.Now().UnixNano(), ext)
+	fullPath := filepath.Join(fullDir, filename)
+	out, err := os.Create(fullPath)
+	if err != nil {
+		return nil, err
+	}
+	defer out.Close()
+
+	hasher := sha256.New()
+	size, err := io.Copy(io.MultiWriter(out, hasher), reader)
+	if err != nil {
+		_ = os.Remove(fullPath)
+		return nil, err
+	}
+	if size > 10*1024*1024 {
+		_ = os.Remove(fullPath)
+		return nil, fmt.Errorf("asset file is too large")
+	}
+	relURL := filepath.ToSlash(filepath.Join(relDir, filename))
+	asset := &models.BuildingAsset{
+		BuildingDefinitionID: buildingID,
+		Level:                level,
+		Variant:              variant,
+		ImageURL:             publicBase + "/" + relURL,
+		ImageHash:            hex.EncodeToString(hasher.Sum(nil)),
+		ImageSize:            size,
+		Version:              version,
+		IsActive:             true,
+	}
+	if err := s.db.WithContext(ctx).Create(asset).Error; err != nil {
+		_ = os.Remove(fullPath)
+		return nil, err
+	}
+	return asset, nil
 }
 
 func (s *WorldGameService) assignWorldAndContinent(ctx context.Context, tx *gorm.DB) (*models.World, *models.Continent, error) {
@@ -1189,6 +1371,360 @@ func negativeInt64(values ...int64) bool {
 	return false
 }
 
+func validateSaveSync(save *models.PlayerSave, input PlayerSaveSyncInput, now time.Time) error {
+	if input.Version < save.Version {
+		return fmt.Errorf("save conflict: server version %d is newer than client version %d", save.Version, input.Version)
+	}
+	if input.Version > save.Version+1 {
+		return fmt.Errorf("sync rejected: client version is too far ahead")
+	}
+	if input.ClientSavedAt != nil {
+		if save.LastSyncedAt != nil && input.ClientSavedAt.Before(save.LastSyncedAt.Add(-2*time.Minute)) {
+			return fmt.Errorf("sync rejected: client save is older than server state")
+		}
+		if now.Sub(*input.ClientSavedAt) > 30*24*time.Hour {
+			return fmt.Errorf("sync rejected: client save is too old")
+		}
+		if input.ClientSavedAt.After(now.Add(10 * time.Minute)) {
+			return fmt.Errorf("sync rejected: client save timestamp is in the future")
+		}
+	}
+	if input.CityLevel < save.CityLevel || input.XP < save.XP || input.Gems < save.Gems {
+		return fmt.Errorf("sync rejected by anti-cheat validation")
+	}
+	if input.CityLevel-save.CityLevel > 3 {
+		return fmt.Errorf("sync rejected: city level delta too high")
+	}
+	if negativeInt64(input.Population, input.Food, input.Energy, input.Credits, input.Gems) || input.Satisfaction < 0 || input.Satisfaction > 100 {
+		return fmt.Errorf("sync rejected: invalid resource values")
+	}
+	elapsed := time.Hour
+	if save.LastSyncedAt != nil {
+		elapsed = now.Sub(*save.LastSyncedAt)
+	}
+	if elapsed < 5*time.Minute {
+		elapsed = 5 * time.Minute
+	}
+	hours := elapsed.Hours()
+	limits := map[string]int64{
+		"food":       int64(50000 + hours*120000),
+		"energy":     int64(50000 + hours*120000),
+		"credits":    int64(75000 + hours*180000),
+		"gems":       int64(25 + hours*75),
+		"xp":         int64(5000 + hours*15000),
+		"population": int64(20000 + hours*50000),
+	}
+	if input.Food-save.Food > limits["food"] ||
+		input.Energy-save.Energy > limits["energy"] ||
+		input.Credits-save.Credits > limits["credits"] ||
+		input.Gems-save.Gems > limits["gems"] ||
+		input.XP-save.XP > limits["xp"] ||
+		input.Population-save.Population > limits["population"] {
+		return fmt.Errorf("sync rejected: resource delta too high for elapsed time")
+	}
+	return nil
+}
+
+func parseEventReward(payload datatypes.JSON) (EventReward, error) {
+	var reward EventReward
+	if len(payload) == 0 {
+		return reward, nil
+	}
+	if err := json.Unmarshal(payload, &reward); err != nil {
+		return reward, fmt.Errorf("invalid rewards JSON: %w", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(payload, &raw); err == nil {
+		reward.XP += int64FromAny(raw["XP"])
+		reward.XP += int64FromAny(raw["Xp"])
+		if reward.XP == 0 {
+			reward.XP = int64FromAny(raw["xp"])
+		}
+	}
+	if negativeInt64(reward.XP, reward.Food, reward.Energy, reward.Credits, reward.Gems, reward.Population) {
+		return reward, fmt.Errorf("invalid rewards JSON: negative rewards are not allowed")
+	}
+	if reward.Satisfaction < 0 {
+		return reward, fmt.Errorf("invalid rewards JSON: negative satisfaction reward is not allowed")
+	}
+	return reward, nil
+}
+
+func applyRewardToSave(save *models.PlayerSave, reward EventReward) {
+	save.XP += reward.XP
+	save.Food += reward.Food
+	save.Energy += reward.Energy
+	save.Credits += reward.Credits
+	save.Gems += reward.Gems
+	save.Population += reward.Population
+	save.Satisfaction = clamp(save.Satisfaction+reward.Satisfaction, 0, 100)
+}
+
+func validateEventRequirements(save *models.PlayerSave, payload datatypes.JSON) error {
+	if len(payload) == 0 || strings.TrimSpace(string(payload)) == "{}" {
+		return nil
+	}
+	var req EventRequirements
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return fmt.Errorf("invalid requirements JSON: %w", err)
+	}
+	minLevel := req.MinCityLevel
+	if req.CityLevel > minLevel {
+		minLevel = req.CityLevel
+	}
+	if minLevel > 0 && save.CityLevel < minLevel {
+		return fmt.Errorf("event requires city level %d", minLevel)
+	}
+	if req.MinXP > 0 && save.XP < req.MinXP {
+		return fmt.Errorf("event requires %d XP", req.MinXP)
+	}
+	if req.MinPopulation > 0 && save.Population < req.MinPopulation {
+		return fmt.Errorf("event requires %d population", req.MinPopulation)
+	}
+	return nil
+}
+
+func (s *WorldGameService) validateGameEventTx(tx *gorm.DB, event *models.GameEvent, ignoreID *uint) error {
+	if event.WorldID == 0 {
+		return fmt.Errorf("event world is required")
+	}
+	if strings.TrimSpace(event.Title) == "" {
+		return fmt.Errorf("event title is required")
+	}
+	if event.StartsAt.IsZero() {
+		event.StartsAt = time.Now()
+	}
+	if event.EndsAt.IsZero() && event.DurationMinutes > 0 {
+		event.EndsAt = event.StartsAt.Add(time.Duration(event.DurationMinutes) * time.Minute)
+	}
+	if event.EndsAt.IsZero() {
+		return fmt.Errorf("event end date is required")
+	}
+	if event.EndsAt.Sub(event.StartsAt) < time.Hour {
+		return fmt.Errorf("event duration must be at least 1 hour")
+	}
+	event.DurationMinutes = int(event.EndsAt.Sub(event.StartsAt).Minutes())
+	if event.Status == "" {
+		event.Status = EventStatusActive
+	}
+	if !validEventDifficulty(event.Difficulty) {
+		return fmt.Errorf("invalid event difficulty")
+	}
+	if _, err := parseEventReward(event.RewardsJSON); err != nil {
+		return err
+	}
+	if err := validateRequirementsPayload(event.RequirementsJSON); err != nil {
+		return err
+	}
+	dayStart := time.Date(event.StartsAt.Year(), event.StartsAt.Month(), event.StartsAt.Day(), 0, 0, 0, 0, event.StartsAt.Location())
+	dayEnd := dayStart.Add(24 * time.Hour)
+	countQuery := tx.Model(&models.GameEvent{}).
+		Where("world_id = ? AND status <> ? AND starts_at >= ? AND starts_at < ?", event.WorldID, EventStatusArchived, dayStart, dayEnd)
+	if ignoreID != nil {
+		countQuery = countQuery.Where("id <> ?", *ignoreID)
+	}
+	var count int64
+	if err := countQuery.Count(&count).Error; err != nil {
+		return err
+	}
+	if count >= 4 {
+		return fmt.Errorf("maximum 4 events per world per day reached")
+	}
+	overlap := tx.Model(&models.GameEvent{}).
+		Where("world_id = ? AND status <> ? AND starts_at < ? AND ends_at > ?", event.WorldID, EventStatusArchived, event.EndsAt, event.StartsAt)
+	if ignoreID != nil {
+		overlap = overlap.Where("id <> ?", *ignoreID)
+	}
+	overlap = sameEventScope(overlap, event)
+	var overlaps int64
+	if err := overlap.Count(&overlaps).Error; err != nil {
+		return err
+	}
+	if overlaps > 0 {
+		return fmt.Errorf("event overlaps an existing event in the same scope")
+	}
+	return nil
+}
+
+func validateRequirementsPayload(payload datatypes.JSON) error {
+	if len(payload) == 0 || strings.TrimSpace(string(payload)) == "{}" {
+		return nil
+	}
+	var req EventRequirements
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return fmt.Errorf("invalid requirements JSON: %w", err)
+	}
+	if req.MinCityLevel < 0 || req.CityLevel < 0 || req.MinXP < 0 || req.MinPopulation < 0 {
+		return fmt.Errorf("invalid requirements JSON: negative requirements are not allowed")
+	}
+	return nil
+}
+
+func sameEventScope(query *gorm.DB, event *models.GameEvent) *gorm.DB {
+	if event.ContinentID == nil {
+		query = query.Where("continent_id IS NULL")
+	} else {
+		query = query.Where("continent_id = ?", *event.ContinentID)
+	}
+	if event.GuildID == nil {
+		query = query.Where("guild_id IS NULL")
+	} else {
+		query = query.Where("guild_id = ?", *event.GuildID)
+	}
+	if event.PlayerID == nil {
+		query = query.Where("player_id IS NULL")
+	} else {
+		query = query.Where("player_id = ?", *event.PlayerID)
+	}
+	return query
+}
+
+func validEventDifficulty(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "easy", "medium", "hard", "critical":
+		return true
+	default:
+		return false
+	}
+}
+
+func applyGameEventFields(event *models.GameEvent, fields map[string]any) {
+	if value, ok := stringField(fields, "title"); ok {
+		event.Title = value
+	}
+	if value, ok := stringField(fields, "description"); ok {
+		event.Description = value
+	}
+	if value, ok := stringField(fields, "type"); ok {
+		event.Type = value
+	}
+	if value, ok := stringField(fields, "difficulty"); ok {
+		event.Difficulty = value
+	}
+	if value, ok := stringField(fields, "status"); ok {
+		event.Status = value
+	}
+	if value, ok := timeField(fields, "startsAt", "starts_at"); ok {
+		event.StartsAt = value
+	}
+	if value, ok := timeField(fields, "endsAt", "ends_at"); ok {
+		event.EndsAt = value
+	}
+	if value, ok := intField(fields, "durationMinutes", "duration_minutes"); ok {
+		event.DurationMinutes = value
+	}
+}
+
+func normalizeGameEventUpdateFields(fields map[string]any) map[string]any {
+	out := make(map[string]any, len(fields))
+	for key, value := range fields {
+		switch key {
+		case "worldId":
+			out["world_id"] = value
+		case "continentId":
+			out["continent_id"] = value
+		case "guildId":
+			out["guild_id"] = value
+		case "playerId":
+			out["player_id"] = value
+		case "durationMinutes":
+			out["duration_minutes"] = value
+		case "rewardsJson":
+			out["rewards_json"] = mustJSON(value)
+		case "requirementsJson":
+			out["requirements_json"] = mustJSON(value)
+		case "consequencesJson":
+			out["consequences_json"] = mustJSON(value)
+		case "createdByAi":
+			out["created_by_ai"] = value
+		case "startsAt":
+			out["starts_at"] = value
+		case "endsAt":
+			out["ends_at"] = value
+		default:
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func stringField(fields map[string]any, names ...string) (string, bool) {
+	for _, name := range names {
+		if value, ok := fields[name]; ok {
+			return fmt.Sprint(value), true
+		}
+	}
+	return "", false
+}
+
+func intField(fields map[string]any, names ...string) (int, bool) {
+	for _, name := range names {
+		if value, ok := fields[name]; ok {
+			switch typed := value.(type) {
+			case float64:
+				return int(typed), true
+			case int:
+				return typed, true
+			case string:
+				parsed, err := strconv.Atoi(typed)
+				return parsed, err == nil
+			}
+		}
+	}
+	return 0, false
+}
+
+func timeField(fields map[string]any, names ...string) (time.Time, bool) {
+	for _, name := range names {
+		if value, ok := fields[name]; ok {
+			switch typed := value.(type) {
+			case string:
+				parsed, err := time.Parse(time.RFC3339, typed)
+				return parsed, err == nil
+			case time.Time:
+				return typed, true
+			}
+		}
+	}
+	return time.Time{}, false
+}
+
+func int64FromAny(value any) int64 {
+	switch typed := value.(type) {
+	case float64:
+		return int64(typed)
+	case int64:
+		return typed
+	case int:
+		return int64(typed)
+	case string:
+		parsed, _ := strconv.ParseInt(typed, 10, 64)
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func (s *WorldGameService) logPlayerAction(ctx context.Context, playerID uint, worldID *uint, continentID *uint, action string, targetType string, targetID string, status string, errorMessage string, before any, after any, metadata any) error {
+	return s.logPlayerActionTx(s.db.WithContext(ctx), playerID, worldID, continentID, action, targetType, targetID, status, errorMessage, before, after, metadata)
+}
+
+func (s *WorldGameService) logPlayerActionTx(tx *gorm.DB, playerID uint, worldID *uint, continentID *uint, action string, targetType string, targetID string, status string, errorMessage string, before any, after any, metadata any) error {
+	return tx.Create(&models.PlayerActionLog{
+		PlayerID:     playerID,
+		WorldID:      worldID,
+		ContinentID:  continentID,
+		Action:       action,
+		TargetType:   targetType,
+		TargetID:     targetID,
+		Status:       status,
+		Error:        errorMessage,
+		BeforeJSON:   mustJSON(before),
+		AfterJSON:    mustJSON(after),
+		MetadataJSON: mustJSON(metadata),
+	}).Error
+}
+
 func clamp(value int, min int, max int) int {
 	if value < min {
 		return min
@@ -1208,4 +1744,27 @@ func containsBlockedChatText(message string) bool {
 		}
 	}
 	return false
+}
+
+func safeAssetSegment(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var builder strings.Builder
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			builder.WriteRune(r)
+		}
+	}
+	if builder.Len() == 0 {
+		return "default"
+	}
+	return builder.String()
+}
+
+func allowedAssetExt(ext string) bool {
+	switch strings.ToLower(ext) {
+	case ".png", ".jpg", ".jpeg", ".webp", ".gif":
+		return true
+	default:
+		return false
+	}
 }

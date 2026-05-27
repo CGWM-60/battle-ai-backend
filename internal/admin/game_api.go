@@ -41,9 +41,9 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.POST("/players/:id/resync", s.gameResyncPlayerAPI(world))
 
 	game.GET("/events", s.gameListModelAPI(&[]models.GameEvent{}, "starts_at DESC"))
-	game.POST("/events", s.gameCreateModelAPI(&models.GameEvent{}, "event"))
+	game.POST("/events", s.gameCreateEventAPI(world))
 	game.GET("/events/:id", s.gameGetModelAPI(&models.GameEvent{}))
-	game.PATCH("/events/:id", s.gamePatchModelAPI(&models.GameEvent{}, "event"))
+	game.PATCH("/events/:id", s.gamePatchEventAPI(world))
 	game.DELETE("/events/:id", s.gameDeleteModelAPI(&models.GameEvent{}, "event"))
 	game.POST("/events/:id/force-start", s.gamePatchStatusAPI(&models.GameEvent{}, "active"))
 	game.POST("/events/:id/force-end", s.gamePatchStatusAPI(&models.GameEvent{}, "finished"))
@@ -202,6 +202,43 @@ func (s *Server) gamePlayersAPI(c *gin.Context) {
 	gameJSON(c, gin.H{"items": items}, err)
 }
 
+func (s *Server) gameCreateEventAPI(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var event models.GameEvent
+		if err := c.ShouldBindJSON(&event); err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		err := world.CreateGameEvent(c.Request.Context(), &event)
+		if err == nil {
+			s.gameAudit(c, "create", "event", strconv.FormatUint(uint64(event.Id), 10), nil, event)
+		}
+		gameJSON(c, event, err)
+	}
+}
+
+func (s *Server) gamePatchEventAPI(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := gameParam(c, "id")
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		var fields map[string]any
+		if err := c.ShouldBindJSON(&fields); err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		delete(fields, "id")
+		delete(fields, "Id")
+		err = world.UpdateGameEvent(c.Request.Context(), id, fields)
+		if err == nil {
+			s.gameAudit(c, "patch", "event", strconv.FormatUint(uint64(id), 10), nil, fields)
+		}
+		gameJSON(c, gin.H{"updated": true}, err)
+	}
+}
+
 func (s *Server) gamePlayerSaveAPI(c *gin.Context) {
 	id, err := gameParam(c, "id")
 	if err != nil {
@@ -343,6 +380,22 @@ func (s *Server) gameCreateBuildingAssetAPI(world *service.WorldGameService) gin
 		buildingID, err := gameParam(c, "id")
 		if err != nil {
 			gameJSON(c, nil, err)
+			return
+		}
+		if strings.Contains(c.GetHeader("Content-Type"), "multipart/form-data") {
+			file, header, err := c.Request.FormFile("image")
+			if err != nil {
+				gameJSON(c, nil, err)
+				return
+			}
+			defer file.Close()
+			level, _ := strconv.Atoi(c.DefaultPostForm("level", "1"))
+			version, _ := strconv.Atoi(c.DefaultPostForm("version", "0"))
+			asset, err := world.SaveBuildingAssetUpload(c.Request.Context(), buildingID, level, c.DefaultPostForm("variant", "default"), version, header.Filename, file)
+			if err == nil {
+				s.gameAudit(c, "upload_asset", "building_asset", strconv.FormatUint(uint64(asset.Id), 10), nil, asset)
+			}
+			gameJSON(c, asset, err)
 			return
 		}
 		var item models.BuildingAsset

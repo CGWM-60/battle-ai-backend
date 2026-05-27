@@ -35,6 +35,8 @@ func RouterApp(database *gorm.DB) {
 	router.Use(securityHeaders())
 	router.Use(requestBodyLimit(maxBodyBytes()))
 	router.Use(admin.RequestMetricsMiddleware())
+	_ = os.MkdirAll(getEnv("BUILDING_ASSET_PUBLIC_DIR", "storage/assets/buildings"), 0o755)
+	router.Static("/assets/buildings", getEnv("BUILDING_ASSET_PUBLIC_DIR", "storage/assets/buildings"))
 
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})

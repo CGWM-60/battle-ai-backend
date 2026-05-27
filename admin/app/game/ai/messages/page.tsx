@@ -11,6 +11,18 @@ export default function AIMessagesPage() {
         endpoint: "game/ai/messages",
         columns: ["id", "worldId", "continentId", "playerId", "title", "tone", "isRead", "createdAt"],
         filters: ["worldId", "continentId", "playerId"],
+        editable: true,
+        createSample: {
+          worldId: 1,
+          continentId: 1,
+          playerId: 1,
+          title: "Transmission NEXUS",
+          message: "Votre progression est notee. Je m'adapte.",
+          tone: "bilan froid",
+          relatedEventsJson: {},
+          relatedConflictsJson: {},
+          isRead: false,
+        },
       }}
     />
   );

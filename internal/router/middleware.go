@@ -172,9 +172,9 @@ func queueTimeout() time.Duration {
 }
 
 func maxBodyBytes() int64 {
-	value, err := strconv.ParseInt(getEnv("APP_MAX_BODY_BYTES", "1048576"), 10, 64)
+	value, err := strconv.ParseInt(getEnv("APP_MAX_BODY_BYTES", "10485760"), 10, 64)
 	if err != nil || value <= 0 {
-		return 1048576
+		return 10485760
 	}
 
 	return value

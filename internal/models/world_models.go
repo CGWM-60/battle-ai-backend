@@ -93,6 +93,22 @@ type PlayerBuilding struct {
 	LastCollectedAt *time.Time     `gorm:"index" json:"lastCollectedAt"`
 }
 
+type PlayerActionLog struct {
+	Id           uint `gorm:"primaryKey" json:"id"`
+	CreatedAt    time.Time
+	PlayerID     uint           `gorm:"index" json:"playerId"`
+	WorldID      *uint          `gorm:"index" json:"worldId"`
+	ContinentID  *uint          `gorm:"index" json:"continentId"`
+	Action       string         `gorm:"size:120;index" json:"action"`
+	TargetType   string         `gorm:"size:80;index" json:"targetType"`
+	TargetID     string         `gorm:"size:80;index" json:"targetId"`
+	Status       string         `gorm:"size:32;index" json:"status"`
+	Error        string         `gorm:"type:text" json:"error"`
+	BeforeJSON   datatypes.JSON `gorm:"type:json" json:"beforeJson"`
+	AfterJSON    datatypes.JSON `gorm:"type:json" json:"afterJson"`
+	MetadataJSON datatypes.JSON `gorm:"type:json" json:"metadataJson"`
+}
+
 type ChatMessage struct {
 	Id           uint `gorm:"primaryKey" json:"id"`
 	CreatedAt    time.Time

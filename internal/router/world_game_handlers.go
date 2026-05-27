@@ -193,9 +193,9 @@ func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
 	})
 
 	admin.GET("/events", adminList[models.GameEvent](database, "starts_at DESC"))
-	admin.POST("/events", adminCreate[models.GameEvent](database, "event"))
+	admin.POST("/events", adminCreateEvent(world))
 	admin.GET("/events/:id", adminGet[models.GameEvent](database, false))
-	admin.PATCH("/events/:id", adminPatch[models.GameEvent](database, "event"))
+	admin.PATCH("/events/:id", adminPatchEvent(world))
 	admin.DELETE("/events/:id", adminSoftDelete[models.GameEvent](database, "event"))
 	admin.POST("/events/:id/force-start", adminPatchStatus[models.GameEvent](database, "active"))
 	admin.POST("/events/:id/force-end", adminPatchStatus[models.GameEvent](database, "finished"))
@@ -639,6 +639,35 @@ func adminPlayers(database *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func adminCreateEvent(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var event models.GameEvent
+		if err := c.ShouldBindJSON(&event); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event payload"})
+			return
+		}
+		writeWorldResponse(c, event, world.CreateGameEvent(c.Request.Context(), &event))
+	}
+}
+
+func adminPatchEvent(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event id"})
+			return
+		}
+		var fields map[string]any
+		if err := c.ShouldBindJSON(&fields); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid event payload"})
+			return
+		}
+		delete(fields, "id")
+		delete(fields, "Id")
+		writeWorldResponse(c, gin.H{"updated": true}, world.UpdateGameEvent(c.Request.Context(), id, fields))
+	}
+}
+
 func adminPlayer(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := parseUintParam(c, "id")
@@ -776,6 +805,19 @@ func adminCreateBuildingAsset(database *gorm.DB, world *service.WorldGameService
 		buildingID, err := parseUintParam(c, "id")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid building id"})
+			return
+		}
+		if strings.Contains(c.GetHeader("Content-Type"), "multipart/form-data") {
+			file, header, err := c.Request.FormFile("image")
+			if err != nil {
+				writeWorldResponse(c, nil, err)
+				return
+			}
+			defer file.Close()
+			level, _ := strconv.Atoi(c.DefaultPostForm("level", "1"))
+			version, _ := strconv.Atoi(c.DefaultPostForm("version", "0"))
+			asset, err := world.SaveBuildingAssetUpload(c.Request.Context(), buildingID, level, c.DefaultPostForm("variant", "default"), version, header.Filename, file)
+			writeWorldResponse(c, asset, err)
 			return
 		}
 		var asset models.BuildingAsset

@@ -15,6 +15,8 @@ export type GameAdminConfig = {
   columns: string[];
   filters?: string[];
   actions?: GameAdminAction[];
+  createSample?: AnyRecord;
+  editable?: boolean;
 };
 
 type GameAdminAction = {
@@ -30,6 +32,10 @@ export function GameAdminPage({ config }: { config: GameAdminConfig }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createPayload, setCreatePayload] = useState("");
+  const [editItem, setEditItem] = useState<AnyRecord | null>(null);
+  const [editPayload, setEditPayload] = useState("");
 
   const query = useMemo(() => {
     const params = new URLSearchParams();
@@ -70,6 +76,39 @@ export function GameAdminPage({ config }: { config: GameAdminConfig }) {
     setRefreshKey((value) => value + 1);
   }
 
+  async function submitJSON(method: "POST" | "PATCH", path: string, body: string) {
+    let parsed: unknown;
+    try {
+      parsed = body.trim() ? JSON.parse(body) : {};
+    } catch {
+      setError("JSON invalide.");
+      return;
+    }
+    const response = await fetch(`/admin/api/${path}`, {
+      method,
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(parsed),
+    });
+    if (!response.ok) {
+      setError(`Sauvegarde echouee: HTTP ${response.status}`);
+      return;
+    }
+    setCreateOpen(false);
+    setEditItem(null);
+    setRefreshKey((value) => value + 1);
+  }
+
+  function openCreate() {
+    setCreatePayload(JSON.stringify(config.createSample ?? {}, null, 2));
+    setCreateOpen(true);
+  }
+
+  function openEdit(item: AnyRecord) {
+    setEditItem(item);
+    setEditPayload(JSON.stringify(stripReadOnly(item), null, 2));
+  }
+
   return (
     <AdminShell title={config.title} description={config.description}>
       {config.filters?.length ? (
@@ -85,6 +124,16 @@ export function GameAdminPage({ config }: { config: GameAdminConfig }) {
           </button>
         </section>
       ) : null}
+      {config.createSample ? (
+        <section className="panel game-toolbar">
+          <button className="primary" type="button" onClick={openCreate}>
+            Creer
+          </button>
+          <button className="secondary" type="button" onClick={() => setRefreshKey((value) => value + 1)}>
+            Recharger
+          </button>
+        </section>
+      ) : null}
       {error ? <ErrorState message={error} /> : null}
       {loading ? <LoadingState /> : null}
       {!loading && !error ? (
@@ -96,7 +145,7 @@ export function GameAdminPage({ config }: { config: GameAdminConfig }) {
                   {config.columns.map((column) => (
                     <th key={column}>{column}</th>
                   ))}
-                  {config.actions?.length ? <th>Actions</th> : null}
+                  {config.actions?.length || config.editable ? <th>Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -105,9 +154,14 @@ export function GameAdminPage({ config }: { config: GameAdminConfig }) {
                     {config.columns.map((column) => (
                       <td key={column}>{formatValue(item[column] ?? item[toPascal(column)] ?? item[toCamel(column)])}</td>
                     ))}
-                    {config.actions?.length ? (
+                    {config.actions?.length || config.editable ? (
                       <td className="row-actions">
-                        {config.actions.map((action) => (
+                        {config.editable ? (
+                          <button className="secondary" type="button" onClick={() => openEdit(item)}>
+                            Modifier
+                          </button>
+                        ) : null}
+                        {(config.actions ?? []).map((action) => (
                           <button className={action.method === "DELETE" ? "danger" : "secondary"} key={action.label} type="button" onClick={() => runAction(action, item)}>
                             {action.label}
                           </button>
@@ -122,7 +176,56 @@ export function GameAdminPage({ config }: { config: GameAdminConfig }) {
           {!data.length ? <p className="hint">Aucune donnee.</p> : null}
         </section>
       ) : null}
+      {createOpen ? (
+        <JSONEditor
+          title={`Creer - ${config.title}`}
+          payload={createPayload}
+          onChange={setCreatePayload}
+          onCancel={() => setCreateOpen(false)}
+          onSubmit={() => submitJSON("POST", config.endpoint, createPayload)}
+        />
+      ) : null}
+      {editItem ? (
+        <JSONEditor
+          title={`Modifier #${String(editItem.id ?? editItem.Id ?? "")}`}
+          payload={editPayload}
+          onChange={setEditPayload}
+          onCancel={() => setEditItem(null)}
+          onSubmit={() => submitJSON("PATCH", `${config.endpoint}/${String(editItem.id ?? editItem.Id)}`, editPayload)}
+        />
+      ) : null}
     </AdminShell>
+  );
+}
+
+function JSONEditor({
+  title,
+  payload,
+  onChange,
+  onCancel,
+  onSubmit,
+}: {
+  title: string;
+  payload: string;
+  onChange: (value: string) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="modal-backdrop">
+      <section className="panel json-modal">
+        <h2>{title}</h2>
+        <textarea className="json-editor" value={payload} onChange={(event) => onChange(event.target.value)} />
+        <div className="editor-actions">
+          <button className="primary" type="button" onClick={onSubmit}>
+            Enregistrer
+          </button>
+          <button className="secondary" type="button" onClick={onCancel}>
+            Annuler
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -152,4 +255,12 @@ function toCamel(value: string): string {
 function toPascal(value: string): string {
   const camel = toCamel(value);
   return camel.charAt(0).toUpperCase() + camel.slice(1);
+}
+
+function stripReadOnly(item: AnyRecord): AnyRecord {
+  const copy = { ...item };
+  for (const key of ["id", "Id", "createdAt", "CreatedAt", "updatedAt", "UpdatedAt", "deletedAt", "DeletedAt"]) {
+    delete copy[key];
+  }
+  return copy;
 }

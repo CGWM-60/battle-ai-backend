@@ -11,6 +11,18 @@ export default function AIFactionsPage() {
         endpoint: "game/ai/factions",
         columns: ["id", "worldId", "continentId", "name", "type", "aggressiveness", "diplomacy", "economy", "militaryPower", "climateResistance", "status"],
         filters: ["worldId", "continentId", "status"],
+        editable: true,
+        createSample: {
+          worldId: 1,
+          name: "Nordrealm",
+          type: "military",
+          aggressiveness: 60,
+          diplomacy: 25,
+          economy: 40,
+          militaryPower: 55,
+          climateResistance: 35,
+          status: "active",
+        },
       }}
     />
   );
