@@ -205,6 +205,41 @@ select {
   gap: 10px;
 }
 
+.mini-bars {
+  display: grid;
+  gap: 10px;
+}
+
+.mini-bar-row {
+  display: grid;
+  grid-template-columns: minmax(76px, 1fr) minmax(90px, 2fr) minmax(44px, auto);
+  gap: 10px;
+  align-items: center;
+  font-size: 13px;
+}
+
+.mini-bar-row span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.mini-bar-row strong {
+  text-align: right;
+}
+
+.mini-bar-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e8edf3;
+}
+
+.mini-bar-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+}
+
 input,
 textarea,
 select {

@@ -135,3 +135,79 @@ func TestBeginnerProtectionCoversNewLowLevelPlayer(t *testing.T) {
 		t.Fatalf("expected established player not to be protected")
 	}
 }
+
+func TestSimulationCycleNormalization(t *testing.T) {
+	cases := map[string]string{
+		"":              SimulationCycleManual,
+		"15m":           SimulationCycleLight,
+		"hourly":        SimulationCycleHourly,
+		"continent":     SimulationCycleHourly,
+		"daily":         SimulationCycleDaily,
+		"unknown":       SimulationCycleManual,
+		" continental ": SimulationCycleHourly,
+	}
+	for input, expected := range cases {
+		if got := normalizeSimulationCycle(input); got != expected {
+			t.Fatalf("cycle %q: expected %q, got %q", input, expected, got)
+		}
+	}
+}
+
+func TestSimulationProfilesProduceDifferentRiskDeltas(t *testing.T) {
+	militaryTension, militaryWeather := simulationRiskDeltas("militaire", SimulationCycleHourly)
+	ecoTension, ecoWeather := simulationRiskDeltas("ecologique", SimulationCycleHourly)
+	if militaryTension <= ecoTension {
+		t.Fatalf("military profile should raise tension more than ecological: %d <= %d", militaryTension, ecoTension)
+	}
+	if ecoWeather <= militaryWeather {
+		t.Fatalf("ecological profile should raise weather risk more than military: %d <= %d", ecoWeather, militaryWeather)
+	}
+	lightTension, _ := simulationRiskDeltas("instable", SimulationCycleLight)
+	if lightTension > 2 {
+		t.Fatalf("light cycle should clamp tension delta, got %d", lightTension)
+	}
+}
+
+func TestPickSimulationContinentUsesCycleStrategy(t *testing.T) {
+	world := models.World{
+		CurrentCycle: 1,
+		Continents: []models.Continent{
+			{Id: 1, CurrentPlayers: 100, TensionLevel: 10},
+			{Id: 2, CurrentPlayers: 20, TensionLevel: 40},
+			{Id: 3, CurrentPlayers: 5, TensionLevel: 90},
+		},
+	}
+	if got := pickSimulationContinent(world, SimulationCycleLight); got.Id != 2 {
+		t.Fatalf("light cycle should rotate by current cycle, got continent %d", got.Id)
+	}
+	if got := pickSimulationContinent(world, SimulationCycleHourly); got.Id != 3 {
+		t.Fatalf("hourly cycle should target least populated continent, got continent %d", got.Id)
+	}
+	if got := pickSimulationContinent(world, SimulationCycleDaily); got.Id != 3 {
+		t.Fatalf("daily cycle should target highest tension continent, got continent %d", got.Id)
+	}
+}
+
+func TestDefaultWeatherEffectsVaryByProfile(t *testing.T) {
+	commercial := defaultWeatherEffects("commercial")
+	technical := defaultWeatherEffects("technologique")
+	if commercial["credits"] == nil {
+		t.Fatalf("commercial weather should affect credits")
+	}
+	if technical["research"] == nil {
+		t.Fatalf("technological weather should affect research")
+	}
+}
+
+func TestParseEventRewardRejectsNegativeReward(t *testing.T) {
+	_, err := parseEventReward(datatypes.JSON([]byte(`{"credits":-1}`)))
+	if err == nil {
+		t.Fatalf("expected negative reward to be rejected")
+	}
+}
+
+func TestValidateRequirementsPayloadRejectsInvalidJSON(t *testing.T) {
+	if err := validateRequirementsPayload(datatypes.JSON([]byte(`{"minCityLevel":"bad"}`))); err == nil {
+		t.Fatalf("expected invalid requirements payload to be rejected")
+	}
+}

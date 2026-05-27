@@ -44,6 +44,11 @@ const (
 	WeatherStatusActive    = "active"
 	DecisionStatusApplied  = "applied"
 	DecisionStatusFallback = "fallback"
+	DecisionStatusDryRun   = "dry_run"
+	SimulationCycleManual  = "manual"
+	SimulationCycleLight   = "light"
+	SimulationCycleHourly  = "continental"
+	SimulationCycleDaily   = "daily"
 )
 
 var emptyJSONObject = datatypes.JSON([]byte(`{}`))
@@ -1116,6 +1121,11 @@ func (s *WorldGameService) PublishCatalog(ctx context.Context, changelog any) (*
 }
 
 func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forcedBy string) (*models.AIWorldDecision, error) {
+	return s.SimulateWorldCycle(ctx, worldID, forcedBy, SimulationCycleManual)
+}
+
+func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint, forcedBy string, cycleType string) (*models.AIWorldDecision, error) {
+	cycleType = normalizeSimulationCycle(cycleType)
 	var world models.World
 	query := s.db.WithContext(ctx).Preload("Continents", func(db *gorm.DB) *gorm.DB {
 		return db.Order("`index` ASC")
@@ -1139,9 +1149,10 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 	}
 
 	snapshot := map[string]any{
-		"world":    world,
-		"forcedBy": forcedBy,
-		"now":      time.Now().Format(time.RFC3339),
+		"world":     world,
+		"cycleType": cycleType,
+		"forcedBy":  forcedBy,
+		"now":       time.Now().Format(time.RFC3339),
 	}
 	inputJSON := mustJSON(snapshot)
 	decision, providerName, modelName, status, callErr := s.callNEXUS(ctx, world)
@@ -1153,8 +1164,12 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 		if len(world.Continents) == 0 {
 			return fmt.Errorf("world has no continents")
 		}
-		continent := world.Continents[world.CurrentCycle%len(world.Continents)]
-		if len(decision.Events) > 0 {
+		continent := pickSimulationContinent(world, cycleType)
+		createEvents := cycleType == SimulationCycleManual || cycleType == SimulationCycleHourly || cycleType == SimulationCycleDaily
+		createWeather := cycleType == SimulationCycleManual || cycleType == SimulationCycleHourly || cycleType == SimulationCycleDaily
+		createConflicts := cycleType == SimulationCycleManual || cycleType == SimulationCycleHourly || cycleType == SimulationCycleDaily
+		sendMessages := cycleType == SimulationCycleManual || cycleType == SimulationCycleDaily
+		if createEvents && len(decision.Events) > 0 {
 			event := decision.Events[0]
 			starts := now
 			ends := starts.Add(2 * time.Hour)
@@ -1183,11 +1198,11 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 				applied["event"] = event.Title
 			}
 		}
-		if len(decision.Weather) > 0 {
+		if createWeather && len(decision.Weather) > 0 {
 			weather := decision.Weather[0]
 			starts := now
 			ends := starts.Add(3 * time.Hour)
-			effects := mustJSON(defaultMap(weather.Effects, map[string]any{"energy": -10, "satisfaction": -5}))
+			effects := mustJSON(defaultMap(weather.Effects, defaultWeatherEffects(continent.AIBehaviorProfile)))
 			if err := tx.Create(&models.WeatherEvent{
 				WorldID:     world.Id,
 				ContinentID: continent.Id,
@@ -1204,7 +1219,7 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 			}
 			applied["weather"] = weather.Title
 		}
-		if len(decision.Conflicts) > 0 {
+		if createConflicts && len(decision.Conflicts) > 0 {
 			conflict := decision.Conflicts[0]
 			starts := now
 			ends := starts.Add(6 * time.Hour)
@@ -1250,7 +1265,7 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 				applied["conflict"] = conflict.Title
 			}
 		}
-		if strings.TrimSpace(decision.Message.Message) != "" {
+		if sendMessages && strings.TrimSpace(decision.Message.Message) != "" {
 			var saves []models.PlayerSave
 			if err := tx.Where("world_id = ? AND continent_id = ? AND updated_at >= ?", world.Id, continent.Id, now.Add(-7*24*time.Hour)).
 				Limit(200).
@@ -1274,14 +1289,21 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 			}
 			applied["messages"] = len(saves)
 		}
-		return tx.Model(&models.World{}).Where("id = ?", world.Id).Updates(map[string]any{
-			"current_cycle":         world.CurrentCycle + 1,
-			"global_tension_level":  clamp(world.GlobalTensionLevel+3, 0, 100),
-			"global_weather_risk":   clamp(world.GlobalWeatherRisk+2, 0, 100),
-			"last_simulation_at":    &now,
-			"last_daily_message_at": &now,
-			"global_economic_state": defaultText(world.GlobalEconomicState, "stable"),
-		}).Error
+		tensionDelta, weatherDelta := simulationRiskDeltas(continent.AIBehaviorProfile, cycleType)
+		updates := map[string]any{
+			"current_cycle":        world.CurrentCycle + 1,
+			"global_tension_level": clamp(world.GlobalTensionLevel+tensionDelta, 0, 100),
+			"global_weather_risk":  clamp(world.GlobalWeatherRisk+weatherDelta, 0, 100),
+			"last_simulation_at":   &now,
+			"global_economic_state": defaultText(world.GlobalEconomicState, profileEconomicState(
+				continent.AIBehaviorProfile,
+				world.GlobalEconomicState,
+			)),
+		}
+		if sendMessages {
+			updates["last_daily_message_at"] = &now
+		}
+		return tx.Model(&models.World{}).Where("id = ?", world.Id).Updates(updates).Error
 	})
 	if err != nil {
 		status = "failed"
@@ -1294,7 +1316,8 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 	}
 	decisionRow := &models.AIWorldDecision{
 		WorldID:            world.Id,
-		Type:               "simulation",
+		ContinentID:        decisionContinentID(world, cycleType),
+		Type:               "simulation_" + cycleType,
 		InputSnapshotJSON:  inputJSON,
 		OutputDecisionJSON: outputJSON,
 		AppliedChangesJSON: mustJSON(applied),
@@ -1312,6 +1335,170 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 		log.Printf("[world-sim] decision log failed world_id=%d err=%v", world.Id, createErr)
 	}
 	return decisionRow, err
+}
+
+func (s *WorldGameService) DryRunWorldSimulation(ctx context.Context, worldID uint, cycleType string) (*models.AIWorldDecision, error) {
+	cycleType = normalizeSimulationCycle(cycleType)
+	var world models.World
+	query := s.db.WithContext(ctx).Preload("Continents", func(db *gorm.DB) *gorm.DB {
+		return db.Order("`index` ASC")
+	})
+	if worldID == 0 {
+		query = query.Where("status = ?", WorldStatusActive).Order("id ASC")
+	}
+	if err := query.First(&world, worldID).Error; err != nil {
+		return nil, err
+	}
+	decision, providerName, modelName, status, callErr := s.callNEXUS(ctx, world)
+	continent := pickSimulationContinent(world, cycleType)
+	tensionDelta, weatherDelta := simulationRiskDeltas(continent.AIBehaviorProfile, cycleType)
+	applied := map[string]any{
+		"dryRun":        true,
+		"cycleType":     cycleType,
+		"targetWorld":   world.Id,
+		"targetProfile": continent.AIBehaviorProfile,
+		"targetContinent": map[string]any{
+			"id":    continent.Id,
+			"name":  continent.Name,
+			"index": continent.Index,
+		},
+		"wouldCreateEvents":    cycleType != SimulationCycleLight && len(decision.Events) > 0,
+		"wouldCreateWeather":   cycleType != SimulationCycleLight && len(decision.Weather) > 0,
+		"wouldCreateConflicts": cycleType != SimulationCycleLight && len(decision.Conflicts) > 0,
+		"wouldSendMessages":    (cycleType == SimulationCycleManual || cycleType == SimulationCycleDaily) && strings.TrimSpace(decision.Message.Message) != "",
+		"tensionDelta":         tensionDelta,
+		"weatherDelta":         weatherDelta,
+	}
+	row := &models.AIWorldDecision{
+		WorldID:            world.Id,
+		ContinentID:        &continent.Id,
+		Type:               "simulation_" + cycleType,
+		InputSnapshotJSON:  mustJSON(map[string]any{"world": world, "cycleType": cycleType, "dryRun": true}),
+		OutputDecisionJSON: mustJSON(decision),
+		AppliedChangesJSON: mustJSON(applied),
+		Provider:           providerName,
+		Model:              modelName,
+		Status:             DecisionStatusDryRun,
+	}
+	if callErr != nil {
+		row.Error = callErr.Error()
+	} else if status != "" && status != DecisionStatusApplied {
+		row.Error = status
+	}
+	return row, nil
+}
+
+func normalizeSimulationCycle(cycleType string) string {
+	switch strings.ToLower(strings.TrimSpace(cycleType)) {
+	case SimulationCycleLight, "15m", "quarter":
+		return SimulationCycleLight
+	case SimulationCycleHourly, "hourly", "1h", "continent":
+		return SimulationCycleHourly
+	case SimulationCycleDaily, "24h", "day":
+		return SimulationCycleDaily
+	default:
+		return SimulationCycleManual
+	}
+}
+
+func pickSimulationContinent(world models.World, cycleType string) models.Continent {
+	if len(world.Continents) == 0 {
+		return models.Continent{}
+	}
+	index := world.CurrentCycle % len(world.Continents)
+	if cycleType == SimulationCycleDaily {
+		var selected models.Continent
+		for i, continent := range world.Continents {
+			if i == 0 || continent.TensionLevel > selected.TensionLevel {
+				selected = continent
+			}
+		}
+		if selected.Id != 0 {
+			return selected
+		}
+	}
+	if cycleType == SimulationCycleHourly {
+		var selected models.Continent
+		for i, continent := range world.Continents {
+			if i == 0 || continent.CurrentPlayers < selected.CurrentPlayers {
+				selected = continent
+			}
+		}
+		if selected.Id != 0 {
+			return selected
+		}
+	}
+	return world.Continents[index]
+}
+
+func decisionContinentID(world models.World, cycleType string) *uint {
+	continent := pickSimulationContinent(world, cycleType)
+	if continent.Id == 0 {
+		return nil
+	}
+	id := continent.Id
+	return &id
+}
+
+func simulationRiskDeltas(profile string, cycleType string) (int, int) {
+	tension := 1
+	weather := 1
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "militaire":
+		tension = 5
+	case "commercial":
+		tension = -1
+	case "diplomatique":
+		tension = -2
+	case "instable":
+		tension = 6
+		weather = 3
+	case "écologique", "ecologique":
+		weather = 5
+	case "technologique":
+		tension = 2
+		weather = 2
+	}
+	switch cycleType {
+	case SimulationCycleLight:
+		tension = clamp(tension, -2, 2)
+		weather = clamp(weather, 0, 2)
+	case SimulationCycleDaily:
+		tension *= 2
+		weather *= 2
+	}
+	return tension, weather
+}
+
+func defaultWeatherEffects(profile string) map[string]any {
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "commercial":
+		return map[string]any{"credits": -8, "constructionCost": 12}
+	case "écologique", "ecologique":
+		return map[string]any{"food": -12, "satisfaction": -6}
+	case "technologique":
+		return map[string]any{"energy": -12, "research": -5}
+	case "militaire":
+		return map[string]any{"energy": -8, "defense": -5}
+	default:
+		return map[string]any{"energy": -10, "satisfaction": -5}
+	}
+}
+
+func profileEconomicState(profile string, current string) string {
+	if strings.TrimSpace(current) != "" {
+		return current
+	}
+	switch strings.ToLower(strings.TrimSpace(profile)) {
+	case "commercial":
+		return "expansion"
+	case "instable":
+		return "volatile"
+	case "technologique":
+		return "innovation"
+	default:
+		return "stable"
+	}
 }
 
 func (s *WorldGameService) AIProviderStatuses() []AIProviderStatus {

@@ -140,8 +140,88 @@ func (s *Server) gameDashboardAPI(c *gin.Context) {
 		"stats":          counts,
 		"lastSimulation": lastWorld.LastSimulationAt,
 		"providers":      service.NewWorldGameService(s.db).AIProviderStatuses(),
+		"charts":         s.gameDashboardCharts(c, now),
 		"generatedAt":    now,
 	})
+}
+
+type gameChartPoint struct {
+	Label string `json:"label"`
+	Count int64  `json:"count"`
+	Value int64  `json:"value,omitempty"`
+}
+
+func (s *Server) gameDashboardCharts(c *gin.Context, now time.Time) gin.H {
+	ctx := c.Request.Context()
+	chatActivity := make([]gameChartPoint, 0)
+	_ = s.db.WithContext(ctx).
+		Model(&models.ChatMessage{}).
+		Select("channel_type as label, COUNT(*) as count").
+		Where("created_at >= ?", now.Add(-7*24*time.Hour)).
+		Group("channel_type").
+		Order("channel_type ASC").
+		Scan(&chatActivity).Error
+
+	playerGrowth := make([]gameChartPoint, 0)
+	_ = s.db.WithContext(ctx).
+		Model(&models.PlayerSave{}).
+		Select("DATE(created_at) as label, COUNT(*) as count").
+		Where("created_at >= ?", now.Add(-14*24*time.Hour)).
+		Group("DATE(created_at)").
+		Order("DATE(created_at) ASC").
+		Scan(&playerGrowth).Error
+
+	conflictsByIntensity := make([]gameChartPoint, 0)
+	_ = s.db.WithContext(ctx).
+		Model(&models.Conflict{}).
+		Select("CASE WHEN intensity >= 80 THEN 'critical' WHEN intensity >= 60 THEN 'high' WHEN intensity >= 30 THEN 'medium' ELSE 'low' END as label, COUNT(*) as count").
+		Group("label").
+		Order("label ASC").
+		Scan(&conflictsByIntensity).Error
+
+	weatherBySeverity := make([]gameChartPoint, 0)
+	_ = s.db.WithContext(ctx).
+		Model(&models.WeatherEvent{}).
+		Select("CASE WHEN severity >= 80 THEN 'critical' WHEN severity >= 60 THEN 'high' WHEN severity >= 30 THEN 'medium' ELSE 'low' END as label, COUNT(*) as count").
+		Group("label").
+		Order("label ASC").
+		Scan(&weatherBySeverity).Error
+
+	resources := make([]gameChartPoint, 0)
+	var totals struct {
+		Food    int64
+		Energy  int64
+		Credits int64
+		Gems    int64
+	}
+	_ = s.db.WithContext(ctx).
+		Model(&models.PlayerSave{}).
+		Select("COALESCE(SUM(food),0) as food, COALESCE(SUM(energy),0) as energy, COALESCE(SUM(credits),0) as credits, COALESCE(SUM(gems),0) as gems").
+		Scan(&totals).Error
+	resources = append(resources,
+		gameChartPoint{Label: "food", Value: totals.Food},
+		gameChartPoint{Label: "energy", Value: totals.Energy},
+		gameChartPoint{Label: "credits", Value: totals.Credits},
+		gameChartPoint{Label: "gems", Value: totals.Gems},
+	)
+
+	rewardsClaimed := make([]gameChartPoint, 0)
+	_ = s.db.WithContext(ctx).
+		Model(&models.GameEventClaim{}).
+		Select("DATE(created_at) as label, COUNT(*) as count").
+		Where("created_at >= ?", now.Add(-14*24*time.Hour)).
+		Group("DATE(created_at)").
+		Order("DATE(created_at) ASC").
+		Scan(&rewardsClaimed).Error
+
+	return gin.H{
+		"chatActivity":         chatActivity,
+		"playerGrowth":         playerGrowth,
+		"conflictsByIntensity": conflictsByIntensity,
+		"weatherBySeverity":    weatherBySeverity,
+		"resources":            resources,
+		"rewardsClaimed":       rewardsClaimed,
+	}
 }
 
 func (s *Server) gameListWorldsAPI(c *gin.Context) {
@@ -188,7 +268,15 @@ func (s *Server) gameSimulateWorldAPI(world *service.WorldGameService) gin.Handl
 		if c.Param("id") != "" {
 			worldID, _ = gameParam(c, "id")
 		}
-		decision, err := world.SimulateWorld(c.Request.Context(), worldID, "admin")
+		cycleType := c.Query("cycleType")
+		if cycleType == "" {
+			var payload struct {
+				CycleType string `json:"cycleType"`
+			}
+			_ = c.ShouldBindJSON(&payload)
+			cycleType = payload.CycleType
+		}
+		decision, err := world.SimulateWorldCycle(c.Request.Context(), worldID, "admin", cycleType)
 		if err == nil && decision != nil {
 			s.gameAudit(c, "simulate", "world", strconv.FormatUint(uint64(decision.WorldID), 10), nil, decision)
 		}
@@ -480,7 +568,12 @@ func (s *Server) gameDecisionDryRunAPI(c *gin.Context) {
 	}
 	var item models.AIWorldDecision
 	err = s.db.WithContext(c.Request.Context()).First(&item, id).Error
-	gameJSON(c, gin.H{"dryRun": true, "decision": item}, err)
+	if err != nil {
+		gameJSON(c, nil, err)
+		return
+	}
+	replay, err := service.NewWorldGameService(s.db).DryRunWorldSimulation(c.Request.Context(), item.WorldID, item.Type)
+	gameJSON(c, gin.H{"dryRun": true, "source": item, "decision": replay}, err)
 }
 
 func (s *Server) gameListModelAPI(dest any, order string) gin.HandlerFunc {

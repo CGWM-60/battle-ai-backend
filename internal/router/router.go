@@ -81,6 +81,10 @@ func RouterApp(database *gorm.DB) {
 	adminAPI.PATCH("/users/:id/progression", updateUserProgression(database))
 	registerAdminWorldGameRoutes(adminAPI, database)
 
+	strictAdminAPI := router.Group("/api/admin")
+	strictAdminAPI.Use(jwtAuth(), adminAPIAuth(), queue.Middleware())
+	registerStrictAdminWorldGameRoutes(strictAdminAPI, database)
+
 	private.POST("/battle", startBattle(database))
 	private.POST("/battles", startBattle(database))
 	private.GET("/battles", listBattles(database))

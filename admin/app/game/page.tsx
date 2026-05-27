@@ -10,6 +10,13 @@ type GameDashboard = {
   stats: Record<string, number>;
   lastSimulation: string | null;
   providers: { name: string; displayName: string; configured: boolean; primary: boolean; fallback: boolean; model: string }[];
+  charts: Record<string, ChartPoint[]>;
+};
+
+type ChartPoint = {
+  label: string;
+  count?: number;
+  value?: number;
 };
 
 export default function GamePage() {
@@ -90,8 +97,45 @@ export default function GamePage() {
               </div>
             </article>
           </section>
+          <section className="triple">
+            <ChartPanel title="Activite chat" items={data.charts.chatActivity} metric="count" />
+            <ChartPanel title="Croissance joueurs" items={data.charts.playerGrowth} metric="count" />
+            <ChartPanel title="Rewards reclames" items={data.charts.rewardsClaimed} metric="count" />
+          </section>
+          <section className="triple">
+            <ChartPanel title="Conflits par intensite" items={data.charts.conflictsByIntensity} metric="count" />
+            <ChartPanel title="Meteo par severite" items={data.charts.weatherBySeverity} metric="count" />
+            <ChartPanel title="Ressources serveur" items={data.charts.resources} metric="value" />
+          </section>
         </>
       ) : null}
     </AdminShell>
+  );
+}
+
+function ChartPanel({ title, items = [], metric }: { title: string; items?: ChartPoint[]; metric: "count" | "value" }) {
+  const max = Math.max(1, ...items.map((item) => Number(item[metric] || 0)));
+  return (
+    <article className="panel">
+      <h2>{title}</h2>
+      {items.length === 0 ? (
+        <p className="muted-panel">Aucune donnee.</p>
+      ) : (
+        <div className="mini-bars">
+          {items.map((item) => {
+            const value = Number(item[metric] || 0);
+            return (
+              <div className="mini-bar-row" key={`${title}-${item.label}`}>
+                <span>{item.label}</span>
+                <div className="mini-bar-track">
+                  <div className="mini-bar-fill" style={{ width: `${Math.max(4, Math.round((value / max) * 100))}%` }} />
+                </div>
+                <strong>{formatNumber(value)}</strong>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </article>
   );
 }

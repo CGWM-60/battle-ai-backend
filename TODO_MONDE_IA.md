@@ -11,8 +11,11 @@
 - [x] Completer les regles guildes: permissions owner/officer, transfert owner, promotion/retrogradation stricte, contributions.
 - [x] Ajouter WebSocket/SSE pour le chat si le client en a besoin; conserver le polling pagine comme fallback.
 
+- [x] Enrichir la simulation NEXUS: cycles 15 min/1h/daily separes, profils continentaux plus differencies, replay/dry-run plus complet.
+- [x] Ajouter les graphiques admin demandes: activite chat, croissance joueurs, conflits par intensite, meteo par severite, ressources/recompenses.
+- [x] Ajouter la matrice de tests prioritaire complete: assignation DB, guildes, chat scopes, events, claims, conflits, manifest.
+- [x] Ajouter des alias stricts `/api/admin/...` si un client externe ne peut pas utiliser `/admin/api/game/...` ou `/api/v1/admin/...`.
+
 ## A faire
-- [ ] Enrichir la simulation NEXUS: cycles 15 min/1h/daily separes, profils continentaux plus differencies, replay/dry-run plus complet.
-- [ ] Ajouter les graphiques admin demandes: activite chat, croissance joueurs, conflits par intensite, meteo par severite, ressources/recompenses.
-- [ ] Ajouter la matrice de tests prioritaire complete: assignation DB, guildes, chat scopes, events, claims, conflits, manifest.
-- [ ] Ajouter des alias stricts `/api/admin/...` si un client externe ne peut pas utiliser `/admin/api/game/...` ou `/api/v1/admin/...`.
+
+- [ ] Passer les tests restants de la matrice en integration DB reelle si un environnement MySQL de test dedie est ajoute.

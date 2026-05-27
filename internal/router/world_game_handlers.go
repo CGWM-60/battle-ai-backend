@@ -127,8 +127,15 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 }
 
 func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
+	registerAdminWorldGameRoutesAt(group.Group("/admin"), database)
+}
+
+func registerStrictAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
+	registerAdminWorldGameRoutesAt(group, database)
+}
+
+func registerAdminWorldGameRoutesAt(admin *gin.RouterGroup, database *gorm.DB) {
 	world := service.NewWorldGameService(database)
-	admin := group.Group("/admin")
 	game := admin.Group("/game")
 	game.GET("/dashboard", adminGameDashboard(database, world))
 	game.GET("/stats", adminGameDashboard(database, world))
@@ -148,7 +155,7 @@ func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid world id"})
 			return
 		}
-		decision, err := world.SimulateWorld(c.Request.Context(), id, "admin-api")
+		decision, err := world.SimulateWorldCycle(c.Request.Context(), id, "admin-api", simulationCycleFromRequest(c))
 		writeWorldResponse(c, decision, err)
 	})
 	admin.GET("/worlds/:id/continents", func(c *gin.Context) {
@@ -174,7 +181,7 @@ func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		decision, err := world.SimulateWorld(c.Request.Context(), continent.WorldID, "admin-continent")
+		decision, err := world.SimulateWorldCycle(c.Request.Context(), continent.WorldID, "admin-continent", simulationCycleFromRequest(c))
 		writeWorldResponse(c, decision, err)
 	})
 
@@ -227,7 +234,12 @@ func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
 	admin.GET("/ai/decisions/:id", adminGet[models.AIWorldDecision](database, false))
 	admin.POST("/ai/decisions/:id/replay-dry-run", func(c *gin.Context) {
 		item, err := adminFindByID[models.AIWorldDecision](c, database)
-		writeWorldResponse(c, gin.H{"dryRun": true, "decision": item}, err)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		replay, err := world.DryRunWorldSimulation(c.Request.Context(), item.WorldID, item.Type)
+		writeWorldResponse(c, gin.H{"dryRun": true, "source": item, "decision": replay}, err)
 	})
 	admin.GET("/ai/providers", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"providers": world.AIProviderStatuses()})
@@ -570,8 +582,75 @@ func adminGameDashboard(database *gorm.DB, world *service.WorldGameService) gin.
 			"stats":          counts,
 			"lastSimulation": last.LastSimulationAt,
 			"providers":      world.AIProviderStatuses(),
+			"charts":         adminDashboardCharts(c, database),
 			"generatedAt":    time.Now(),
 		})
+	}
+}
+
+type adminChartPoint struct {
+	Label string `json:"label"`
+	Count int64  `json:"count"`
+	Value int64  `json:"value,omitempty"`
+}
+
+func adminDashboardCharts(c *gin.Context, database *gorm.DB) gin.H {
+	now := time.Now()
+	ctx := c.Request.Context()
+	chatActivity := make([]adminChartPoint, 0)
+	_ = database.WithContext(ctx).Model(&models.ChatMessage{}).
+		Select("channel_type as label, COUNT(*) as count").
+		Where("created_at >= ?", now.Add(-7*24*time.Hour)).
+		Group("channel_type").
+		Order("channel_type ASC").
+		Scan(&chatActivity).Error
+	playerGrowth := make([]adminChartPoint, 0)
+	_ = database.WithContext(ctx).Model(&models.PlayerSave{}).
+		Select("DATE(created_at) as label, COUNT(*) as count").
+		Where("created_at >= ?", now.Add(-14*24*time.Hour)).
+		Group("DATE(created_at)").
+		Order("DATE(created_at) ASC").
+		Scan(&playerGrowth).Error
+	conflictsByIntensity := make([]adminChartPoint, 0)
+	_ = database.WithContext(ctx).Model(&models.Conflict{}).
+		Select("CASE WHEN intensity >= 80 THEN 'critical' WHEN intensity >= 60 THEN 'high' WHEN intensity >= 30 THEN 'medium' ELSE 'low' END as label, COUNT(*) as count").
+		Group("label").
+		Order("label ASC").
+		Scan(&conflictsByIntensity).Error
+	weatherBySeverity := make([]adminChartPoint, 0)
+	_ = database.WithContext(ctx).Model(&models.WeatherEvent{}).
+		Select("CASE WHEN severity >= 80 THEN 'critical' WHEN severity >= 60 THEN 'high' WHEN severity >= 30 THEN 'medium' ELSE 'low' END as label, COUNT(*) as count").
+		Group("label").
+		Order("label ASC").
+		Scan(&weatherBySeverity).Error
+	var totals struct {
+		Food    int64
+		Energy  int64
+		Credits int64
+		Gems    int64
+	}
+	_ = database.WithContext(ctx).Model(&models.PlayerSave{}).
+		Select("COALESCE(SUM(food),0) as food, COALESCE(SUM(energy),0) as energy, COALESCE(SUM(credits),0) as credits, COALESCE(SUM(gems),0) as gems").
+		Scan(&totals).Error
+	rewardsClaimed := make([]adminChartPoint, 0)
+	_ = database.WithContext(ctx).Model(&models.GameEventClaim{}).
+		Select("DATE(created_at) as label, COUNT(*) as count").
+		Where("created_at >= ?", now.Add(-14*24*time.Hour)).
+		Group("DATE(created_at)").
+		Order("DATE(created_at) ASC").
+		Scan(&rewardsClaimed).Error
+	return gin.H{
+		"chatActivity":         chatActivity,
+		"playerGrowth":         playerGrowth,
+		"conflictsByIntensity": conflictsByIntensity,
+		"weatherBySeverity":    weatherBySeverity,
+		"resources": []adminChartPoint{
+			{Label: "food", Value: totals.Food},
+			{Label: "energy", Value: totals.Energy},
+			{Label: "credits", Value: totals.Credits},
+			{Label: "gems", Value: totals.Gems},
+		},
+		"rewardsClaimed": rewardsClaimed,
 	}
 }
 
@@ -691,9 +770,20 @@ func adminPatchStatus[T any](database *gorm.DB, status string) gin.HandlerFunc {
 
 func adminSimulateWorld(world *service.WorldGameService, worldID uint) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		decision, err := world.SimulateWorld(c.Request.Context(), worldID, "admin-api")
+		decision, err := world.SimulateWorldCycle(c.Request.Context(), worldID, "admin-api", simulationCycleFromRequest(c))
 		writeWorldResponse(c, decision, err)
 	}
+}
+
+func simulationCycleFromRequest(c *gin.Context) string {
+	if cycle := strings.TrimSpace(c.Query("cycleType")); cycle != "" {
+		return cycle
+	}
+	var payload struct {
+		CycleType string `json:"cycleType"`
+	}
+	_ = c.ShouldBindJSON(&payload)
+	return payload.CycleType
 }
 
 func adminPlayers(database *gorm.DB) gin.HandlerFunc {
