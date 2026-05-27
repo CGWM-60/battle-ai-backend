@@ -312,6 +312,57 @@ func (s *Server) gameSimulateWorldAPI(world *service.WorldGameService) gin.Handl
 	}
 }
 
+func (s *Server) gameWorldRoutineAPI(world *service.WorldGameService, generate bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var worldID uint
+		if c.Param("id") != "" {
+			id, err := gameParam(c, "id")
+			if err != nil {
+				gameJSON(c, nil, err)
+				return
+			}
+			worldID = id
+		}
+		if generate {
+			routine, decision, err := world.GenerateWorldFourPageRoutine(c.Request.Context(), worldID, "admin")
+			if err == nil && routine != nil {
+				s.gameAudit(c, "generate_routine_4_pages", "world", strconv.FormatUint(uint64(routine.WorldID), 10), nil, gin.H{"routine": routine, "decision": decision})
+			}
+			gameJSON(c, gin.H{"routine": routine, "decision": decision}, err)
+			return
+		}
+		routine, err := world.LatestWorldFourPageRoutine(c.Request.Context(), worldID)
+		gameJSON(c, routine, err)
+	}
+}
+
+func (s *Server) gameRecalculatePlayerMetricsAPI(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		playerID, err := gameParam(c, "id")
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		var save models.PlayerSave
+		err = s.db.WithContext(c.Request.Context()).Where("player_id = ?", playerID).First(&save).Error
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		err = world.CalculateAndStorePlayerWorldMetric(c.Request.Context(), save)
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		var metric models.PlayerWorldMetric
+		err = s.db.WithContext(c.Request.Context()).Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).First(&metric).Error
+		if err == nil {
+			s.gameAudit(c, "recalculate_metrics", "player", strconv.FormatUint(uint64(save.PlayerID), 10), nil, metric)
+		}
+		gameJSON(c, metric, err)
+	}
+}
+
 func (s *Server) gamePlayersAPI(c *gin.Context) {
 	var items []models.PlayerSave
 	err := s.db.WithContext(c.Request.Context()).Preload("World").Preload("Continent").Order("updated_at DESC").Limit(gameLimit(c)).Find(&items).Error

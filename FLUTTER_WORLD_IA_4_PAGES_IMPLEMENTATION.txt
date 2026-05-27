@@ -1,0 +1,522 @@
+IMPLEMENTATION FLUTTER - MONDE IA / 4 PAGES
+Date: 2026-05-27
+
+Objectif
+========
+Ce fichier décrit ce que le front Flutter doit consommer et implémenter pour les 4 pages Monde IA:
+
+1. Conflits actuels
+2. Diplomatie
+3. Commerce international
+4. Météo & Risques
+
+Le backend Go doit rester la source de vérité. Flutter ne doit pas inventer de données.
+Si une donnée est absente:
+- numérique: afficher 0
+- texte: afficher "Non disponible"
+- liste: afficher une liste vide
+
+Tous les appels ci-dessous nécessitent l'auth joueur existante.
+Base API mobile: /api/v1
+
+
+Règles générales Flutter
+========================
+
+1. Ne plus hardcoder les données des 4 pages.
+2. Ne pas afficher les valeurs statiques de maquette si le backend renvoie vide.
+3. Les cartes, tableaux, jauges et boutons doivent être alimentés par API.
+4. Toutes les actions utilisateur doivent appeler le backend.
+5. Après une action réussie, recharger la page ou au minimum le widget concerné.
+6. Les IDs backend doivent être conservés pour les actions détail/intervention.
+7. Les listes doivent supporter empty/loading/error.
+8. Les pages peuvent poller:
+   - toutes les 60 secondes pour données normales
+   - toutes les 15 secondes si conflit critique ou météo critique active
+
+
+Endpoints globaux utiles
+========================
+
+GET /api/v1/world/current
+Retourne le monde courant du joueur.
+
+GET /api/v1/world/status
+Retourne l'état serveur global du joueur.
+
+GET /api/v1/world/routine
+Retourne la dernière routine IA 4 pages générée pour le monde du joueur.
+Si aucune routine n'existe encore, le backend peut en générer une.
+
+GET /api/v1/player/metrics
+Retourne les métriques calculées du joueur:
+- popularity
+- stability
+- sustainability
+- conflictScore
+- diplomacyScore
+- commerceScore
+- weatherScore
+
+Ces métriques sont calculées côté backend depuis les actions réelles des 4 piliers:
+- conflits
+- diplomatie
+- commerce
+- météo
+
+
+Contrat /world/routine
+======================
+
+Réponse attendue:
+
+{
+  "id": 1,
+  "worldId": 1,
+  "routineVersion": "WORLD_IA_ROUTINE_4_PAGES",
+  "snapshotJson": {
+    "generatedAt": "ISO8601",
+    "world": {},
+    "continents": [],
+    "conflicts": [],
+    "diplomacy": {},
+    "commerce": {},
+    "weather": {},
+    "events": [],
+    "playerMetrics": [],
+    "metricsSummary": {},
+    "qualityControls": {}
+  },
+  "aiOutputJson": {
+    "summary": "string",
+    "threatLevel": 0,
+    "worldMood": "surveille|modere|eleve|critique",
+    "pillarDecisions": {
+      "conflicts": {},
+      "diplomacy": {},
+      "commerce": {},
+      "weather": {}
+    },
+    "playerMetricPolicy": {},
+    "alerts": []
+  },
+  "metricsJson": [],
+  "provider": "string",
+  "model": "string",
+  "status": "applied|fallback|failed",
+  "error": "string",
+  "createdAt": "ISO8601"
+}
+
+Usage Flutter:
+- Utiliser snapshotJson pour précharger les 4 pages.
+- Utiliser aiOutputJson pour afficher résumé NEXUS, alertes et niveau de menace.
+- Utiliser metricsJson ou /player/metrics pour les métriques joueur.
+
+
+Métriques joueur
+================
+
+Endpoint:
+GET /api/v1/player/metrics
+
+Réponse:
+
+{
+  "playerId": 1,
+  "worldId": 1,
+  "continentId": 1,
+  "popularity": 0,
+  "stability": 0,
+  "sustainability": 0,
+  "conflictScore": 0,
+  "diplomacyScore": 0,
+  "commerceScore": 0,
+  "weatherScore": 0,
+  "inputJson": {},
+  "generatedAt": "ISO8601"
+}
+
+Affichage recommandé:
+- Popularité: jauge ou KPI
+- Stabilité: jauge ou KPI
+- Durabilité: jauge ou KPI
+- Scores piliers: mini barres sur les pages concernées
+
+Important:
+- Ces scores ne sont pas calculés côté Flutter.
+- Flutter affiche uniquement ce que le backend renvoie.
+
+
+PAGE 1 - COMMERCE INTERNATIONAL
+===============================
+
+Endpoints:
+
+GET /api/v1/world/commerce/routes
+GET /api/v1/world/commerce/details?type=export
+GET /api/v1/world/commerce/details?type=import
+POST /api/v1/world/commerce/agreements
+POST /api/v1/world/commerce/routes/optimize
+GET /api/v1/world/commerce/report
+
+Route item:
+
+{
+  "id": "string",
+  "route": "Origine -> Destination",
+  "cargo": "string",
+  "volume": 0,
+  "efficiency": 0,
+  "status": "active|perturbe|Non disponible"
+}
+
+Report:
+
+{
+  "report": {
+    "totalVolume": 0,
+    "activeRoutes": 0,
+    "routesCount": 0
+  }
+}
+
+Interactions à implémenter:
+
+1. Bouton "Voir détails" exportations
+   - appeler GET /api/v1/world/commerce/details?type=export
+   - ouvrir bottom sheet ou page détail
+   - afficher liste retournée par backend
+
+2. Bouton "Voir détails" importations
+   - appeler GET /api/v1/world/commerce/details?type=import
+   - ouvrir bottom sheet ou page détail
+
+3. Bouton "Nouvel accord"
+   - appeler POST /api/v1/world/commerce/agreements
+   - body possible:
+     {
+       "target": "Valoria",
+       "type": "commercial"
+     }
+   - afficher succès ou erreur backend
+
+4. Bouton "Optimiser routes"
+   - appeler POST /api/v1/world/commerce/routes/optimize
+   - afficher recommendation retournée
+
+5. Bouton "Rapport économique"
+   - appeler GET /api/v1/world/commerce/report
+   - afficher totalVolume, activeRoutes, routesCount
+
+Carte:
+- Tracer une ligne seulement si route contient "Origine -> Destination".
+- Origine et Destination doivent matcher:
+  nordrealm, valoria, aurora, sylvanie, dravon, novus.
+- Si parsing impossible: pas de ligne.
+
+
+PAGE 2 - CONFLITS ACTUELS
+=========================
+
+Endpoints:
+
+GET /api/v1/world/conflicts
+GET /api/v1/world/conflicts/report
+GET /api/v1/world/conflicts/:id/detail
+POST /api/v1/world/conflicts/:id/intervene
+
+Conflict item:
+
+{
+  "id": "string",
+  "title": "string",
+  "description": "string",
+  "attackerName": "string",
+  "defenderName": "string",
+  "intensity": 0,
+  "riskLevel": "surveille|modere|eleve|critique",
+  "status": "active|resolved|Non disponible",
+  "startsAt": "ISO8601",
+  "endsAt": "ISO8601"
+}
+
+Interactions à implémenter:
+
+1. Bouton "Voir détails"
+   - appeler GET /api/v1/world/conflicts/:id/detail
+   - afficher description complète, acteurs, risque, dates, intensité
+
+2. Bouton "Intervenir"
+   - appeler POST /api/v1/world/conflicts/:id/intervene
+   - body possible:
+     {
+       "actionType": "intervene"
+     }
+   - si succès: afficher action acceptée et recharger conflits/report
+
+3. Lien "Afficher tous les conflits"
+   - afficher la liste complète retournée par GET /api/v1/world/conflicts
+
+4. Fil d'actualité en direct
+   - polling toutes les 15 secondes si un conflit riskLevel == critique
+   - sinon toutes les 60 secondes
+
+Carte:
+- Ligne pointillée seulement si attackerName et defenderName sont mappables.
+- Si l'un vaut "Non disponible": ne pas tracer de ligne.
+
+
+PAGE 3 - DIPLOMATIE
+===================
+
+Endpoints:
+
+GET /api/v1/world/diplomacy/relations
+GET /api/v1/world/diplomacy/treaties
+GET /api/v1/world/diplomacy/reports
+GET /api/v1/world/diplomacy/report
+GET /api/v1/world/diplomacy/emissaries/status
+POST /api/v1/world/diplomacy/negotiations/open
+POST /api/v1/world/diplomacy/emissaries/send
+
+Relation item:
+
+{
+  "id": "string",
+  "faction": "string",
+  "continentId": 1,
+  "score": 0,
+  "stance": "allie|neutre|independant|hostile",
+  "politicalState": "string"
+}
+
+Emissary status:
+
+{
+  "available": 0,
+  "total": 0,
+  "cooldownSeconds": 0
+}
+
+Interactions à implémenter:
+
+1. Bouton "Voir toutes les relations"
+   - appeler GET /api/v1/world/diplomacy/relations
+   - afficher toutes les relations dans une page/liste
+
+2. Bouton "Voir traités"
+   - appeler GET /api/v1/world/diplomacy/treaties
+   - afficher traités réels
+   - si liste vide: afficher "Aucun traité actif"
+
+3. Bouton "Ouvrir négociation"
+   - appeler POST /api/v1/world/diplomacy/negotiations/open
+   - body possible:
+     {
+       "target": "Valoria",
+       "type": "defense_pact"
+     }
+
+4. Bouton "Voir détails" réputation
+   - utiliser GET /api/v1/player/metrics
+   - afficher diplomacyScore, popularity, stability
+
+5. Bouton "Envoyer émissaire"
+   - appeler d'abord GET /api/v1/world/diplomacy/emissaries/status
+   - si available == 0: désactiver bouton ou afficher message
+   - sinon appeler POST /api/v1/world/diplomacy/emissaries/send
+   - si backend renvoie 409: afficher erreur backend
+
+6. Bouton "Consulter" rapports
+   - appeler GET /api/v1/world/diplomacy/reports
+   - afficher les rapports IA réels
+
+7. Rapport principal
+   - appeler GET /api/v1/world/diplomacy/report
+   - afficher dernier rapport ou état vide
+
+
+PAGE 4 - MÉTÉO & RISQUES
+=========================
+
+Endpoints:
+
+GET /api/v1/world/weather/forecast
+GET /api/v1/world/weather/zones
+POST /api/v1/world/weather/actions/:actionKey
+GET /api/v1/world/weather/report
+
+Weather item:
+
+{
+  "id": "string",
+  "type": "string",
+  "title": "string",
+  "description": "string",
+  "severity": 0,
+  "region": "string",
+  "startsAt": "ISO8601",
+  "endsAt": "ISO8601"
+}
+
+Actions météo autorisées:
+- deploy-aid
+- preposition-resources
+- activate-defense-protocol
+
+Interactions à implémenter:
+
+1. Bouton "Voir détails" sur une alerte
+   - utiliser item météo déjà chargé ou recharger forecast
+   - afficher title, description, region, severity, startsAt, endsAt
+
+2. Bouton "Voir prévisions détaillées"
+   - appeler GET /api/v1/world/weather/forecast
+   - afficher liste complète
+
+3. Bouton "Voir carte des zones"
+   - appeler GET /api/v1/world/weather/zones
+   - afficher zones et risque
+
+4. Bouton "Déployer aide"
+   - appeler POST /api/v1/world/weather/actions/deploy-aid
+   - body possible:
+     {
+       "regions": ["Nordrealm"]
+     }
+
+5. Bouton "Prépositionner"
+   - appeler POST /api/v1/world/weather/actions/preposition-resources
+
+6. Bouton "Activer protocole"
+   - appeler POST /api/v1/world/weather/actions/activate-defense-protocol
+
+7. Bouton "Voir rapport complet"
+   - appeler GET /api/v1/world/weather/report
+   - afficher activeEvents, averageSeverity, globalRiskLabel
+
+Si actionKey est invalide:
+- backend renvoie erreur
+- Flutter doit afficher l'erreur
+
+
+Mapping carte
+=============
+
+Noms reconnus côté Flutter:
+
+- nordrealm
+- valoria
+- aurora
+- sylvanie
+- dravon
+- novus
+
+Créer une fonction de normalisation:
+- lowercase
+- trim
+- enlever accents si nécessaire
+
+Exemple:
+
+String normalizeRegion(String value) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replaceAll('é', 'e')
+    .replaceAll('è', 'e')
+    .replaceAll('ê', 'e')
+    .replaceAll('à', 'a')
+    .replaceAll('û', 'u');
+}
+
+
+Architecture Flutter recommandée
+================================
+
+Créer ou compléter:
+
+lib/features/world_ai/
+  data/
+    world_ai_api.dart
+    world_ai_repository.dart
+    models/
+      world_routine.dart
+      world_conflict.dart
+      diplomacy_relation.dart
+      commerce_route.dart
+      weather_risk.dart
+      player_world_metrics.dart
+  presentation/
+    pages/
+      commerce_international_page.dart
+      current_conflicts_page.dart
+      diplomacy_page.dart
+      weather_risks_page.dart
+    widgets/
+      world_map.dart
+      kpi_card.dart
+      risk_badge.dart
+      action_button.dart
+      metric_gauge.dart
+
+
+Service API Flutter
+===================
+
+Méthodes minimales:
+
+- getWorldRoutine()
+- getPlayerMetrics()
+- getConflicts()
+- getConflictReport()
+- getConflictDetail(String id)
+- interveneConflict(String id)
+- getDiplomacyRelations()
+- getDiplomacyTreaties()
+- getDiplomacyReports()
+- getDiplomacyReport()
+- getEmissaryStatus()
+- openNegotiation(Map body)
+- sendEmissary(Map body)
+- getCommerceRoutes()
+- getCommerceDetails(String type)
+- createCommerceAgreement(Map body)
+- optimizeCommerceRoutes()
+- getCommerceReport()
+- getWeatherForecast()
+- getWeatherZones()
+- runWeatherAction(String actionKey, Map body)
+- getWeatherReport()
+
+
+Gestion erreurs
+===============
+
+401:
+- rediriger vers login ou refresh token selon auth existante
+
+403:
+- afficher accès refusé
+
+409:
+- action impossible mais normale
+- exemple: aucun émissaire disponible
+
+500:
+- afficher erreur serveur et proposer retry
+
+
+Checklist Flutter avant validation
+==================================
+
+- Les 4 pages ne contiennent plus de tableaux statiques.
+- Tous les boutons cités appellent un endpoint backend.
+- Les gauges popularité/stabilité/durabilité viennent de /api/v1/player/metrics.
+- Les lignes de carte ne sont dessinées que si les régions sont mappables.
+- Les listes vides affichent un état vide propre.
+- Les erreurs backend sont visibles.
+- Le polling critique est activé seulement si risque critique.
+- Aucune valeur fake "+12%" ou "8.76M" n'est affichée sans source backend.
+
