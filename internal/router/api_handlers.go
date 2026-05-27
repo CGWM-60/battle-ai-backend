@@ -1409,11 +1409,27 @@ func joinCoopParty(database *gorm.DB) gin.HandlerFunc {
 
 func leaveCoopParty(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if err := newCoopService(database).Leave(c.Request.Context(), c.Param("code"), currentUserID(c)); err != nil {
+		userID := currentUserID(c)
+		party, err := newCoopService(database).Get(c.Request.Context(), c.Param("code"))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "coop party not found"})
+			return
+		}
+		shouldEndLive := party.HostUserID == userID && coopPartyCarriesRolePlay(party)
+		if err := newCoopService(database).Leave(c.Request.Context(), c.Param("code"), userID); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"left": true})
+		endedLives := 0
+		if shouldEndLive {
+			var err error
+			endedLives, err = endLiveSessionsByCoopParty(c.Request.Context(), database, party.Id, "host left roleplay coop party")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot end coop live sessions"})
+				return
+			}
+		}
+		c.JSON(http.StatusOK, gin.H{"left": true, "liveEnded": endedLives > 0, "endedLiveSessions": endedLives})
 	}
 }
 
@@ -1595,6 +1611,67 @@ func createCoopLiveSession(ctx context.Context, database *gorm.DB, ownerID uint,
 		}
 		return tx.Create(&event).Error
 	})
+}
+
+func coopPartyCarriesRolePlay(party *models.CoopParty) bool {
+	if party == nil {
+		return false
+	}
+	return party.RolePlaySessionID != nil || party.Mode == constants.ModeRolePlayIA
+}
+
+func endLiveSessionsByCoopParty(ctx context.Context, database *gorm.DB, coopPartyID uint, message string) (int, error) {
+	var sessions []models.LiveSession
+	if err := database.WithContext(ctx).
+		Where("coop_party_id = ? AND status <> ?", coopPartyID, constants.LiveStatusEnded).
+		Find(&sessions).Error; err != nil {
+		return 0, err
+	}
+
+	ended := 0
+	now := time.Now()
+	for _, session := range sessions {
+		err := database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var last models.LiveEvent
+			nextSequence := 1
+			if err := tx.Where("live_session_id = ?", session.Id).Order("sequence DESC").First(&last).Error; err == nil {
+				nextSequence = last.Sequence + 1
+			} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+
+			payload, _ := json.Marshal(gin.H{
+				"status":      constants.LiveStatusEnded,
+				"channel":     session.ChannelKey,
+				"message":     message,
+				"coopPartyId": coopPartyID,
+			})
+			if err := tx.Create(&models.LiveEvent{
+				LiveSessionID: session.Id,
+				Sequence:      nextSequence,
+				EventType:     constants.LiveEventTypeStatus,
+				AuthorType:    constants.AuthorTypeSystem,
+				AuthorName:    constants.AuthorTypeSystem,
+				Payload:       datatypes.JSON(payload),
+			}).Error; err != nil {
+				return err
+			}
+
+			return tx.Model(&models.LiveSession{}).
+				Where("id = ?", session.Id).
+				Updates(map[string]any{
+					"status":        constants.LiveStatusEnded,
+					"ended_at":      &now,
+					"last_event_at": &now,
+				}).Error
+		})
+		if err != nil {
+			return ended, err
+		}
+		ended++
+	}
+
+	return ended, nil
 }
 
 func getLiveSession(database *gorm.DB) gin.HandlerFunc {
