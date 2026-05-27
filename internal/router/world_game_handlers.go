@@ -129,6 +129,80 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 }
 
 func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGameService) {
+	private.GET("/world/conflicts/report", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		conflicts, err := world.ListWorldConflicts(c.Request.Context(), save.WorldID, save.ContinentID, limitFromQuery(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		total := len(conflicts)
+		high := 0
+		avg := 0
+		if total > 0 {
+			sum := 0
+			for _, conflict := range conflicts {
+				sum += conflict.Intensity
+				if conflict.Intensity >= 70 {
+					high++
+				}
+			}
+			avg = sum / total
+		}
+		writeWorldResponse(c, gin.H{
+			"report": gin.H{
+				"activeConflicts":  total,
+				"highIntensity":    high,
+				"averageIntensity": avg,
+			},
+		}, nil)
+	})
+
+	private.GET("/world/conflicts/:id/detail", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conflict id"})
+			return
+		}
+		conflicts, err := world.ListWorldConflicts(c.Request.Context(), save.WorldID, save.ContinentID, 200)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		var conflict *models.Conflict
+		for i := range conflicts {
+			if conflicts[i].Id == id {
+				conflict = &conflicts[i]
+				break
+			}
+		}
+		if conflict == nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "conflict not found"})
+			return
+		}
+		writeWorldResponse(c, gin.H{"conflict": conflict}, nil)
+	})
+
+	private.POST("/world/conflicts/:id/intervene", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conflict id"})
+			return
+		}
+		input := service.EventActionInput{ActionType: "intervene"}
+		err = world.ConflictAction(c.Request.Context(), currentUserID(c), id, input)
+		writeWorldResponse(c, gin.H{"accepted": err == nil, "actionType": "intervene"}, err)
+	})
+
 	private.GET("/world/diplomacy/relations", func(c *gin.Context) {
 		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
 		if err != nil {
