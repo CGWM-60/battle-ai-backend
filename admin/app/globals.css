@@ -569,6 +569,41 @@ dd {
   font-size: 12px;
 }
 
+.decision-modal {
+  width: min(1180px, 100%);
+}
+
+.decision-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.decision-block {
+  min-width: 0;
+}
+
+.decision-block h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.decision-block pre {
+  min-height: 180px;
+  max-height: 360px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f172a;
+  color: #e5e7eb;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .rp-toolbar {
   display: grid;
   grid-template-columns: auto minmax(280px, 1fr) auto;

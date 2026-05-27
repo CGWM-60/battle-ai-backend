@@ -333,7 +333,7 @@ func resolveConstructionDuration(tx *gorm.DB, buildingKey string) (time.Duration
 	}
 
 	var def models.BuildingDefinition
-	err := tx.Where("key = ? AND is_active = ?", key, true).First(&def).Error
+	err := tx.Where("`key` = ? AND is_active = ?", key, true).First(&def).Error
 	if err != nil {
 		return 0, err
 	}

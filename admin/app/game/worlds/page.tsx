@@ -38,6 +38,8 @@ export default function WorldsPage() {
   const [continents, setContinents] = useState<Continent[]>([]);
   const [selectedWorldId, setSelectedWorldId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const selectedWorld = useMemo(() => worlds.find((world) => world.id === selectedWorldId) ?? worlds[0], [worlds, selectedWorldId]);
 
@@ -51,7 +53,7 @@ export default function WorldsPage() {
       return;
     }
     loadAdminData<{ continents: Continent[] }>(`game/worlds/${selectedWorld.id}/continents`)
-      .then((payload) => setContinents(payload.continents ?? []))
+      .then((payload) => setContinents(payload.continents ?? (payload as unknown as { items?: Continent[] }).items ?? []))
       .catch((err: Error) => setError(err.message));
   }, [selectedWorld]);
 
@@ -69,29 +71,42 @@ export default function WorldsPage() {
     }
   }
 
-  async function postAction(path: string) {
-    const response = await fetch(`/admin/api/${path}`, { method: "POST", credentials: "same-origin", headers: { Accept: "application/json" } });
+  async function postAction(path: string, label: string, body?: unknown) {
+    setError(null);
+    setNotice(null);
+    setBusyAction(label);
+    const response = await fetch(`/admin/api/${path}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
     if (!response.ok) {
+      setBusyAction(null);
       setError(`Action echouee: HTTP ${response.status}`);
       return;
     }
+    setNotice(`${label} termine.`);
     await refreshWorlds();
+    setBusyAction(null);
   }
 
   return (
     <AdminShell title="Mondes" description="Capacite, continents par monde, simulations NEXUS et maintenance des compteurs serveur.">
       {error ? <ErrorState message={error} /> : null}
+      {notice ? <div className="alert ok">{notice}</div> : null}
+      {busyAction ? <div className="alert">Action en cours: {busyAction}</div> : null}
       {loading ? <LoadingState /> : null}
       {!loading ? (
         <>
           <section className="panel game-toolbar">
-            <button className="primary" type="button" onClick={() => postAction("game/worlds")}>
+            <button className="primary" type="button" disabled={Boolean(busyAction)} onClick={() => postAction("game/worlds", "Creation monde")}>
               Creer un monde
             </button>
-            <button className="secondary" type="button" onClick={() => postAction("game/worlds/reconcile-counts")}>
+            <button className="secondary" type="button" disabled={Boolean(busyAction)} onClick={() => postAction("game/worlds/reconcile-counts", "Recalcul joueurs")}>
               Recalculer joueurs
             </button>
-            <button className="danger" type="button" onClick={() => postAction("game/worlds/archive-empty")}>
+            <button className="danger" type="button" disabled={Boolean(busyAction)} onClick={() => postAction("game/worlds/archive-empty", "Archivage mondes vides")}>
               Archiver mondes vides
             </button>
             <button className="secondary" type="button" onClick={refreshWorlds}>
@@ -134,7 +149,12 @@ export default function WorldsPage() {
                         <button className="secondary" type="button" onClick={() => setSelectedWorldId(world.id)}>
                           Détail monde
                         </button>
-                        <button className="secondary" type="button" onClick={() => postAction(`game/worlds/${world.id}/simulate`)}>
+                        <button
+                          className="secondary"
+                          type="button"
+                          disabled={Boolean(busyAction)}
+                          onClick={() => postAction(`game/worlds/${world.id}/simulate`, `Simulation monde #${world.id}`, { cycleType: "manual" })}
+                        >
                           Simuler monde
                         </button>
                       </td>

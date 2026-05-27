@@ -58,6 +58,10 @@ export default function GamePage() {
                 <strong>Simulation et maintenance</strong>
                 <span>Simuler un monde, recalculer les joueurs et archiver les mondes vides.</span>
               </Link>
+              <Link className="quick-link" href="/game/ai/decisions/">
+                <strong>Décisions IA</strong>
+                <span>Voir toutes les décisions NEXUS avec input, output, changements appliqués, provider et erreurs.</span>
+              </Link>
             </div>
           </section>
           <MetricGrid
