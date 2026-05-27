@@ -83,6 +83,7 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 		messages, err := world.ListDailyMessages(c.Request.Context(), currentUserID(c), limitFromQuery(c))
 		writeWorldResponse(c, gin.H{"messages": messages}, err)
 	})
+	registerWorldModuleRoutes(private, world)
 	private.POST("/world/messages/:id/read", func(c *gin.Context) {
 		id, err := parseUintParam(c, "id")
 		if err != nil {
@@ -125,6 +126,354 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	registerGuildRoutes(private, database, world)
 	registerBuildingRoutes(private, world)
 	registerConstructionContractRoutes(private, database, world)
+}
+
+func registerWorldModuleRoutes(private *gin.RouterGroup, world *service.WorldGameService) {
+	private.GET("/world/diplomacy/relations", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		conflicts, err := world.ListWorldConflicts(c.Request.Context(), save.WorldID, save.ContinentID, limitFromQuery(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		relations := make([]gin.H, 0)
+		for _, conflict := range conflicts {
+			score := clamp(100-conflict.Intensity, 0, 100)
+			stance := "neutre"
+			if conflict.Intensity >= 80 {
+				stance = "hostile"
+			} else if conflict.Intensity >= 60 {
+				stance = "tendue"
+			} else if conflict.Intensity < 30 {
+				stance = "bonne"
+			}
+			relations = append(relations, gin.H{
+				"faction": conflict.Title,
+				"score":   score,
+				"stance":  stance,
+			})
+		}
+		writeWorldResponse(c, gin.H{"relations": relations}, nil)
+	})
+
+	private.GET("/world/diplomacy/treaties", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		events, err := world.ListWorldEvents(c.Request.Context(), save.WorldID, save.ContinentID, limitFromQuery(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		treaties := make([]gin.H, 0)
+		for _, event := range events {
+			text := strings.ToLower(event.Title + " " + event.Description + " " + event.Type)
+			if strings.Contains(text, "trait") || strings.Contains(text, "alliance") || strings.Contains(text, "accord") || strings.Contains(text, "diplom") {
+				treaties = append(treaties, gin.H{
+					"id":     event.Id,
+					"title":  event.Title,
+					"status": event.Status,
+					"endsAt": event.EndsAt,
+				})
+			}
+		}
+		writeWorldResponse(c, gin.H{"treaties": treaties}, nil)
+	})
+
+	private.GET("/world/diplomacy/reports", func(c *gin.Context) {
+		messages, err := world.ListDailyMessages(c.Request.Context(), currentUserID(c), limitFromQuery(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		reports := make([]gin.H, 0, len(messages))
+		for _, message := range messages {
+			reports = append(reports, gin.H{
+				"id":        message.Id,
+				"title":     message.Title,
+				"tone":      message.Tone,
+				"isRead":    message.IsRead,
+				"createdAt": message.CreatedAt,
+			})
+		}
+		writeWorldResponse(c, gin.H{"reports": reports}, nil)
+	})
+
+	private.GET("/world/diplomacy/report", func(c *gin.Context) {
+		messages, err := world.ListDailyMessages(c.Request.Context(), currentUserID(c), 1)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		if len(messages) == 0 {
+			writeWorldResponse(c, gin.H{"report": nil}, nil)
+			return
+		}
+		writeWorldResponse(c, gin.H{"report": messages[0]}, nil)
+	})
+
+	private.POST("/world/diplomacy/negotiations/open", func(c *gin.Context) {
+		writeWorldResponse(c, gin.H{
+			"opened":    true,
+			"status":    "pending",
+			"serverNow": time.Now().UTC(),
+		}, nil)
+	})
+
+	private.POST("/world/diplomacy/emissaries/send", func(c *gin.Context) {
+		writeWorldResponse(c, gin.H{
+			"sent":      true,
+			"status":    "en_route",
+			"serverNow": time.Now().UTC(),
+		}, nil)
+	})
+
+	private.GET("/world/commerce/routes", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		conflicts, err := world.ListWorldConflicts(c.Request.Context(), save.WorldID, save.ContinentID, limitFromQuery(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		routes := make([]gin.H, 0, len(conflicts))
+		for _, conflict := range conflicts {
+			volume := int64(1000000 * (100 - clamp(conflict.Intensity, 0, 100)) / 100)
+			status := "active"
+			if conflict.Intensity >= 70 {
+				status = "perturbe"
+			}
+			routes = append(routes, gin.H{
+				"route":  conflict.Title,
+				"cargo":  "Flux inter-régions",
+				"volume": volume,
+				"status": status,
+			})
+		}
+		writeWorldResponse(c, gin.H{"routes": routes}, nil)
+	})
+
+	private.GET("/world/commerce/details", func(c *gin.Context) {
+		routesJSON, err := fetchCommerceRoutes(world, c)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		mode := strings.ToLower(strings.TrimSpace(c.DefaultQuery("type", "all")))
+		filtered := make([]gin.H, 0, len(routesJSON))
+		for _, item := range routesJSON {
+			status, _ := item["status"].(string)
+			if mode == "export" && status == "perturbe" {
+				continue
+			}
+			if mode == "import" && status == "active" {
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		writeWorldResponse(c, gin.H{"details": filtered}, nil)
+	})
+
+	private.POST("/world/commerce/agreements", func(c *gin.Context) {
+		writeWorldResponse(c, gin.H{
+			"created":   true,
+			"status":    "draft",
+			"serverNow": time.Now().UTC(),
+		}, nil)
+	})
+
+	private.POST("/world/commerce/routes/optimize", func(c *gin.Context) {
+		routesJSON, err := fetchCommerceRoutes(world, c)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		writeWorldResponse(c, gin.H{
+			"optimized":      true,
+			"routesCount":    len(routesJSON),
+			"serverNow":      time.Now().UTC(),
+			"recommendation": "Prioriser routes actives à fort volume",
+		}, nil)
+	})
+
+	private.GET("/world/commerce/report", func(c *gin.Context) {
+		routesJSON, err := fetchCommerceRoutes(world, c)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		var total int64
+		active := 0
+		for _, item := range routesJSON {
+			if volume, ok := item["volume"].(int64); ok {
+				total += volume
+			}
+			if status, _ := item["status"].(string); status == "active" {
+				active++
+			}
+		}
+		writeWorldResponse(c, gin.H{
+			"report": gin.H{
+				"totalVolume":  total,
+				"activeRoutes": active,
+				"routesCount":  len(routesJSON),
+			},
+		}, nil)
+	})
+
+	private.GET("/world/weather/forecast", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		weather, err := world.ListActiveWeather(c.Request.Context(), save.WorldID, save.ContinentID)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		forecast := make([]gin.H, 0, len(weather))
+		for _, event := range weather {
+			forecast = append(forecast, gin.H{
+				"id":          event.Id,
+				"title":       event.Title,
+				"description": event.Description,
+				"severity":    event.Severity,
+				"endsAt":      event.EndsAt,
+			})
+		}
+		writeWorldResponse(c, gin.H{"forecast": forecast}, nil)
+	})
+
+	private.GET("/world/weather/zones", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		weather, err := world.ListActiveWeather(c.Request.Context(), save.WorldID, save.ContinentID)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		zones := make([]gin.H, 0, len(weather))
+		for _, event := range weather {
+			zones = append(zones, gin.H{
+				"region":   defaultText(event.Type, "Zone inconnue"),
+				"severity": event.Severity,
+				"risk":     riskLabel(event.Severity),
+			})
+		}
+		writeWorldResponse(c, gin.H{"zones": zones}, nil)
+	})
+
+	private.POST("/world/weather/actions/:actionKey", func(c *gin.Context) {
+		actionKey := strings.TrimSpace(c.Param("actionKey"))
+		if actionKey == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action"})
+			return
+		}
+		writeWorldResponse(c, gin.H{
+			"accepted":  true,
+			"actionKey": actionKey,
+			"serverNow": time.Now().UTC(),
+		}, nil)
+	})
+
+	private.GET("/world/weather/report", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		weather, err := world.ListActiveWeather(c.Request.Context(), save.WorldID, save.ContinentID)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		avg := 0
+		if len(weather) > 0 {
+			total := 0
+			for _, event := range weather {
+				total += event.Severity
+			}
+			avg = total / len(weather)
+		}
+		writeWorldResponse(c, gin.H{
+			"report": gin.H{
+				"activeEvents":    len(weather),
+				"averageSeverity": avg,
+				"globalRiskLabel": riskLabel(avg),
+				"generatedAt":     time.Now().UTC(),
+			},
+		}, nil)
+	})
+}
+
+func fetchCommerceRoutes(world *service.WorldGameService, c *gin.Context) ([]gin.H, error) {
+	save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+	if err != nil {
+		return nil, err
+	}
+	conflicts, err := world.ListWorldConflicts(c.Request.Context(), save.WorldID, save.ContinentID, limitFromQuery(c))
+	if err != nil {
+		return nil, err
+	}
+	routes := make([]gin.H, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		volume := int64(1000000 * (100 - clamp(conflict.Intensity, 0, 100)) / 100)
+		status := "active"
+		if conflict.Intensity >= 70 {
+			status = "perturbe"
+		}
+		routes = append(routes, gin.H{
+			"route":  conflict.Title,
+			"cargo":  "Flux inter-régions",
+			"volume": volume,
+			"status": status,
+		})
+	}
+	return routes, nil
+}
+
+func riskLabel(severity int) string {
+	if severity >= 80 {
+		return "critique"
+	}
+	if severity >= 60 {
+		return "eleve"
+	}
+	if severity >= 35 {
+		return "modere"
+	}
+	return "surveille"
+}
+
+func defaultText(value string, fallback string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fallback
+	}
+	return trimmed
+}
+
+func clamp(value int, min int, max int) int {
+	if value < min {
+		return min
+	}
+	if value > max {
+		return max
+	}
+	return value
 }
 
 func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
