@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AdminShell } from "../components/AdminShell";
 import { ErrorState, LoadingState } from "../components/LoadState";
@@ -42,6 +43,23 @@ export default function GamePage() {
       {!data && !error ? <LoadingState /> : null}
       {data ? (
         <>
+          <section className="panel">
+            <h2>Pilotage monde</h2>
+            <div className="quick-grid">
+              <Link className="quick-link" href="/game/worlds/">
+                <strong>Détail monde</strong>
+                <span>Voir les mondes, sélectionner un monde et afficher ses continents.</span>
+              </Link>
+              <Link className="quick-link" href="/game/worlds/">
+                <strong>Continents par monde</strong>
+                <span>Afficher les 5 continents du monde sélectionné avec tension, climat, économie et joueurs.</span>
+              </Link>
+              <Link className="quick-link" href="/game/worlds/">
+                <strong>Simulation et maintenance</strong>
+                <span>Simuler un monde, recalculer les joueurs et archiver les mondes vides.</span>
+              </Link>
+            </div>
+          </section>
           <MetricGrid
             items={[
               { label: "Mondes", value: formatNumber(data.stats.worlds) },

@@ -132,10 +132,10 @@ export default function WorldsPage() {
                       <td>{formatDate(world.lastSimulationAt)}</td>
                       <td className="row-actions">
                         <button className="secondary" type="button" onClick={() => setSelectedWorldId(world.id)}>
-                          Details
+                          Détail monde
                         </button>
                         <button className="secondary" type="button" onClick={() => postAction(`game/worlds/${world.id}/simulate`)}>
-                          Simuler
+                          Simuler monde
                         </button>
                       </td>
                     </tr>
@@ -149,8 +149,9 @@ export default function WorldsPage() {
           {selectedWorld ? (
             <section className="panel">
               <h2>
-                Continents du monde #{selectedWorld.id} - {selectedWorld.name}
+                Continents par monde - monde #{selectedWorld.id} - {selectedWorld.name}
               </h2>
+              <p className="muted-panel">Détail du monde sélectionné: capacité, profils IA continentaux, climat, politique, économie, tension et répartition des joueurs.</p>
               <div className="table-wrap">
                 <table>
                   <thead>
