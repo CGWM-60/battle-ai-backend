@@ -171,6 +171,17 @@ type GuildInvite struct {
 	ExpiresAt       time.Time      `gorm:"index" json:"expiresAt"`
 }
 
+type GuildContribution struct {
+	Id           uint `gorm:"primaryKey" json:"id"`
+	CreatedAt    time.Time
+	GuildID      uint           `gorm:"index" json:"guildId"`
+	Guild        Guild          `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	PlayerID     uint           `gorm:"index" json:"playerId"`
+	Contribution string         `gorm:"size:64;index" json:"contribution"`
+	Amount       int64          `json:"amount"`
+	Payload      datatypes.JSON `gorm:"type:json" json:"payload"`
+}
+
 type AIWorldFaction struct {
 	Id                uint `gorm:"primaryKey" json:"id"`
 	CreatedAt         time.Time

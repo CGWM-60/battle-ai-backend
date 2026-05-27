@@ -202,10 +202,10 @@ func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {
 	admin.POST("/events/generate-ai", adminSimulateWorld(world, 0))
 
 	admin.GET("/conflicts", adminList[models.Conflict](database, "starts_at DESC"))
-	admin.POST("/conflicts", adminCreate[models.Conflict](database, "conflict"))
+	admin.POST("/conflicts", adminCreateConflict(world))
 	admin.GET("/conflicts/:id", adminGet[models.Conflict](database, false))
 	admin.PATCH("/conflicts/:id", adminPatch[models.Conflict](database, "conflict"))
-	admin.POST("/conflicts/:id/resolve", adminPatchStatus[models.Conflict](database, "resolved"))
+	admin.POST("/conflicts/:id/resolve", adminResolveConflict(world))
 	admin.POST("/conflicts/generate-ai", adminSimulateWorld(world, 0))
 
 	admin.GET("/weather", adminList[models.WeatherEvent](database, "starts_at DESC"))
@@ -289,6 +289,51 @@ func registerChatRoutes(private *gin.RouterGroup, world *service.WorldGameServic
 			message, err := world.SendChat(c.Request.Context(), currentUserID(c), ch, input)
 			writeWorldResponse(c, message, err)
 		})
+		private.GET("/chat/"+ch+"/stream", streamChatChannel(world, ch))
+	}
+}
+
+func streamChatChannel(world *service.WorldGameService, channel string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		flusher, ok := c.Writer.(http.Flusher)
+		if !ok {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "streaming unsupported"})
+			return
+		}
+		afterRaw, _ := strconv.ParseUint(c.DefaultQuery("after", "0"), 10, 64)
+		afterID := uint(afterRaw)
+		c.Header("Content-Type", "text/event-stream")
+		c.Header("Cache-Control", "no-cache")
+		c.Header("Connection", "keep-alive")
+		c.Header("X-Accel-Buffering", "no")
+		ticker := time.NewTicker(3 * time.Second)
+		defer ticker.Stop()
+		deadline := time.NewTimer(2 * time.Minute)
+		defer deadline.Stop()
+		_ = writeSSEEvent(c, flusher, "ready", gin.H{"channel": channel, "after": afterID})
+		for {
+			messages, err := world.ListChatAfter(c.Request.Context(), currentUserID(c), channel, afterID, 50)
+			if err != nil {
+				_ = writeSSEEvent(c, flusher, "error", gin.H{"error": err.Error()})
+				return
+			}
+			for _, message := range messages {
+				if message.Id > afterID {
+					afterID = message.Id
+				}
+				if err := writeSSEEvent(c, flusher, "message", message); err != nil {
+					return
+				}
+			}
+			select {
+			case <-ticker.C:
+			case <-deadline.C:
+				_ = writeSSEEvent(c, flusher, "done", gin.H{"after": afterID})
+				return
+			case <-c.Request.Context().Done():
+				return
+			}
+		}
 	}
 }
 
@@ -338,13 +383,43 @@ func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 			PlayerID uint `json:"playerId"`
 		}
 		_ = bindPayload(c, &input)
-		invite := models.GuildInvite{GuildID: id, InviterPlayerID: currentUserID(c), InvitedPlayerID: input.PlayerID, Status: "pending", ExpiresAt: time.Now().Add(7 * 24 * time.Hour)}
-		writeWorldResponse(c, invite, database.WithContext(c.Request.Context()).Create(&invite).Error)
+		invite, err := world.InviteGuildMember(c.Request.Context(), currentUserID(c), id, input.PlayerID)
+		writeWorldResponse(c, invite, err)
 	})
-	private.POST("/guilds/invites/:id/accept", guildInviteStatus(database, "accepted", true))
-	private.POST("/guilds/invites/:id/decline", guildInviteStatus(database, "declined", false))
+	private.POST("/guilds/invites/:id/accept", guildInviteStatus(world, true))
+	private.POST("/guilds/invites/:id/decline", guildInviteStatus(world, false))
 	private.POST("/guilds/:id/members/:playerId/role", func(c *gin.Context) {
-		adminPatchGuildMember(database)(c)
+		id, err1 := parseUintParam(c, "id")
+		playerID, err2 := parseUintParam(c, "playerId")
+		if err1 != nil || err2 != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild member id"})
+			return
+		}
+		var input struct {
+			Role string `json:"role"`
+		}
+		_ = bindPayload(c, &input)
+		writeWorldResponse(c, gin.H{"role": input.Role}, world.ChangeGuildMemberRole(c.Request.Context(), currentUserID(c), id, playerID, input.Role))
+	})
+	private.DELETE("/guilds/:id/members/:playerId", func(c *gin.Context) {
+		id, err1 := parseUintParam(c, "id")
+		playerID, err2 := parseUintParam(c, "playerId")
+		if err1 != nil || err2 != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild member id"})
+			return
+		}
+		writeWorldResponse(c, gin.H{"deleted": true}, world.RemoveGuildMember(c.Request.Context(), currentUserID(c), id, playerID))
+	})
+	private.POST("/guilds/:id/contribute", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		var input service.GuildContributionInput
+		_ = bindPayload(c, &input)
+		contribution, err := world.ContributeGuild(c.Request.Context(), currentUserID(c), id, input)
+		writeWorldResponse(c, contribution, err)
 	})
 }
 
@@ -452,28 +527,18 @@ func getOwnedGuild(database *gorm.DB, world *service.WorldGameService) gin.Handl
 	}
 }
 
-func guildInviteStatus(database *gorm.DB, status string, join bool) gin.HandlerFunc {
+func guildInviteStatus(world *service.WorldGameService, accept bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := parseUintParam(c, "id")
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid invite id"})
 			return
 		}
-		var invite models.GuildInvite
-		err = database.WithContext(c.Request.Context()).Where("id = ? AND invited_player_id = ?", id, currentUserID(c)).First(&invite).Error
-		if err != nil {
-			writeWorldResponse(c, nil, err)
-			return
+		err = world.RespondGuildInvite(c.Request.Context(), currentUserID(c), id, accept)
+		status := "declined"
+		if accept {
+			status = "accepted"
 		}
-		err = database.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-			if err := tx.Model(&invite).Update("status", status).Error; err != nil {
-				return err
-			}
-			if join {
-				return service.NewWorldGameService(tx).JoinGuild(c.Request.Context(), currentUserID(c), invite.GuildID)
-			}
-			return nil
-		})
 		writeWorldResponse(c, gin.H{"status": status}, err)
 	}
 }
@@ -647,6 +712,29 @@ func adminCreateEvent(world *service.WorldGameService) gin.HandlerFunc {
 			return
 		}
 		writeWorldResponse(c, event, world.CreateGameEvent(c.Request.Context(), &event))
+	}
+}
+
+func adminCreateConflict(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var input service.ConflictInput
+		if err := c.ShouldBindJSON(&input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conflict payload"})
+			return
+		}
+		conflict, err := world.CreateConflict(c.Request.Context(), input)
+		writeWorldResponse(c, conflict, err)
+	}
+}
+
+func adminResolveConflict(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conflict id"})
+			return
+		}
+		writeWorldResponse(c, gin.H{"status": service.ConflictStatusResolved}, world.ResolveConflict(c.Request.Context(), id, "admin-api"))
 	}
 }
 

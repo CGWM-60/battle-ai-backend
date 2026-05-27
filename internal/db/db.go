@@ -68,6 +68,7 @@ func DbConnect() *gorm.DB {
 		&models.Guild{},
 		&models.GuildMember{},
 		&models.GuildInvite{},
+		&models.GuildContribution{},
 		&models.AIWorldFaction{},
 		&models.Conflict{},
 		&models.ConflictAction{},

@@ -40,6 +40,7 @@ const (
 	EventStatusFinished    = "finished"
 	EventStatusArchived    = "archived"
 	ConflictStatusActive   = "active"
+	ConflictStatusResolved = "resolved"
 	WeatherStatusActive    = "active"
 	DecisionStatusApplied  = "applied"
 	DecisionStatusFallback = "fallback"
@@ -86,6 +87,31 @@ type GuildInput struct {
 type EventActionInput struct {
 	ActionType string         `json:"actionType"`
 	Payload    datatypes.JSON `json:"payload"`
+}
+
+type ConflictInput struct {
+	WorldID       uint           `json:"worldId"`
+	ContinentID   *uint          `json:"continentId"`
+	AttackerType  string         `json:"attackerType"`
+	AttackerID    uint           `json:"attackerId"`
+	DefenderType  string         `json:"defenderType"`
+	DefenderID    uint           `json:"defenderId"`
+	Title         string         `json:"title"`
+	Description   string         `json:"description"`
+	Intensity     int            `json:"intensity"`
+	RiskLevel     string         `json:"riskLevel"`
+	Status        string         `json:"status"`
+	StartsAt      time.Time      `json:"startsAt"`
+	EndsAt        time.Time      `json:"endsAt"`
+	RewardsJSON   datatypes.JSON `json:"rewardsJson"`
+	PenaltiesJSON datatypes.JSON `json:"penaltiesJson"`
+	CreatedByAI   bool           `json:"createdByAi"`
+}
+
+type GuildContributionInput struct {
+	Contribution string         `json:"contribution"`
+	Amount       int64          `json:"amount"`
+	Payload      datatypes.JSON `json:"payload"`
 }
 
 type EventReward struct {
@@ -531,16 +557,134 @@ func (s *WorldGameService) ConflictAction(ctx context.Context, playerID uint, co
 		First(&conflict).Error; err != nil {
 		return err
 	}
+	if conflict.ContinentID != nil && *conflict.ContinentID != save.ContinentID {
+		return fmt.Errorf("conflict is not available on this continent")
+	}
+	var activePlayerConflicts int64
+	if err := s.db.WithContext(ctx).Model(&models.ConflictAction{}).
+		Joins("JOIN conflicts ON conflicts.id = conflict_actions.conflict_id").
+		Where("conflict_actions.player_id = ? AND conflicts.status = ?", playerID, ConflictStatusActive).
+		Count(&activePlayerConflicts).Error; err != nil {
+		return err
+	}
+	if activePlayerConflicts >= 3 {
+		return fmt.Errorf("player already participates in too many active conflicts")
+	}
+	var existing int64
+	if err := s.db.WithContext(ctx).Model(&models.ConflictAction{}).
+		Where("conflict_id = ? AND player_id = ?", conflictID, playerID).
+		Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return fmt.Errorf("player already acted on this conflict")
+	}
 	action := strings.TrimSpace(input.ActionType)
 	if action == "" {
 		action = "participate"
 	}
-	return s.db.WithContext(ctx).Create(&models.ConflictAction{
+	err = s.db.WithContext(ctx).Create(&models.ConflictAction{
 		ConflictID: conflictID,
 		PlayerID:   playerID,
 		ActionType: action,
 		Payload:    emptyJSON(input.Payload),
 	}).Error
+	if err == nil {
+		_ = s.logPlayerAction(ctx, playerID, &save.WorldID, &save.ContinentID, "conflict_action", "conflict", strconv.FormatUint(uint64(conflictID), 10), "accepted", "", nil, input, nil)
+	}
+	return err
+}
+
+func (s *WorldGameService) CreateConflict(ctx context.Context, input ConflictInput) (*models.Conflict, error) {
+	conflict := &models.Conflict{
+		WorldID:       input.WorldID,
+		ContinentID:   input.ContinentID,
+		AttackerType:  defaultText(input.AttackerType, "ai_faction"),
+		AttackerID:    input.AttackerID,
+		DefenderType:  defaultText(input.DefenderType, "continent"),
+		DefenderID:    input.DefenderID,
+		Title:         input.Title,
+		Description:   input.Description,
+		Intensity:     input.Intensity,
+		RiskLevel:     input.RiskLevel,
+		Status:        defaultText(input.Status, ConflictStatusActive),
+		StartsAt:      input.StartsAt,
+		EndsAt:        input.EndsAt,
+		RewardsJSON:   emptyJSON(input.RewardsJSON),
+		PenaltiesJSON: emptyJSON(input.PenaltiesJSON),
+		CreatedByAI:   input.CreatedByAI,
+	}
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.validateConflictTx(tx, conflict, nil); err != nil {
+			return err
+		}
+		return tx.Create(conflict).Error
+	})
+	return conflict, err
+}
+
+func (s *WorldGameService) ResolveConflict(ctx context.Context, conflictID uint, resolver string) error {
+	now := time.Now()
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var conflict models.Conflict
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&conflict, conflictID).Error; err != nil {
+			return err
+		}
+		if conflict.Status != ConflictStatusActive {
+			return fmt.Errorf("conflict is not active")
+		}
+		var actions []models.ConflictAction
+		if err := tx.Where("conflict_id = ?", conflictID).Find(&actions).Error; err != nil {
+			return err
+		}
+		reward, err := parseEventReward(conflict.RewardsJSON)
+		if err != nil {
+			return err
+		}
+		penalty, err := parseEventReward(conflict.PenaltiesJSON)
+		if err != nil {
+			return err
+		}
+		participants := map[uint]bool{}
+		for _, action := range actions {
+			participants[action.PlayerID] = true
+		}
+		for participantID := range participants {
+			var save models.PlayerSave
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("player_id = ?", participantID).First(&save).Error; err != nil {
+				return err
+			}
+			before := save
+			applyRewardToSave(&save, reward)
+			save.Version++
+			save.LastSyncedAt = &now
+			if err := updateSaveResourcesTx(tx, &save); err != nil {
+				return err
+			}
+			if err := s.logPlayerActionTx(tx, participantID, &save.WorldID, &save.ContinentID, "conflict_resolved_reward", "conflict", strconv.FormatUint(uint64(conflictID), 10), "accepted", "", before, save, reward); err != nil {
+				return err
+			}
+		}
+		if conflict.DefenderType == "player" && conflict.DefenderID != 0 && !participants[conflict.DefenderID] {
+			var save models.PlayerSave
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("player_id = ?", conflict.DefenderID).First(&save).Error; err == nil && !isBeginnerProtected(save, now) {
+				before := save
+				applyPenaltyToSave(&save, penalty)
+				save.Version++
+				save.LastSyncedAt = &now
+				if err := updateSaveResourcesTx(tx, &save); err != nil {
+					return err
+				}
+				if err := s.logPlayerActionTx(tx, conflict.DefenderID, &save.WorldID, &save.ContinentID, "conflict_resolved_penalty", "conflict", strconv.FormatUint(uint64(conflictID), 10), "accepted", "", before, save, penalty); err != nil {
+					return err
+				}
+			}
+		}
+		return tx.Model(&models.Conflict{}).Where("id = ?", conflictID).Updates(map[string]any{
+			"status":  ConflictStatusResolved,
+			"ends_at": now,
+		}).Error
+	})
 }
 
 func (s *WorldGameService) SendChat(ctx context.Context, playerID uint, channel string, input ChatInput) (*models.ChatMessage, error) {
@@ -593,6 +737,10 @@ func (s *WorldGameService) SendChat(ctx context.Context, playerID uint, channel 
 }
 
 func (s *WorldGameService) ListChat(ctx context.Context, playerID uint, channel string, limit int) ([]models.ChatMessage, error) {
+	return s.ListChatAfter(ctx, playerID, channel, 0, limit)
+}
+
+func (s *WorldGameService) ListChatAfter(ctx context.Context, playerID uint, channel string, afterID uint, limit int) ([]models.ChatMessage, error) {
 	save, err := s.EnsurePlayerSave(ctx, playerID)
 	if err != nil {
 		return nil, err
@@ -612,8 +760,15 @@ func (s *WorldGameService) ListChat(ctx context.Context, playerID uint, channel 
 	default:
 		return nil, fmt.Errorf("invalid chat channel")
 	}
+	if afterID > 0 {
+		query = query.Where("id > ?", afterID)
+	}
 	var messages []models.ChatMessage
-	err = query.Order("created_at DESC").Limit(limitOrDefault(limit)).Find(&messages).Error
+	order := "created_at DESC"
+	if afterID > 0 {
+		order = "id ASC"
+	}
+	err = query.Order(order).Limit(limitOrDefault(limit)).Find(&messages).Error
 	return messages, err
 }
 
@@ -699,6 +854,177 @@ func (s *WorldGameService) LeaveGuild(ctx context.Context, playerID uint, guildI
 		return fmt.Errorf("owner must transfer ownership before leaving")
 	}
 	return s.db.WithContext(ctx).Delete(&member).Error
+}
+
+func (s *WorldGameService) InviteGuildMember(ctx context.Context, inviterID uint, guildID uint, invitedID uint) (*models.GuildInvite, error) {
+	if invitedID == 0 || invitedID == inviterID {
+		return nil, fmt.Errorf("invalid invited player")
+	}
+	var invite models.GuildInvite
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		inviter, err := guildMemberForUpdate(tx, guildID, inviterID)
+		if err != nil {
+			return err
+		}
+		if inviter.Role != GuildRoleOwner && inviter.Role != GuildRoleOfficer {
+			return fmt.Errorf("only owner or officer can invite")
+		}
+		var guild models.Guild
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&guild, guildID).Error; err != nil {
+			return err
+		}
+		var invitedSave models.PlayerSave
+		if err := tx.Where("player_id = ?", invitedID).First(&invitedSave).Error; err != nil {
+			return err
+		}
+		if invitedSave.WorldID != guild.WorldID {
+			return fmt.Errorf("invited player is not in guild world")
+		}
+		var existingMembership int64
+		if err := tx.Model(&models.GuildMember{}).Where("player_id = ?", invitedID).Count(&existingMembership).Error; err != nil {
+			return err
+		}
+		if existingMembership > 0 {
+			return fmt.Errorf("invited player is already in a guild")
+		}
+		invite = models.GuildInvite{
+			GuildID:         guildID,
+			InviterPlayerID: inviterID,
+			InvitedPlayerID: invitedID,
+			Status:          "pending",
+			ExpiresAt:       time.Now().Add(7 * 24 * time.Hour),
+		}
+		return tx.Create(&invite).Error
+	})
+	return &invite, err
+}
+
+func (s *WorldGameService) RespondGuildInvite(ctx context.Context, playerID uint, inviteID uint, accept bool) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var invite models.GuildInvite
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND invited_player_id = ?", inviteID, playerID).
+			First(&invite).Error; err != nil {
+			return err
+		}
+		if invite.Status != "pending" {
+			return fmt.Errorf("invite is not pending")
+		}
+		if time.Now().After(invite.ExpiresAt) {
+			return tx.Model(&invite).Update("status", "expired").Error
+		}
+		status := "declined"
+		if accept {
+			var existing int64
+			if err := tx.Model(&models.GuildMember{}).Where("player_id = ?", playerID).Count(&existing).Error; err != nil {
+				return err
+			}
+			if existing > 0 {
+				return fmt.Errorf("player is already in a guild")
+			}
+			var guild models.Guild
+			if err := tx.First(&guild, invite.GuildID).Error; err != nil {
+				return err
+			}
+			var count int64
+			if err := tx.Model(&models.GuildMember{}).Where("guild_id = ?", invite.GuildID).Count(&count).Error; err != nil {
+				return err
+			}
+			if int(count) >= guild.MaxMembers {
+				return fmt.Errorf("guild is full")
+			}
+			if err := tx.Create(&models.GuildMember{
+				GuildID:  invite.GuildID,
+				PlayerID: playerID,
+				Role:     GuildRoleMember,
+				JoinedAt: time.Now(),
+			}).Error; err != nil {
+				return err
+			}
+			status = "accepted"
+		}
+		return tx.Model(&invite).Update("status", status).Error
+	})
+}
+
+func (s *WorldGameService) ChangeGuildMemberRole(ctx context.Context, actorID uint, guildID uint, targetPlayerID uint, role string) error {
+	role = strings.TrimSpace(role)
+	if role != GuildRoleOwner && role != GuildRoleOfficer && role != GuildRoleMember {
+		return fmt.Errorf("invalid guild role")
+	}
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		actor, err := guildMemberForUpdate(tx, guildID, actorID)
+		if err != nil {
+			return err
+		}
+		if actor.Role != GuildRoleOwner {
+			return fmt.Errorf("only owner can change member roles")
+		}
+		target, err := guildMemberForUpdate(tx, guildID, targetPlayerID)
+		if err != nil {
+			return err
+		}
+		if target.Role == GuildRoleOwner && role != GuildRoleOwner {
+			return fmt.Errorf("owner must be transferred before demotion")
+		}
+		if role == GuildRoleOwner {
+			if err := tx.Model(&models.GuildMember{}).Where("guild_id = ? AND role = ?", guildID, GuildRoleOwner).Update("role", GuildRoleOfficer).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&models.Guild{}).Where("id = ?", guildID).Update("owner_player_id", targetPlayerID).Error; err != nil {
+				return err
+			}
+		}
+		return tx.Model(&models.GuildMember{}).Where("guild_id = ? AND player_id = ?", guildID, targetPlayerID).Update("role", role).Error
+	})
+}
+
+func (s *WorldGameService) RemoveGuildMember(ctx context.Context, actorID uint, guildID uint, targetPlayerID uint) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		actor, err := guildMemberForUpdate(tx, guildID, actorID)
+		if err != nil {
+			return err
+		}
+		target, err := guildMemberForUpdate(tx, guildID, targetPlayerID)
+		if err != nil {
+			return err
+		}
+		if target.Role == GuildRoleOwner {
+			return fmt.Errorf("owner cannot be removed without ownership transfer")
+		}
+		if actor.Role != GuildRoleOwner && !(actor.Role == GuildRoleOfficer && target.Role == GuildRoleMember) {
+			return fmt.Errorf("insufficient guild permissions")
+		}
+		return tx.Delete(&models.GuildMember{}, target.Id).Error
+	})
+}
+
+func (s *WorldGameService) ContributeGuild(ctx context.Context, playerID uint, guildID uint, input GuildContributionInput) (*models.GuildContribution, error) {
+	if input.Amount <= 0 {
+		return nil, fmt.Errorf("contribution amount must be positive")
+	}
+	var contribution models.GuildContribution
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if _, err := guildMemberForUpdate(tx, guildID, playerID); err != nil {
+			return err
+		}
+		contribution = models.GuildContribution{
+			GuildID:      guildID,
+			PlayerID:     playerID,
+			Contribution: defaultText(input.Contribution, "credits"),
+			Amount:       input.Amount,
+			Payload:      emptyJSON(input.Payload),
+		}
+		if err := tx.Create(&contribution).Error; err != nil {
+			return err
+		}
+		xpDelta := input.Amount / 100
+		if xpDelta < 1 {
+			xpDelta = 1
+		}
+		return tx.Model(&models.Guild{}).Where("id = ?", guildID).UpdateColumn("xp", gorm.Expr("xp + ?", xpDelta)).Error
+	})
+	return &contribution, err
 }
 
 func (s *WorldGameService) ListGuilds(ctx context.Context, playerID uint, limit int) ([]models.Guild, error) {
@@ -882,7 +1208,7 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 			conflict := decision.Conflicts[0]
 			starts := now
 			ends := starts.Add(6 * time.Hour)
-			if err := tx.Create(&models.Conflict{
+			conflictInput := ConflictInput{
 				WorldID:       world.Id,
 				ContinentID:   &continent.Id,
 				AttackerType:  "ai_faction",
@@ -896,12 +1222,33 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 				StartsAt:      starts,
 				EndsAt:        ends,
 				RewardsJSON:   mustJSON(map[string]any{"credits": 1000, "xp": 100}),
-				PenaltiesJSON: mustJSON(map[string]any{"satisfaction": -8}),
+				PenaltiesJSON: mustJSON(map[string]any{"satisfaction": 8}),
 				CreatedByAI:   true,
-			}).Error; err != nil {
-				return err
 			}
-			applied["conflict"] = conflict.Title
+			conflictModel := &models.Conflict{
+				WorldID:       conflictInput.WorldID,
+				ContinentID:   conflictInput.ContinentID,
+				AttackerType:  conflictInput.AttackerType,
+				DefenderType:  conflictInput.DefenderType,
+				DefenderID:    conflictInput.DefenderID,
+				Title:         conflictInput.Title,
+				Description:   conflictInput.Description,
+				Intensity:     conflictInput.Intensity,
+				RiskLevel:     conflictInput.RiskLevel,
+				Status:        conflictInput.Status,
+				StartsAt:      conflictInput.StartsAt,
+				EndsAt:        conflictInput.EndsAt,
+				RewardsJSON:   conflictInput.RewardsJSON,
+				PenaltiesJSON: conflictInput.PenaltiesJSON,
+				CreatedByAI:   true,
+			}
+			if err := s.validateConflictTx(tx, conflictModel, nil); err != nil {
+				applied["conflictSkipped"] = err.Error()
+			} else if err := tx.Create(conflictModel).Error; err != nil {
+				return err
+			} else {
+				applied["conflict"] = conflict.Title
+			}
 		}
 		if strings.TrimSpace(decision.Message.Message) != "" {
 			var saves []models.PlayerSave
@@ -1460,6 +1807,110 @@ func applyRewardToSave(save *models.PlayerSave, reward EventReward) {
 	save.Satisfaction = clamp(save.Satisfaction+reward.Satisfaction, 0, 100)
 }
 
+func applyPenaltyToSave(save *models.PlayerSave, penalty EventReward) {
+	save.XP = maxInt64(0, save.XP-penalty.XP)
+	save.Food = maxInt64(0, save.Food-penalty.Food)
+	save.Energy = maxInt64(0, save.Energy-penalty.Energy)
+	save.Credits = maxInt64(0, save.Credits-penalty.Credits)
+	save.Gems = maxInt64(0, save.Gems-penalty.Gems)
+	save.Population = maxInt64(0, save.Population-penalty.Population)
+	save.Satisfaction = clamp(save.Satisfaction-penalty.Satisfaction, 0, 100)
+}
+
+func updateSaveResourcesTx(tx *gorm.DB, save *models.PlayerSave) error {
+	return tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(map[string]any{
+		"xp":             save.XP,
+		"food":           save.Food,
+		"energy":         save.Energy,
+		"credits":        save.Credits,
+		"gems":           save.Gems,
+		"population":     save.Population,
+		"satisfaction":   save.Satisfaction,
+		"version":        save.Version,
+		"last_synced_at": save.LastSyncedAt,
+	}).Error
+}
+
+func maxInt64(min int64, value int64) int64 {
+	if value < min {
+		return min
+	}
+	return value
+}
+
+func isBeginnerProtected(save models.PlayerSave, now time.Time) bool {
+	return save.CityLevel < 3 || now.Sub(save.CreatedAt) < 72*time.Hour
+}
+
+func (s *WorldGameService) validateConflictTx(tx *gorm.DB, conflict *models.Conflict, ignoreID *uint) error {
+	if conflict.WorldID == 0 {
+		return fmt.Errorf("conflict world is required")
+	}
+	if strings.TrimSpace(conflict.Title) == "" {
+		return fmt.Errorf("conflict title is required")
+	}
+	if conflict.Intensity < 1 || conflict.Intensity > 100 {
+		return fmt.Errorf("conflict intensity must be between 1 and 100")
+	}
+	if conflict.StartsAt.IsZero() {
+		conflict.StartsAt = time.Now()
+	}
+	if conflict.EndsAt.IsZero() || !conflict.EndsAt.After(conflict.StartsAt) {
+		return fmt.Errorf("conflict duration is required")
+	}
+	if conflict.Status == "" {
+		conflict.Status = ConflictStatusActive
+	}
+	if _, err := parseEventReward(conflict.RewardsJSON); err != nil {
+		return err
+	}
+	if _, err := parseEventReward(conflict.PenaltiesJSON); err != nil {
+		return err
+	}
+	active := tx.Model(&models.Conflict{}).Where("world_id = ? AND status = ?", conflict.WorldID, ConflictStatusActive)
+	if conflict.ContinentID != nil {
+		active = active.Where("continent_id = ?", *conflict.ContinentID)
+	}
+	if ignoreID != nil {
+		active = active.Where("id <> ?", *ignoreID)
+	}
+	var activeCount int64
+	if err := active.Count(&activeCount).Error; err != nil {
+		return err
+	}
+	if activeCount >= 5 {
+		return fmt.Errorf("too many active conflicts in this scope")
+	}
+	for _, participant := range []struct {
+		kind string
+		id   uint
+	}{{conflict.AttackerType, conflict.AttackerID}, {conflict.DefenderType, conflict.DefenderID}} {
+		if participant.kind != "player" || participant.id == 0 {
+			continue
+		}
+		var save models.PlayerSave
+		if err := tx.Where("player_id = ?", participant.id).First(&save).Error; err != nil {
+			return err
+		}
+		if isBeginnerProtected(save, time.Now()) {
+			return fmt.Errorf("beginner player %d is protected from conflicts", participant.id)
+		}
+		var playerConflictCount int64
+		query := tx.Model(&models.Conflict{}).
+			Where("status = ? AND ((attacker_type = ? AND attacker_id = ?) OR (defender_type = ? AND defender_id = ?))", ConflictStatusActive, "player", participant.id, "player", participant.id)
+		if ignoreID != nil {
+			query = query.Where("id <> ?", *ignoreID)
+		}
+		if err := query.Count(&playerConflictCount).Error; err != nil {
+			return err
+		}
+		if playerConflictCount >= 3 {
+			return fmt.Errorf("player %d already has too many active conflicts", participant.id)
+		}
+	}
+	return nil
+}
+
 func validateEventRequirements(save *models.PlayerSave, payload datatypes.JSON) error {
 	if len(payload) == 0 || strings.TrimSpace(string(payload)) == "{}" {
 		return nil
@@ -1703,6 +2154,17 @@ func int64FromAny(value any) int64 {
 	default:
 		return 0
 	}
+}
+
+func guildMemberForUpdate(tx *gorm.DB, guildID uint, playerID uint) (models.GuildMember, error) {
+	var member models.GuildMember
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("guild_id = ? AND player_id = ?", guildID, playerID).
+		First(&member).Error
+	if err != nil {
+		return member, fmt.Errorf("guild member not found")
+	}
+	return member, nil
 }
 
 func (s *WorldGameService) logPlayerAction(ctx context.Context, playerID uint, worldID *uint, continentID *uint, action string, targetType string, targetID string, status string, errorMessage string, before any, after any, metadata any) error {

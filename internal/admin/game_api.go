@@ -50,10 +50,10 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.POST("/events/generate-ai", s.gameSimulateWorldAPI(world))
 
 	game.GET("/conflicts", s.gameListModelAPI(&[]models.Conflict{}, "starts_at DESC"))
-	game.POST("/conflicts", s.gameCreateModelAPI(&models.Conflict{}, "conflict"))
+	game.POST("/conflicts", s.gameCreateConflictAPI(world))
 	game.GET("/conflicts/:id", s.gameGetModelAPI(&models.Conflict{}))
 	game.PATCH("/conflicts/:id", s.gamePatchModelAPI(&models.Conflict{}, "conflict"))
-	game.POST("/conflicts/:id/resolve", s.gamePatchStatusAPI(&models.Conflict{}, "resolved"))
+	game.POST("/conflicts/:id/resolve", s.gameResolveConflictAPI(world))
 	game.POST("/conflicts/generate-ai", s.gameSimulateWorldAPI(world))
 
 	game.GET("/weather", s.gameListModelAPI(&[]models.WeatherEvent{}, "starts_at DESC"))
@@ -214,6 +214,36 @@ func (s *Server) gameCreateEventAPI(world *service.WorldGameService) gin.Handler
 			s.gameAudit(c, "create", "event", strconv.FormatUint(uint64(event.Id), 10), nil, event)
 		}
 		gameJSON(c, event, err)
+	}
+}
+
+func (s *Server) gameCreateConflictAPI(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var input service.ConflictInput
+		if err := c.ShouldBindJSON(&input); err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		conflict, err := world.CreateConflict(c.Request.Context(), input)
+		if err == nil {
+			s.gameAudit(c, "create", "conflict", strconv.FormatUint(uint64(conflict.Id), 10), nil, conflict)
+		}
+		gameJSON(c, conflict, err)
+	}
+}
+
+func (s *Server) gameResolveConflictAPI(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := gameParam(c, "id")
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+		err = world.ResolveConflict(c.Request.Context(), id, adminUsername())
+		if err == nil {
+			s.gameAudit(c, "resolve", "conflict", strconv.FormatUint(uint64(id), 10), nil, gin.H{"status": service.ConflictStatusResolved})
+		}
+		gameJSON(c, gin.H{"status": service.ConflictStatusResolved}, err)
 	}
 }
 

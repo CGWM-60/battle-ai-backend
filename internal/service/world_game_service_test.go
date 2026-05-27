@@ -112,3 +112,26 @@ func TestValidateEventRequirementsRejectsLowLevelPlayer(t *testing.T) {
 		t.Fatalf("expected low level player to be rejected")
 	}
 }
+
+func TestApplyPenaltyToSaveClampsResources(t *testing.T) {
+	save := &models.PlayerSave{XP: 10, Food: 20, Energy: 30, Credits: 40, Gems: 1, Population: 100, Satisfaction: 5}
+	applyPenaltyToSave(save, EventReward{XP: 50, Food: 50, Energy: 50, Credits: 50, Gems: 5, Population: 200, Satisfaction: 20})
+	if save.XP != 0 || save.Food != 0 || save.Energy != 0 || save.Credits != 0 || save.Gems != 0 || save.Population != 0 {
+		t.Fatalf("penalties should clamp resources to zero: %+v", save)
+	}
+	if save.Satisfaction != 0 {
+		t.Fatalf("satisfaction should clamp to zero, got %d", save.Satisfaction)
+	}
+}
+
+func TestBeginnerProtectionCoversNewLowLevelPlayer(t *testing.T) {
+	save := models.PlayerSave{CityLevel: 2, CreatedAt: time.Now().Add(-24 * time.Hour)}
+	if !isBeginnerProtected(save, time.Now()) {
+		t.Fatalf("expected low-level recent player to be protected")
+	}
+	save.CityLevel = 5
+	save.CreatedAt = time.Now().Add(-96 * time.Hour)
+	if isBeginnerProtected(save, time.Now()) {
+		t.Fatalf("expected established player not to be protected")
+	}
+}
