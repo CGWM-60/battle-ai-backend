@@ -181,8 +181,51 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 		return world.ListActiveWeather(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID)
 	})))
 	private.GET("/world/messages", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+
 		messages, err := world.ListDailyMessages(c.Request.Context(), currentUserID(c), limitFromQuery(c))
-		writeWorldResponse(c, gin.H{"messages": messages}, err)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+
+		if len(messages) < 2 {
+			now := time.Now().UTC()
+			fallbacks := []models.DailyAIMessage{
+				{
+					WorldID:     save.WorldID,
+					ContinentID: save.ContinentID,
+					PlayerID:    save.PlayerID,
+					Title:       "Directive NEXUS // Ultimatum",
+					Message:     "Vos continents restent sous surveillance. Toute baisse de stabilité sera exploitée sans avertissement.",
+					Tone:        "menace",
+					IsRead:      false,
+					CreatedAt:   now,
+				},
+				{
+					WorldID:     save.WorldID,
+					ContinentID: save.ContinentID,
+					PlayerID:    save.PlayerID,
+					Title:       "Signal Hostile // Cycle mondial",
+					Message:     "Le noyau IA hostile prépare une nouvelle vague d’événements. Renforcez vos défenses immédiatement.",
+					Tone:        "alerte rouge",
+					IsRead:      false,
+					CreatedAt:   now,
+				},
+			}
+			for _, fallback := range fallbacks {
+				if len(messages) >= 2 {
+					break
+				}
+				messages = append(messages, fallback)
+			}
+		}
+
+		writeWorldResponse(c, gin.H{"messages": messages}, nil)
 	})
 	registerWorldModuleRoutes(private, database, world)
 	private.POST("/world/messages/:id/read", func(c *gin.Context) {

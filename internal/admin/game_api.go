@@ -26,6 +26,7 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.POST("/worlds", s.gameCreateWorldAPI)
 	game.POST("/worlds/reconcile-counts", s.gameReconcileWorldCountsAPI(world))
 	game.POST("/worlds/archive-empty", s.gameArchiveEmptyWorldsAPI(world))
+	game.POST("/purge-all", s.gamePurgeAllAPI())
 	game.GET("/worlds/:id", s.gameGetWorldAPI)
 	game.PATCH("/worlds/:id", s.gamePatchModelAPI(&models.World{}, "world"))
 	game.POST("/worlds/:id/simulate", s.gameSimulateWorldAPI(world))
@@ -287,6 +288,130 @@ func (s *Server) gameArchiveEmptyWorldsAPI(world *service.WorldGameService) gin.
 			s.gameAudit(c, "archive_empty", "world", "all", nil, result)
 		}
 		gameJSON(c, result, err)
+	}
+}
+
+func (s *Server) gamePurgeAllAPI() gin.HandlerFunc {
+	type purgeRequest struct {
+		Confirm           string `json:"confirm"`
+		IncludeUsers      bool   `json:"includeUsers"`
+		IncludeAdminAudit bool   `json:"includeAdminAudit"`
+	}
+
+	type purgeTarget struct {
+		key   string
+		model any
+	}
+
+	deleteModel := func(tx *gorm.DB, target purgeTarget, deleted map[string]int64) error {
+		result := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(target.model)
+		if result.Error != nil {
+			return result.Error
+		}
+		deleted[target.key] += result.RowsAffected
+		return nil
+	}
+
+	return func(c *gin.Context) {
+		var req purgeRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+
+		if strings.TrimSpace(req.Confirm) != "PURGE_ALL_GAME_DATA" {
+			gameJSON(c, nil, errors.New("confirm must be PURGE_ALL_GAME_DATA"))
+			return
+		}
+
+		deleted := map[string]int64{}
+		err := s.db.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			targets := []purgeTarget{
+				// Live / coop / battle / roleplay runtime tables.
+				{key: "live_events", model: &models.LiveEvent{}},
+				{key: "live_sessions", model: &models.LiveSession{}},
+				{key: "coop_party_members", model: &models.CoopPartyMember{}},
+				{key: "coop_parties", model: &models.CoopParty{}},
+				{key: "battle_arena_members", model: &models.BattleArenaMember{}},
+				{key: "battle_arenas", model: &models.BattleArena{}},
+				{key: "battle_save_turns", model: &models.BattleSaveTurn{}},
+				{key: "battle_saves", model: &models.BattleSave{}},
+				{key: "roleplay_session_turns", model: &models.RolePlaySessionTurn{}},
+				{key: "roleplay_quest_runs", model: &models.RolePlayQuestRun{}},
+				{key: "roleplay_sessions", model: &models.RolePlaySession{}},
+				{key: "roleplay_quest_chapters", model: &models.RolePlayQuestChapter{}},
+				{key: "roleplay_quest_arcs", model: &models.RolePlayQuestArc{}},
+				{key: "roleplay_quest_templates", model: &models.RolePlayQuestTemplate{}},
+				{key: "ai_usage_records", model: &models.AIUsageRecord{}},
+
+				// World game dynamic runtime tables.
+				{key: "player_action_logs", model: &models.PlayerActionLog{}},
+				{key: "game_event_claims", model: &models.GameEventClaim{}},
+				{key: "game_event_participations", model: &models.GameEventParticipation{}},
+				{key: "conflict_actions", model: &models.ConflictAction{}},
+				{key: "daily_ai_messages", model: &models.DailyAIMessage{}},
+				{key: "ai_world_decisions", model: &models.AIWorldDecision{}},
+				{key: "world_routine_snapshots", model: &models.WorldRoutineSnapshot{}},
+				{key: "player_world_metrics", model: &models.PlayerWorldMetric{}},
+				{key: "chat_messages", model: &models.ChatMessage{}},
+				{key: "guild_contributions", model: &models.GuildContribution{}},
+				{key: "guild_invites", model: &models.GuildInvite{}},
+				{key: "guild_members", model: &models.GuildMember{}},
+				{key: "guilds", model: &models.Guild{}},
+				{key: "game_events", model: &models.GameEvent{}},
+				{key: "conflicts", model: &models.Conflict{}},
+				{key: "weather_events", model: &models.WeatherEvent{}},
+				{key: "player_buildings", model: &models.PlayerBuilding{}},
+				{key: "player_saves", model: &models.PlayerSave{}},
+
+				// Game content tables.
+				{key: "building_assets", model: &models.BuildingAsset{}},
+				{key: "building_catalog_versions", model: &models.BuildingCatalogVersion{}},
+				{key: "building_definitions", model: &models.BuildingDefinition{}},
+				{key: "research_node_definitions", model: &models.ResearchNodeDefinition{}},
+				{key: "research_tree_definitions", model: &models.ResearchTreeDefinition{}},
+				{key: "resource_definitions", model: &models.ResourceDefinition{}},
+				{key: "ai_world_factions", model: &models.AIWorldFaction{}},
+				{key: "continents", model: &models.Continent{}},
+				{key: "worlds", model: &models.World{}},
+
+				// Additional player-facing game catalog/profile tables.
+				{key: "ia_profiles", model: &models.IAProfile{}},
+				{key: "quest_ia_battles", model: &models.QuestIaBattle{}},
+				{key: "nexus_coin_plans", model: &models.NexusCoinPlan{}},
+			}
+
+			if req.IncludeUsers {
+				targets = append(targets, purgeTarget{key: "users", model: &models.Users{}})
+			}
+			if req.IncludeAdminAudit {
+				targets = append(targets, purgeTarget{key: "admin_audit_logs", model: &models.AdminAuditLog{}})
+			}
+
+			for _, target := range targets {
+				if err := deleteModel(tx, target, deleted); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+
+		result := gin.H{
+			"purged":            true,
+			"confirm":           req.Confirm,
+			"includeUsers":      req.IncludeUsers,
+			"includeAdminAudit": req.IncludeAdminAudit,
+			"deleted":           deleted,
+			"timestamp":         time.Now().UTC(),
+		}
+		s.gameAudit(c, "purge_all", "game_data", "all", req, result)
+		gameJSON(c, result, nil)
 	}
 }
 

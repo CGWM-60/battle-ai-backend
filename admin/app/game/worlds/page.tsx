@@ -91,6 +91,24 @@ export default function WorldsPage() {
     setBusyAction(null);
   }
 
+  async function purgeAllGameData() {
+    setError(null);
+    setNotice(null);
+    const typed = window.prompt(
+      "Action destructive: tapez PURGE_ALL_GAME_DATA pour confirmer.",
+      "",
+    );
+    if (typed !== "PURGE_ALL_GAME_DATA") {
+      setError("Confirmation invalide: purge annulee.");
+      return;
+    }
+    await postAction("game/purge-all", "Purge globale", {
+      confirm: "PURGE_ALL_GAME_DATA",
+      includeUsers: true,
+      includeAdminAudit: false,
+    });
+  }
+
   return (
     <AdminShell title="Mondes" description="Capacite, continents par monde, simulations NEXUS et maintenance des compteurs serveur.">
       {error ? <ErrorState message={error} /> : null}
@@ -108,6 +126,9 @@ export default function WorldsPage() {
             </button>
             <button className="danger" type="button" disabled={Boolean(busyAction)} onClick={() => postAction("game/worlds/archive-empty", "Archivage mondes vides")}>
               Archiver mondes vides
+            </button>
+            <button className="danger" type="button" disabled={Boolean(busyAction)} onClick={purgeAllGameData}>
+              Purge MONDES + USERS
             </button>
             <button className="secondary" type="button" onClick={refreshWorlds}>
               Recharger
