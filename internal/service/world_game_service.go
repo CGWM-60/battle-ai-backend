@@ -908,7 +908,25 @@ func (s *WorldGameService) ListWorldEvents(ctx context.Context, worldID uint, co
 		Order("starts_at DESC").
 		Limit(limitOrDefault(limit)).
 		Find(&events).Error
-	return events, err
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	active := make([]models.GameEvent, 0, len(events))
+	inactive := make([]models.GameEvent, 0, len(events))
+	for _, event := range events {
+		if event.EndsAt.IsZero() {
+			continue
+		}
+		if event.EndsAt.After(now) {
+			active = append(active, event)
+			continue
+		}
+		inactive = append(inactive, event)
+	}
+
+	return append(active, inactive...), nil
 }
 
 func (s *WorldGameService) ListWorldConflicts(ctx context.Context, worldID uint, continentID uint, limit int) ([]models.Conflict, error) {
@@ -918,7 +936,25 @@ func (s *WorldGameService) ListWorldConflicts(ctx context.Context, worldID uint,
 		Order("intensity DESC, starts_at DESC").
 		Limit(limitOrDefault(limit)).
 		Find(&conflicts).Error
-	return conflicts, err
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	active := make([]models.Conflict, 0, len(conflicts))
+	inactive := make([]models.Conflict, 0, len(conflicts))
+	for _, conflict := range conflicts {
+		if conflict.EndsAt.IsZero() {
+			continue
+		}
+		if conflict.EndsAt.After(now) {
+			active = append(active, conflict)
+			continue
+		}
+		inactive = append(inactive, conflict)
+	}
+
+	return append(active, inactive...), nil
 }
 
 func (s *WorldGameService) ListActiveWeather(ctx context.Context, worldID uint, continentID uint) ([]models.WeatherEvent, error) {
