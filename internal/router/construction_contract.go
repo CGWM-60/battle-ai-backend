@@ -212,13 +212,34 @@ func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm
 				return gorm.ErrRecordNotFound
 			}
 			now := time.Now().UTC()
+			job := jobs[idx]
+			if strings.EqualFold(strings.TrimSpace(job.Status), "cancelled") {
+				return fmt.Errorf("cannot speed up a cancelled construction")
+			}
+			if strings.EqualFold(strings.TrimSpace(job.Status), "completed") {
+				return fmt.Errorf("construction already completed")
+			}
+			if job.CompletedAt == nil {
+				return fmt.Errorf("construction cannot be speed up before it starts")
+			}
+
+			remaining := job.CompletedAt.Sub(now)
+			if remaining <= 0 {
+				return fmt.Errorf("construction is already ready to complete")
+			}
+			gemCost := calculateSpeedUpGemCost(remaining)
+			if save.Gems < int64(gemCost) {
+				return fmt.Errorf("insufficient gems: required %d, available %d", gemCost, save.Gems)
+			}
+			save.Gems -= int64(gemCost)
+
 			jobs[idx].Status = "completed"
 			jobs[idx].CompletedAt = ptrTime(now)
 
 			if err := persistSaveBundle(tx, save, jobs, buildings); err != nil {
 				return err
 			}
-			response = buildQueueResponse(save, jobs, buildings, activeEffects, "construction speedup applied")
+			response = buildQueueResponse(save, jobs, buildings, activeEffects, fmt.Sprintf("construction speedup applied (-%d gems)", gemCost))
 			return nil
 		})
 		if err != nil {
@@ -245,9 +266,13 @@ func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm
 			if idx < 0 {
 				return gorm.ErrRecordNotFound
 			}
-			jobs[idx].Status = "cancelled"
-
-			buildings = resetBuildingOnCancel(buildings, jobs[idx])
+			cancelledJob := jobs[idx]
+			buildings = resetBuildingOnCancel(buildings, cancelledJob)
+			jobs = removeJob(jobs, idx)
+			jobs, err = reconcileConstructionQueueSchedule(tx, jobs, save, activeEffects)
+			if err != nil {
+				return err
+			}
 
 			if err := persistSaveBundle(tx, save, jobs, buildings); err != nil {
 				return err
@@ -288,6 +313,10 @@ func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm
 
 			buildings = applyCompletedBuilding(buildings, job, now)
 			jobs = removeJob(jobs, idx)
+			jobs, err = reconcileConstructionQueueSchedule(tx, jobs, save, activeEffects)
+			if err != nil {
+				return err
+			}
 
 			if err := persistSaveBundle(tx, save, jobs, buildings); err != nil {
 				return err
@@ -591,6 +620,7 @@ func persistSaveBundle(tx *gorm.DB, save *models.PlayerSave, jobs []Construction
 	updates := map[string]any{
 		"construction_queue_json": datatypes.JSON(jobsRaw),
 		"buildings_json":          datatypes.JSON(buildingsRaw),
+		"gems":                    save.Gems,
 		"version":                 save.Version + 1,
 		"last_synced_at":          &now,
 	}
@@ -801,14 +831,110 @@ func upsertBuildingForJobProgress(buildings []map[string]any, job ConstructionJo
 }
 
 func resetBuildingOnCancel(buildings []map[string]any, job ConstructionJobDTO) []map[string]any {
-	for i := range buildings {
-		if strings.TrimSpace(fmt.Sprintf("%v", buildings[i]["buildingKey"])) == job.BuildingKey {
-			buildings[i]["state"] = "placed"
-			buildings[i]["startedAt"] = nil
-			buildings[i]["completedAt"] = nil
+	for i := 0; i < len(buildings); i++ {
+		if strings.TrimSpace(fmt.Sprintf("%v", buildings[i]["buildingKey"])) != job.BuildingKey {
+			continue
 		}
+
+		if strings.EqualFold(strings.TrimSpace(job.Type), "construct") && job.FromLevel <= 0 {
+			return append(buildings[:i], buildings[i+1:]...)
+		}
+
+		buildings[i]["state"] = "placed"
+		buildings[i]["startedAt"] = nil
+		buildings[i]["completedAt"] = nil
+		buildings[i]["level"] = job.FromLevel
+		return buildings
 	}
 	return buildings
+}
+
+func reconcileConstructionQueueSchedule(tx *gorm.DB, jobs []ConstructionJobDTO, save *models.PlayerSave, activeEffects map[string]any) ([]ConstructionJobDTO, error) {
+	if len(jobs) == 0 {
+		return jobs, nil
+	}
+
+	now := time.Now().UTC()
+	maxTeams := maxTeamsFromEffects(activeEffects)
+	activeTeams := 0
+
+	for i := range jobs {
+		status := strings.ToLower(strings.TrimSpace(jobs[i].Status))
+		switch status {
+		case "completed", "cancelled":
+			continue
+		case "active":
+			status = "in_progress"
+		}
+
+		if jobs[i].CompletedAt != nil && !jobs[i].CompletedAt.After(now) {
+			jobs[i].Status = "completed"
+			continue
+		}
+
+		if status == "in_progress" {
+			if jobs[i].StartedAt == nil {
+				jobs[i].StartedAt = ptrTime(now)
+			}
+			if jobs[i].CompletedAt == nil {
+				duration, err := resolveConstructionDuration(tx, jobs[i].BuildingKey, jobs[i].TargetLevel, save.Satisfaction, activeEffects)
+				if err != nil {
+					return nil, err
+				}
+				end := jobs[i].StartedAt.UTC().Add(duration)
+				jobs[i].CompletedAt = ptrTime(end)
+			}
+			jobs[i].Status = "in_progress"
+			activeTeams++
+			continue
+		}
+
+		jobs[i].Status = "queued"
+		jobs[i].StartedAt = nil
+		jobs[i].CompletedAt = nil
+	}
+
+	for i := range jobs {
+		if activeTeams >= maxTeams {
+			break
+		}
+		if strings.ToLower(strings.TrimSpace(jobs[i].Status)) != "queued" {
+			continue
+		}
+		duration, err := resolveConstructionDuration(tx, jobs[i].BuildingKey, jobs[i].TargetLevel, save.Satisfaction, activeEffects)
+		if err != nil {
+			return nil, err
+		}
+		jobs[i].Status = "in_progress"
+		jobs[i].StartedAt = ptrTime(now)
+		end := now.Add(duration)
+		jobs[i].CompletedAt = ptrTime(end)
+		activeTeams++
+	}
+
+	return jobs, nil
+}
+
+func calculateSpeedUpGemCost(remaining time.Duration) int {
+	if remaining <= 15*time.Minute {
+		return 1
+	}
+	if remaining <= time.Hour {
+		return 5
+	}
+	if remaining <= 6*time.Hour {
+		return 15
+	}
+	if remaining <= 12*time.Hour {
+		return 30
+	}
+	if remaining <= 24*time.Hour {
+		return 60
+	}
+	if remaining <= 72*time.Hour {
+		return 120
+	}
+	return 200
 }
 
 func applyCompletedBuilding(buildings []map[string]any, job ConstructionJobDTO, now time.Time) []map[string]any {

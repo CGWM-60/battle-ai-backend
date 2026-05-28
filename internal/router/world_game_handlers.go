@@ -131,6 +131,21 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 			writeWorldResponse(c, nil, err)
 			return
 		}
+
+		seedSimulation := false
+		if events, eErr := world.ListWorldEvents(c.Request.Context(), save.WorldID, save.ContinentID, 1); eErr == nil && len(events) == 0 {
+			if conflicts, cErr := world.ListWorldConflicts(c.Request.Context(), save.WorldID, save.ContinentID, 1); cErr == nil && len(conflicts) == 0 {
+				if weather, wErr := world.ListActiveWeather(c.Request.Context(), save.WorldID, save.ContinentID); wErr == nil && len(weather) == 0 {
+					if messages, mErr := world.ListDailyMessages(c.Request.Context(), currentUserID(c), 1); mErr == nil && len(messages) == 0 {
+						seedSimulation = true
+					}
+				}
+			}
+		}
+		if seedSimulation {
+			_, _ = world.SimulateWorldCycle(c.Request.Context(), save.WorldID, "player-routine-autoseed", service.SimulationCycleManual)
+		}
+
 		routine, err := world.LatestWorldFourPageRoutine(c.Request.Context(), save.WorldID)
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			routine, _, err = world.GenerateWorldFourPageRoutine(c.Request.Context(), save.WorldID, "player-api")
