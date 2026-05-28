@@ -74,3 +74,12 @@ func TestBaseConstructionMinutesByLevel(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeBuildingKeyAcceptsRechercheAlias(t *testing.T) {
+	if got := normalizeBuildingKey("recherche"); got != "research_center" {
+		t.Fatalf("expected recherche to map to research_center, got %q", got)
+	}
+	if got := normalizeBuildingKey("lab"); got != "research_center" {
+		t.Fatalf("expected lab to map to research_center, got %q", got)
+	}
+}

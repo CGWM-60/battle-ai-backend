@@ -22,6 +22,18 @@ type playerActionRequest struct {
 	Payload    datatypes.JSON `json:"payload"`
 }
 
+type cityCreateRequest struct {
+	CityName       string `json:"cityName"`
+	Continent      string `json:"continent"`
+	PlayerID       string `json:"playerId"`
+	Specialization string `json:"specialization"`
+}
+
+type actionSyncRequest struct {
+	ClientSaveVersion int                            `json:"clientSaveVersion"`
+	Actions           []service.PlayerActionSyncItem `json:"actions"`
+}
+
 func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	world := service.NewWorldGameService(database)
 
@@ -40,7 +52,52 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 			return
 		}
 		save, err := world.SyncPlayerSave(c.Request.Context(), currentUserID(c), input)
+		if conflict, ok := service.AsSaveSyncConflict(err); ok {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":         "syncConflict",
+				"message":       conflict.Message,
+				"serverVersion": conflict.ServerVersion,
+				"clientVersion": conflict.ClientVersion,
+				"serverSave":    conflict.ServerSave,
+			})
+			return
+		}
 		writeWorldResponse(c, save, err)
+	})
+	private.POST("/player/city/create", func(c *gin.Context) {
+		var input cityCreateRequest
+		if err := bindPayload(c, &input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid city create payload"})
+			return
+		}
+		state, err := world.CreatePlayerCity(c.Request.Context(), currentUserID(c), service.PlayerCityCreateInput{
+			CityName:       input.CityName,
+			Continent:      input.Continent,
+			Specialization: input.Specialization,
+		})
+		writeWorldResponse(c, state, err)
+	})
+	private.POST("/player/actions/sync", func(c *gin.Context) {
+		var input actionSyncRequest
+		if err := bindPayload(c, &input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid actions sync payload"})
+			return
+		}
+		result, err := world.SyncPlayerActions(c.Request.Context(), currentUserID(c), service.PlayerActionsSyncInput{
+			ClientSaveVersion: input.ClientSaveVersion,
+			Actions:           input.Actions,
+		})
+		if conflict, ok := service.AsSaveSyncConflict(err); ok {
+			c.JSON(http.StatusConflict, gin.H{
+				"error":         "syncConflict",
+				"message":       conflict.Message,
+				"serverVersion": conflict.ServerVersion,
+				"clientVersion": conflict.ClientVersion,
+				"serverSave":    conflict.ServerSave,
+			})
+			return
+		}
+		writeWorldResponse(c, result, err)
 	})
 	private.POST("/player/action", func(c *gin.Context) {
 		var input playerActionRequest
@@ -85,17 +142,25 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 		writeWorldResponse(c, metrics, err)
 	})
 	private.GET("/world/events", playerScopedList(curryPlayerScope(world, func(ctxUser playerScope) (any, error) {
-		return world.ListWorldEvents(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID, ctxUser.Limit)
+		events, err := world.ListWorldEvents(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID, ctxUser.Limit)
+		if err != nil {
+			return nil, err
+		}
+		return gin.H{"events": formatEventItems(database, ctxUser.Context, ctxUser.Save.PlayerID, events)}, nil
 	})))
 	private.GET("/world/conflicts", playerScopedList(curryPlayerScope(world, func(ctxUser playerScope) (any, error) {
 		conflicts, err := world.ListWorldConflicts(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID, ctxUser.Limit)
 		if err != nil {
 			return nil, err
 		}
-		return gin.H{"items": formatConflictItems(database, ctxUser.Context, conflicts)}, nil
+		return gin.H{"conflicts": formatConflictItems(database, ctxUser.Context, conflicts)}, nil
 	})))
 	private.GET("/world/weather", playerScopedList(curryPlayerScope(world, func(ctxUser playerScope) (any, error) {
-		return world.ListActiveWeather(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID)
+		weather, err := world.ListActiveWeather(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID)
+		if err != nil {
+			return nil, err
+		}
+		return gin.H{"weather": formatWeatherItems(weather)}, nil
 	})))
 	private.GET("/weather/active", playerScopedList(curryPlayerScope(world, func(ctxUser playerScope) (any, error) {
 		return world.ListActiveWeather(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID)
@@ -587,19 +652,109 @@ func formatConflictItems(database *gorm.DB, ctx contextLike, conflicts []models.
 		attackerName := conflictEntityName(database, ctx, conflict.AttackerType, conflict.AttackerID)
 		defenderName := conflictEntityName(database, ctx, conflict.DefenderType, conflict.DefenderID)
 		items = append(items, gin.H{
-			"id":           strconv.FormatUint(uint64(conflict.Id), 10),
-			"title":        defaultText(conflict.Title, "Non disponible"),
-			"description":  defaultText(conflict.Description, "Non disponible"),
-			"attackerName": attackerName,
-			"defenderName": defenderName,
-			"intensity":    clamp(conflict.Intensity, 0, 100),
-			"riskLevel":    normalizeRiskLevel(conflict.RiskLevel, conflict.Intensity),
-			"status":       defaultText(conflict.Status, "Non disponible"),
-			"startsAt":     conflict.StartsAt,
-			"endsAt":       conflict.EndsAt,
+			"id":               strconv.FormatUint(uint64(conflict.Id), 10),
+			"title":            defaultText(conflict.Title, "Non disponible"),
+			"description":      defaultText(conflict.Description, "Non disponible"),
+			"attackerName":     attackerName,
+			"attackerType":     defaultText(conflict.AttackerType, "unknown"),
+			"defenderName":     defenderName,
+			"defenderType":     defaultText(conflict.DefenderType, "unknown"),
+			"intensity":        clamp(conflict.Intensity, 0, 100),
+			"risk":             clamp(conflict.Intensity, 0, 100),
+			"riskLevel":        normalizeRiskLevel(conflict.RiskLevel, conflict.Intensity),
+			"status":           defaultText(conflict.Status, "Non disponible"),
+			"rewards":          parseJSONObject(conflict.RewardsJSON),
+			"penalties":        parseJSONObject(conflict.PenaltiesJSON),
+			"availableActions": conflictAvailableActions(conflict.Status),
+			"startsAt":         conflict.StartsAt,
+			"endsAt":           conflict.EndsAt,
 		})
 	}
 	return items
+}
+
+func formatEventItems(database *gorm.DB, ctx contextLike, playerID uint, events []models.GameEvent) []gin.H {
+	if len(events) == 0 {
+		return []gin.H{}
+	}
+	eventIDs := make([]uint, 0, len(events))
+	for _, event := range events {
+		eventIDs = append(eventIDs, event.Id)
+	}
+	participated := map[uint]bool{}
+	claimed := map[uint]bool{}
+	if database != nil {
+		var participations []models.GameEventParticipation
+		_ = database.WithContext(ctx).Where("player_id = ? AND event_id IN ?", playerID, eventIDs).Find(&participations).Error
+		for _, item := range participations {
+			participated[item.EventID] = true
+		}
+		var claims []models.GameEventClaim
+		_ = database.WithContext(ctx).Where("player_id = ? AND event_id IN ?", playerID, eventIDs).Find(&claims).Error
+		for _, item := range claims {
+			claimed[item.EventID] = true
+		}
+	}
+	now := time.Now().UTC()
+	items := make([]gin.H, 0, len(events))
+	for _, event := range events {
+		hasParticipated := participated[event.Id]
+		isClaimed := claimed[event.Id]
+		canClaim := hasParticipated && !isClaimed && !event.EndsAt.After(now)
+		items = append(items, gin.H{
+			"id":              strconv.FormatUint(uint64(event.Id), 10),
+			"title":           defaultText(event.Title, "Non disponible"),
+			"description":     defaultText(event.Description, "Non disponible"),
+			"type":            defaultText(event.Type, "Non disponible"),
+			"difficulty":      defaultText(event.Difficulty, "medium"),
+			"status":          defaultText(event.Status, "Non disponible"),
+			"startsAt":        event.StartsAt,
+			"endsAt":          event.EndsAt,
+			"rewards":         parseJSONObject(event.RewardsJSON),
+			"requirements":    parseJSONObject(event.RequirementsJSON),
+			"consequences":    parseJSONObject(event.ConsequencesJSON),
+			"hasParticipated": hasParticipated,
+			"canClaim":        canClaim,
+			"claimed":         isClaimed,
+		})
+	}
+	return items
+}
+
+func formatWeatherItems(events []models.WeatherEvent) []gin.H {
+	items := make([]gin.H, 0, len(events))
+	for _, event := range events {
+		items = append(items, gin.H{
+			"id":          strconv.FormatUint(uint64(event.Id), 10),
+			"type":        defaultText(event.Type, "Non disponible"),
+			"severity":    clamp(event.Severity, 0, 100),
+			"title":       defaultText(event.Title, "Non disponible"),
+			"description": defaultText(event.Description, "Non disponible"),
+			"startsAt":    event.StartsAt,
+			"endsAt":      event.EndsAt,
+			"effects":     parseJSONObject(event.EffectsJSON),
+		})
+	}
+	return items
+}
+
+func parseJSONObject(raw datatypes.JSON) gin.H {
+	if len(raw) == 0 {
+		return gin.H{}
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(raw, &parsed); err != nil || parsed == nil {
+		return gin.H{}
+	}
+	return gin.H(parsed)
+}
+
+func conflictAvailableActions(status string) []string {
+	normalized := strings.ToLower(strings.TrimSpace(status))
+	if normalized == "resolved" || normalized == "finished" || normalized == "closed" || normalized == "archived" {
+		return []string{}
+	}
+	return []string{"intervene", "observe"}
 }
 
 func conflictEntityName(database *gorm.DB, ctx contextLike, entityType string, entityID uint) string {

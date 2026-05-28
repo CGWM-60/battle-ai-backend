@@ -78,6 +78,51 @@ type PlayerSaveSyncInput struct {
 	ClientSavedAt         *time.Time     `json:"clientSavedAt"`
 }
 
+type SaveSyncConflictError struct {
+	Message       string         `json:"message"`
+	ServerVersion int            `json:"serverVersion"`
+	ClientVersion int            `json:"clientVersion"`
+	ServerSave    map[string]any `json:"serverSave"`
+}
+
+func (e *SaveSyncConflictError) Error() string {
+	if e == nil {
+		return "save conflict"
+	}
+	if strings.TrimSpace(e.Message) != "" {
+		return e.Message
+	}
+	return fmt.Sprintf("save conflict: server version %d client version %d", e.ServerVersion, e.ClientVersion)
+}
+
+func AsSaveSyncConflict(err error) (*SaveSyncConflictError, bool) {
+	if err == nil {
+		return nil, false
+	}
+	var conflict *SaveSyncConflictError
+	if errors.As(err, &conflict) {
+		return conflict, true
+	}
+	return nil, false
+}
+
+type PlayerCityCreateInput struct {
+	CityName       string `json:"cityName"`
+	Continent      string `json:"continent"`
+	Specialization string `json:"specialization"`
+}
+
+type PlayerActionSyncItem struct {
+	IdempotencyKey string         `json:"idempotencyKey"`
+	Type           string         `json:"type"`
+	Payload        datatypes.JSON `json:"payload"`
+}
+
+type PlayerActionsSyncInput struct {
+	ClientSaveVersion int                    `json:"clientSaveVersion"`
+	Actions           []PlayerActionSyncItem `json:"actions"`
+}
+
 type ChatInput struct {
 	Message      string         `json:"message"`
 	MetadataJSON datatypes.JSON `json:"metadataJson"`
@@ -406,6 +451,10 @@ func (s *WorldGameService) PlayerState(ctx context.Context, playerID uint) (map[
 	if err != nil {
 		return nil, err
 	}
+	var player models.Users
+	if err := s.db.WithContext(ctx).First(&player, playerID).Error; err != nil {
+		return nil, err
+	}
 	var buildings []models.PlayerBuilding
 	if err := s.db.WithContext(ctx).Where("player_id = ?", playerID).Order("id ASC").Find(&buildings).Error; err != nil {
 		return nil, err
@@ -415,6 +464,12 @@ func (s *WorldGameService) PlayerState(ctx context.Context, playerID uint) (map[
 	weather, _ := s.ListActiveWeather(ctx, save.WorldID, save.ContinentID)
 	messages, _ := s.ListDailyMessages(ctx, playerID, 20)
 	return map[string]any{
+		"pseudo": player.Pseudo,
+		"player": map[string]any{
+			"id":     strconv.FormatUint(uint64(player.Id), 10),
+			"pseudo": player.Pseudo,
+			"guild":  nil,
+		},
 		"save":      save,
 		"buildings": buildings,
 		"events":    events,
@@ -422,6 +477,192 @@ func (s *WorldGameService) PlayerState(ctx context.Context, playerID uint) (map[
 		"weather":   weather,
 		"messages":  messages,
 	}, nil
+}
+
+func (s *WorldGameService) CreatePlayerCity(ctx context.Context, playerID uint, input PlayerCityCreateInput) (map[string]any, error) {
+	cityName := strings.TrimSpace(input.CityName)
+	if cityName == "" {
+		cityName = fmt.Sprintf("Ville %d", playerID)
+	}
+	if len([]rune(cityName)) > 120 {
+		return nil, fmt.Errorf("city name too long")
+	}
+	now := time.Now().UTC()
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		base, err := s.EnsurePlayerSave(ctx, playerID)
+		if err != nil {
+			return err
+		}
+		var save models.PlayerSave
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", base.Id).First(&save).Error; err != nil {
+			return err
+		}
+		defaultCityName := fmt.Sprintf("Ville %d", playerID)
+		if strings.TrimSpace(save.CityName) != "" && save.CityName != defaultCityName {
+			return fmt.Errorf("player already has an active city")
+		}
+
+		starterBuildings := []map[string]any{
+			{"buildingKey": "habitation", "level": 1, "positionX": 1, "positionY": 1, "state": "placed", "lastCollectedAt": now},
+			{"buildingKey": "solar_park", "level": 1, "positionX": 2, "positionY": 1, "state": "placed", "lastCollectedAt": now},
+		}
+		buildingsJSON, _ := json.Marshal(starterBuildings)
+
+		activeEffects := map[string]any{}
+		if len(save.ActiveEffectsJSON) > 0 {
+			_ = json.Unmarshal(save.ActiveEffectsJSON, &activeEffects)
+		}
+		if activeEffects == nil {
+			activeEffects = map[string]any{}
+		}
+		if strings.TrimSpace(input.Specialization) != "" {
+			activeEffects["specialization"] = strings.TrimSpace(input.Specialization)
+		}
+		if strings.TrimSpace(input.Continent) != "" {
+			activeEffects["continent"] = strings.TrimSpace(input.Continent)
+		}
+		activeEffectsJSON, _ := json.Marshal(activeEffects)
+
+		updates := map[string]any{
+			"city_name":               cityName,
+			"buildings_json":          datatypes.JSON(buildingsJSON),
+			"construction_queue_json": emptyJSONObject,
+			"active_effects_json":     datatypes.JSON(activeEffectsJSON),
+			"version":                 save.Version + 1,
+			"last_synced_at":          &now,
+		}
+		if err := tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(updates).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Where("player_id = ?", playerID).Delete(&models.PlayerBuilding{}).Error; err != nil {
+			return err
+		}
+		rows := []models.PlayerBuilding{
+			{PlayerID: playerID, BuildingKey: "habitation", Level: 1, PositionX: 1, PositionY: 1, State: "placed", LastCollectedAt: &now},
+			{PlayerID: playerID, BuildingKey: "solar_park", Level: 1, PositionX: 2, PositionY: 1, State: "placed", LastCollectedAt: &now},
+		}
+		for _, row := range rows {
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return s.PlayerState(ctx, playerID)
+}
+
+func (s *WorldGameService) SyncPlayerActions(ctx context.Context, playerID uint, input PlayerActionsSyncInput) (map[string]any, error) {
+	save, err := s.EnsurePlayerSave(ctx, playerID)
+	if err != nil {
+		return nil, err
+	}
+	if input.ClientSaveVersion > 0 && input.ClientSaveVersion != save.Version {
+		return nil, &SaveSyncConflictError{
+			Message:       "Save version conflict",
+			ServerVersion: save.Version,
+			ClientVersion: input.ClientSaveVersion,
+			ServerSave: map[string]any{
+				"id":        save.Id,
+				"playerId":  save.PlayerID,
+				"version":   save.Version,
+				"cityName":  save.CityName,
+				"cityLevel": save.CityLevel,
+			},
+		}
+	}
+
+	accepted := make([]map[string]any, 0, len(input.Actions))
+	rejected := make([]map[string]any, 0)
+
+	for _, action := range input.Actions {
+		idempotencyKey := strings.TrimSpace(action.IdempotencyKey)
+		actionType := strings.TrimSpace(action.Type)
+		if idempotencyKey == "" || actionType == "" {
+			rejected = append(rejected, map[string]any{
+				"idempotencyKey": idempotencyKey,
+				"type":           actionType,
+				"reason":         "missing idempotencyKey or type",
+			})
+			continue
+		}
+
+		var existing models.PlayerActionLog
+		err := s.db.WithContext(ctx).
+			Where("player_id = ? AND action = ? AND target_id = ? AND status = ?", playerID, "client_action_sync", idempotencyKey, "accepted").
+			Order("id DESC").
+			First(&existing).Error
+		if err == nil {
+			accepted = append(accepted, map[string]any{
+				"idempotencyKey": idempotencyKey,
+				"type":           actionType,
+				"idempotent":     true,
+				"status":         "accepted",
+			})
+			continue
+		}
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
+
+		if actionType == "player.city.create" {
+			payload := map[string]any{}
+			if len(action.Payload) > 0 {
+				_ = json.Unmarshal(action.Payload, &payload)
+			}
+			_, err := s.CreatePlayerCity(ctx, playerID, PlayerCityCreateInput{
+				CityName:       strings.TrimSpace(fmt.Sprint(payload["cityName"])),
+				Continent:      strings.TrimSpace(fmt.Sprint(payload["continent"])),
+				Specialization: strings.TrimSpace(fmt.Sprint(payload["specialization"])),
+			})
+			if err != nil {
+				rejected = append(rejected, map[string]any{
+					"idempotencyKey": idempotencyKey,
+					"type":           actionType,
+					"reason":         err.Error(),
+				})
+				continue
+			}
+		} else if !isSupportedSyncedAction(actionType) {
+			rejected = append(rejected, map[string]any{
+				"idempotencyKey": idempotencyKey,
+				"type":           actionType,
+				"reason":         "unsupported action type",
+			})
+			continue
+		}
+
+		if err := s.logPlayerAction(ctx, playerID, &save.WorldID, &save.ContinentID, "client_action_sync", actionType, idempotencyKey, "accepted", "", nil, nil, map[string]any{
+			"type": actionType,
+		}); err != nil {
+			return nil, err
+		}
+		accepted = append(accepted, map[string]any{
+			"idempotencyKey": idempotencyKey,
+			"type":           actionType,
+			"idempotent":     false,
+			"status":         "accepted",
+		})
+	}
+
+	updatedSave, err := s.EnsurePlayerSave(ctx, playerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"accepted":      accepted,
+		"rejected":      rejected,
+		"save":          updatedSave,
+		"serverVersion": updatedSave.Version,
+	}, nil
+}
+
+func isSupportedSyncedAction(actionType string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(actionType))
+	return strings.HasPrefix(normalized, "construction.") || strings.HasPrefix(normalized, "diplomacy.") || strings.HasPrefix(normalized, "commerce.") || strings.HasPrefix(normalized, "weather.")
 }
 
 func (s *WorldGameService) SyncPlayerSave(ctx context.Context, playerID uint, input PlayerSaveSyncInput) (*models.PlayerSave, error) {
@@ -437,6 +678,35 @@ func (s *WorldGameService) SyncPlayerSave(ctx context.Context, playerID uint, in
 			Where("id = ? AND player_id = ?", save.Id, playerID).
 			First(&locked).Error; err != nil {
 			return err
+		}
+		if input.Version != locked.Version {
+			return &SaveSyncConflictError{
+				Message:       "Save version conflict",
+				ServerVersion: locked.Version,
+				ClientVersion: input.Version,
+				ServerSave: map[string]any{
+					"id":                    locked.Id,
+					"playerId":              locked.PlayerID,
+					"worldId":               locked.WorldID,
+					"continentId":           locked.ContinentID,
+					"cityName":              locked.CityName,
+					"cityLevel":             locked.CityLevel,
+					"xp":                    locked.XP,
+					"population":            locked.Population,
+					"satisfaction":          locked.Satisfaction,
+					"food":                  locked.Food,
+					"energy":                locked.Energy,
+					"credits":               locked.Credits,
+					"gems":                  locked.Gems,
+					"buildingsJson":         locked.BuildingsJSON,
+					"constructionQueueJson": locked.ConstructionQueueJSON,
+					"researchJson":          locked.ResearchJSON,
+					"inventoryJson":         locked.InventoryJSON,
+					"activeEffectsJson":     locked.ActiveEffectsJSON,
+					"version":               locked.Version,
+					"lastSyncedAt":          locked.LastSyncedAt,
+				},
+			}
 		}
 		if err := validateSaveSync(&locked, input, now); err != nil {
 			_ = s.logPlayerActionTx(tx, playerID, &locked.WorldID, &locked.ContinentID, "save_sync", "player_save", strconv.FormatUint(uint64(locked.Id), 10), "rejected", err.Error(), locked, input, nil)
@@ -2822,12 +3092,6 @@ func negativeInt64(values ...int64) bool {
 }
 
 func validateSaveSync(save *models.PlayerSave, input PlayerSaveSyncInput, now time.Time) error {
-	if input.Version < save.Version {
-		return fmt.Errorf("save conflict: server version %d is newer than client version %d", save.Version, input.Version)
-	}
-	if input.Version > save.Version+1 {
-		return fmt.Errorf("sync rejected: client version is too far ahead")
-	}
 	if input.ClientSavedAt != nil {
 		if save.LastSyncedAt != nil && input.ClientSavedAt.Before(save.LastSyncedAt.Add(-2*time.Minute)) {
 			return fmt.Errorf("sync rejected: client save is older than server state")

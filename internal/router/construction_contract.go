@@ -488,7 +488,7 @@ func normalizeBuildingKey(buildingKey string) string {
 		return "solar_park"
 	case "farm", "verticalfarm", "verticale_farm", "ferme_verticale":
 		return "vertical_farm"
-	case "research", "researchcenter", "centre_recherche", "centre_de_recherche":
+	case "recherche", "research", "researchcenter", "centre_recherche", "centre_de_recherche", "laboratory", "lab":
 		return "research_center"
 	case "ai", "aicenter", "centre_ia", "centre_ai":
 		return "ai_center"
