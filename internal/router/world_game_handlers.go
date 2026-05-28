@@ -561,6 +561,114 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 		}, err)
 	})
 
+	private.POST("/world/actions/:id/cancel", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		actionID := strings.TrimSpace(c.Param("id"))
+		if actionID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action id"})
+			return
+		}
+
+		var logEntry models.PlayerActionLog
+		query := database.WithContext(c.Request.Context()).
+			Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).
+			Where("target_id = ?", actionID)
+		if numericID, parseErr := strconv.ParseUint(actionID, 10, 64); parseErr == nil {
+			query = database.WithContext(c.Request.Context()).
+				Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).
+				Where("target_id = ? OR id = ?", actionID, uint(numericID))
+		}
+		if err := query.Order("created_at DESC").First(&logEntry).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "action not found"})
+				return
+			}
+			writeWorldResponse(c, nil, err)
+			return
+		}
+
+		meta := bindOptionalMap(c)
+		meta["cancelledAt"] = time.Now().UTC().Format(time.RFC3339)
+		meta["sourceAction"] = logEntry.Action
+		err = world.LogPlayerWorldAction(
+			c.Request.Context(),
+			currentUserID(c),
+			save.WorldID,
+			save.ContinentID,
+			"world_action_cancel",
+			logEntry.TargetType,
+			logEntry.TargetID,
+			"accepted",
+			"",
+			meta,
+		)
+		writeWorldResponse(c, gin.H{
+			"accepted":  err == nil,
+			"actionId":  actionID,
+			"status":    "cancelled",
+			"serverNow": time.Now().UTC(),
+		}, err)
+	})
+
+	private.POST("/world/actions/:id/claim", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		actionID := strings.TrimSpace(c.Param("id"))
+		if actionID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid action id"})
+			return
+		}
+
+		var logEntry models.PlayerActionLog
+		query := database.WithContext(c.Request.Context()).
+			Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).
+			Where("target_id = ?", actionID)
+		if numericID, parseErr := strconv.ParseUint(actionID, 10, 64); parseErr == nil {
+			query = database.WithContext(c.Request.Context()).
+				Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).
+				Where("target_id = ? OR id = ?", actionID, uint(numericID))
+		}
+		if err := query.Order("created_at DESC").First(&logEntry).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				c.JSON(http.StatusNotFound, gin.H{"error": "action not found"})
+				return
+			}
+			writeWorldResponse(c, nil, err)
+			return
+		}
+
+		meta := bindOptionalMap(c)
+		meta["claimedAt"] = time.Now().UTC().Format(time.RFC3339)
+		meta["sourceAction"] = logEntry.Action
+		err = world.LogPlayerWorldAction(
+			c.Request.Context(),
+			currentUserID(c),
+			save.WorldID,
+			save.ContinentID,
+			"world_action_claim",
+			logEntry.TargetType,
+			logEntry.TargetID,
+			"accepted",
+			"",
+			meta,
+		)
+		writeWorldResponse(c, gin.H{
+			"accepted":  err == nil,
+			"actionId":  actionID,
+			"status":    "claimed",
+			"claimed":   err == nil,
+			"serverNow": time.Now().UTC(),
+			"rewards":   gin.H{},
+		}, err)
+	})
+
 	private.GET("/world/commerce/report", func(c *gin.Context) {
 		routesJSON, err := fetchCommerceRoutes(database, world, c)
 		if err != nil {
@@ -1016,7 +1124,7 @@ func emissaryAvailability(database *gorm.DB, ctx contextLike, save *models.Playe
 		since := time.Now().UTC().Add(-2 * time.Hour)
 		_ = database.WithContext(ctx).
 			Model(&models.PlayerActionLog{}).
-			Where("player_id = ? AND action_type = ? AND status = ? AND created_at >= ?", save.PlayerID, "diplomacy_emissary_send", "accepted", since).
+			Where("player_id = ? AND action = ? AND status = ? AND created_at >= ?", save.PlayerID, "diplomacy_emissary_send", "accepted", since).
 			Count(&inProgress).Error
 	}
 	available = total - int(inProgress)
