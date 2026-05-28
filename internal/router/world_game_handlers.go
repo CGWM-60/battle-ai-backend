@@ -146,6 +146,7 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	registerChatRoutes(private, world)
 	registerGuildRoutes(private, database, world)
 	registerBuildingRoutes(private, world)
+	registerResearchRoutes(private, world)
 	registerConstructionContractRoutes(private, database, world)
 }
 
@@ -936,6 +937,21 @@ func registerAdminWorldGameRoutesAt(admin *gin.RouterGroup, database *gorm.DB) {
 	admin.GET("/buildings/:id", adminGet[models.BuildingDefinition](database, true))
 	admin.PATCH("/buildings/:id", adminPatch[models.BuildingDefinition](database, "building"))
 	admin.DELETE("/buildings/:id", adminSoftDelete[models.BuildingDefinition](database, "building"))
+	admin.GET("/resources", adminList[models.ResourceDefinition](database, "sort_order ASC, id ASC"))
+	admin.POST("/resources", adminCreate[models.ResourceDefinition](database, "resource"))
+	admin.GET("/resources/:id", adminGet[models.ResourceDefinition](database, false))
+	admin.PATCH("/resources/:id", adminPatch[models.ResourceDefinition](database, "resource"))
+	admin.DELETE("/resources/:id", adminSoftDelete[models.ResourceDefinition](database, "resource"))
+	admin.GET("/research-trees", adminList[models.ResearchTreeDefinition](database, "sort_order ASC, id ASC"))
+	admin.POST("/research-trees", adminCreate[models.ResearchTreeDefinition](database, "research_tree"))
+	admin.GET("/research-trees/:id", adminGet[models.ResearchTreeDefinition](database, true))
+	admin.PATCH("/research-trees/:id", adminPatch[models.ResearchTreeDefinition](database, "research_tree"))
+	admin.DELETE("/research-trees/:id", adminSoftDelete[models.ResearchTreeDefinition](database, "research_tree"))
+	admin.GET("/research-nodes", adminList[models.ResearchNodeDefinition](database, "sort_order ASC, id ASC"))
+	admin.POST("/research-nodes", adminCreate[models.ResearchNodeDefinition](database, "research_node"))
+	admin.GET("/research-nodes/:id", adminGet[models.ResearchNodeDefinition](database, false))
+	admin.PATCH("/research-nodes/:id", adminPatch[models.ResearchNodeDefinition](database, "research_node"))
+	admin.DELETE("/research-nodes/:id", adminSoftDelete[models.ResearchNodeDefinition](database, "research_node"))
 	admin.GET("/buildings/:id/assets", adminBuildingAssets(database))
 	admin.POST("/buildings/:id/assets", adminCreateBuildingAsset(database, world))
 	admin.GET("/building-assets", adminList[models.BuildingAsset](database, "building_definition_id ASC, level ASC"))
@@ -1112,6 +1128,10 @@ func registerBuildingRoutes(private *gin.RouterGroup, world *service.WorldGameSe
 		version, err := world.CurrentCatalogVersion(c.Request.Context())
 		writeWorldResponse(c, gin.H{"version": version}, err)
 	})
+	private.GET("/buildings/:key/research-tree", func(c *gin.Context) {
+		payload, err := world.ResearchCatalog(c.Request.Context(), currentUserID(c), c.Param("key"))
+		writeWorldResponse(c, payload, err)
+	})
 	private.GET("/buildings/:key", func(c *gin.Context) {
 		catalog, err := world.BuildingCatalog(c.Request.Context(), true)
 		if err != nil {
@@ -1135,6 +1155,25 @@ func registerBuildingRoutes(private *gin.RouterGroup, world *service.WorldGameSe
 		since, _ := strconv.Atoi(c.DefaultQuery("sinceVersion", "0"))
 		manifest, err := world.BuildingManifest(c.Request.Context(), since)
 		writeWorldResponse(c, manifest, err)
+	})
+}
+
+func registerResearchRoutes(private *gin.RouterGroup, world *service.WorldGameService) {
+	private.GET("/research/catalog", func(c *gin.Context) {
+		payload, err := world.ResearchCatalog(c.Request.Context(), currentUserID(c), c.Query("buildingKey"))
+		writeWorldResponse(c, payload, err)
+	})
+	private.GET("/research/state", func(c *gin.Context) {
+		progress, err := world.ResearchProgress(c.Request.Context(), currentUserID(c))
+		writeWorldResponse(c, progress, err)
+	})
+	private.POST("/research/:nodeKey/start", func(c *gin.Context) {
+		result, err := world.StartResearch(c.Request.Context(), currentUserID(c), c.Param("nodeKey"))
+		writeWorldResponse(c, result, err)
+	})
+	private.POST("/research/:nodeKey/complete", func(c *gin.Context) {
+		result, err := world.CompleteResearch(c.Request.Context(), currentUserID(c), c.Param("nodeKey"))
+		writeWorldResponse(c, result, err)
 	})
 }
 
@@ -1742,7 +1781,7 @@ func adminSendAIMessage(database *gorm.DB) gin.HandlerFunc {
 }
 
 func applyAdminFilters(c *gin.Context, query *gorm.DB) {
-	for _, key := range []string{"world_id", "continent_id", "guild_id", "player_id", "status", "is_active", "type", "channel_type"} {
+	for _, key := range []string{"world_id", "continent_id", "guild_id", "player_id", "status", "is_active", "type", "channel_type", "domain", "building_key", "research_tree_definition_id"} {
 		if value := c.Query(key); value != "" {
 			query.Where(key+" = ?", value)
 		}

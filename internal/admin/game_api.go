@@ -114,6 +114,21 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.GET("/buildings/:id", s.gameGetBuildingAPI)
 	game.PATCH("/buildings/:id", s.gamePatchModelAPI(&models.BuildingDefinition{}, "building"))
 	game.DELETE("/buildings/:id", s.gameDeleteModelAPI(&models.BuildingDefinition{}, "building"))
+	game.GET("/resources", s.gameListModelAPI(&[]models.ResourceDefinition{}, "sort_order ASC, id ASC"))
+	game.POST("/resources", s.gameCreateModelAPI(&models.ResourceDefinition{}, "resource"))
+	game.GET("/resources/:id", s.gameGetModelAPI(&models.ResourceDefinition{}))
+	game.PATCH("/resources/:id", s.gamePatchModelAPI(&models.ResourceDefinition{}, "resource"))
+	game.DELETE("/resources/:id", s.gameDeleteModelAPI(&models.ResourceDefinition{}, "resource"))
+	game.GET("/research-trees", s.gameListModelAPI(&[]models.ResearchTreeDefinition{}, "sort_order ASC, id ASC"))
+	game.POST("/research-trees", s.gameCreateModelAPI(&models.ResearchTreeDefinition{}, "research_tree"))
+	game.GET("/research-trees/:id", s.gameGetResearchTreeAPI)
+	game.PATCH("/research-trees/:id", s.gamePatchModelAPI(&models.ResearchTreeDefinition{}, "research_tree"))
+	game.DELETE("/research-trees/:id", s.gameDeleteModelAPI(&models.ResearchTreeDefinition{}, "research_tree"))
+	game.GET("/research-nodes", s.gameListModelAPI(&[]models.ResearchNodeDefinition{}, "sort_order ASC, id ASC"))
+	game.POST("/research-nodes", s.gameCreateModelAPI(&models.ResearchNodeDefinition{}, "research_node"))
+	game.GET("/research-nodes/:id", s.gameGetModelAPI(&models.ResearchNodeDefinition{}))
+	game.PATCH("/research-nodes/:id", s.gamePatchModelAPI(&models.ResearchNodeDefinition{}, "research_node"))
+	game.DELETE("/research-nodes/:id", s.gameDeleteModelAPI(&models.ResearchNodeDefinition{}, "research_node"))
 	game.GET("/buildings/:id/assets", s.gameBuildingAssetsAPI)
 	game.POST("/buildings/:id/assets", s.gameCreateBuildingAssetAPI(world))
 	game.GET("/building-assets", s.gameListModelAPI(&[]models.BuildingAsset{}, "building_definition_id ASC, level ASC"))
@@ -727,6 +742,19 @@ func (s *Server) gameGetModelAPI(dest any) gin.HandlerFunc {
 	}
 }
 
+func (s *Server) gameGetResearchTreeAPI(c *gin.Context) {
+	id, err := gameParam(c, "id")
+	if err != nil {
+		gameJSON(c, nil, err)
+		return
+	}
+	var tree models.ResearchTreeDefinition
+	err = s.db.WithContext(c.Request.Context()).Preload("Nodes", func(db *gorm.DB) *gorm.DB {
+		return db.Order("sort_order ASC, id ASC")
+	}).First(&tree, id).Error
+	gameJSON(c, tree, err)
+}
+
 func (s *Server) gameCreateModelAPI(dest any, target string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if err := c.ShouldBindJSON(dest); err != nil {
@@ -800,14 +828,17 @@ func (s *Server) gamePatchStatusAPI(model any, status string) gin.HandlerFunc {
 
 func gameApplyFilters(c *gin.Context, query *gorm.DB) *gorm.DB {
 	fields := map[string]string{
-		"worldId":     "world_id",
-		"continentId": "continent_id",
-		"guildId":     "guild_id",
-		"playerId":    "player_id",
-		"status":      "status",
-		"isActive":    "is_active",
-		"type":        "type",
-		"channelType": "channel_type",
+		"worldId":                  "world_id",
+		"continentId":              "continent_id",
+		"guildId":                  "guild_id",
+		"playerId":                 "player_id",
+		"status":                   "status",
+		"isActive":                 "is_active",
+		"type":                     "type",
+		"domain":                   "domain",
+		"buildingKey":              "building_key",
+		"researchTreeDefinitionId": "research_tree_definition_id",
+		"channelType":              "channel_type",
 	}
 	for queryKey, column := range fields {
 		if value := c.Query(queryKey); value != "" {

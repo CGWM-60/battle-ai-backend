@@ -360,6 +360,7 @@ type BuildingDefinition struct {
 	Name                   string          `gorm:"size:160;index" json:"name"`
 	Description            string          `gorm:"type:text" json:"description"`
 	Category               string          `gorm:"size:64;index" json:"category"`
+	ResearchTreeKey        string          `gorm:"size:120;index" json:"researchTreeKey"`
 	MaxLevel               int             `json:"maxLevel"`
 	BaseCostJSON           datatypes.JSON  `gorm:"type:json" json:"baseCostJson"`
 	LevelCostFormulaJSON   datatypes.JSON  `gorm:"type:json" json:"levelCostFormulaJson"`

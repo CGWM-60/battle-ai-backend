@@ -9,7 +9,7 @@ export default function BuildingsPage() {
         title: "Catalogue de batiments",
         description: "Definitions dynamiques envoyees a Flutter avec categories, couts, effets et conditions.",
         endpoint: "game/buildings",
-        columns: ["id", "key", "name", "category", "maxLevel", "isActive", "sortOrder", "updatedAt"],
+        columns: ["id", "key", "name", "category", "researchTreeKey", "maxLevel", "isActive", "sortOrder", "updatedAt"],
         filters: ["type"],
         editable: true,
         createSample: {
@@ -17,6 +17,7 @@ export default function BuildingsPage() {
           name: "Parc solaire",
           description: "Produit de l'energie propre.",
           category: "energy",
+          researchTreeKey: "durabilite_energie",
           maxLevel: 30,
           baseCostJson: { credits: 1000, energy: 0 },
           levelCostFormulaJson: { multiplier: 1.18 },

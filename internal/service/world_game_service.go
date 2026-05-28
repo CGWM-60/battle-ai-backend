@@ -144,12 +144,13 @@ type BuildingManifest struct {
 }
 
 type BuildingManifestDefinition struct {
-	Key         string                  `json:"key"`
-	Name        string                  `json:"name"`
-	Description string                  `json:"description"`
-	Category    string                  `json:"category"`
-	MaxLevel    int                     `json:"maxLevel"`
-	Assets      []BuildingManifestAsset `json:"assets"`
+	Key             string                  `json:"key"`
+	Name            string                  `json:"name"`
+	Description     string                  `json:"description"`
+	Category        string                  `json:"category"`
+	ResearchTreeKey string                  `json:"researchTreeKey"`
+	MaxLevel        int                     `json:"maxLevel"`
+	Assets          []BuildingManifestAsset `json:"assets"`
 }
 
 type BuildingManifestAsset struct {
@@ -1181,12 +1182,13 @@ func (s *WorldGameService) BuildingManifest(ctx context.Context, sinceVersion in
 	manifest := BuildingManifest{Version: version, Buildings: make([]BuildingManifestDefinition, 0, len(buildings))}
 	for _, building := range buildings {
 		item := BuildingManifestDefinition{
-			Key:         building.Key,
-			Name:        building.Name,
-			Description: building.Description,
-			Category:    building.Category,
-			MaxLevel:    building.MaxLevel,
-			Assets:      []BuildingManifestAsset{},
+			Key:             building.Key,
+			Name:            building.Name,
+			Description:     building.Description,
+			Category:        building.Category,
+			ResearchTreeKey: building.ResearchTreeKey,
+			MaxLevel:        building.MaxLevel,
+			Assets:          []BuildingManifestAsset{},
 		}
 		for _, asset := range building.Assets {
 			if !asset.IsActive || (sinceVersion > 0 && asset.Version <= sinceVersion) {

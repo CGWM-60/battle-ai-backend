@@ -58,6 +58,18 @@ export default function GamePage() {
                 <strong>Simulation et maintenance</strong>
                 <span>Simuler un monde, recalculer les joueurs et archiver les mondes vides.</span>
               </Link>
+              <Link className="quick-link" href="/game/research-trees/">
+                <strong>Arbres de competence</strong>
+                <span>Gerer les arbres de recherche rattaches aux batiments et leurs branches.</span>
+              </Link>
+              <Link className="quick-link" href="/game/research-nodes/">
+                <strong>Noeuds de recherche</strong>
+                <span>Modifier les niveaux, durees F2P, ressources et conditions de chaque branche.</span>
+              </Link>
+              <Link className="quick-link" href="/game/resources/">
+                <strong>Ressources systeme</strong>
+                <span>Maintenir les ressources referencees par les recherches et les couts dynamiques.</span>
+              </Link>
               <Link className="quick-link" href="/game/ai/decisions/">
                 <strong>Décisions IA</strong>
                 <span>Voir toutes les décisions NEXUS avec input, output, changements appliqués, provider et erreurs.</span>
