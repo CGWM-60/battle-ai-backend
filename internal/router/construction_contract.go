@@ -58,19 +58,38 @@ type ConstructionActionPathParams struct {
 // registerConstructionContractRoutes exposes the 6 construction endpoints with exact JSON shape.
 func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm.DB, world *service.WorldGameService) {
 	private.GET("/construction/queue", func(c *gin.Context) {
-		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		var response ConstructionQueueResponse
+		err := database.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			save, jobs, buildings, activeEffects, err := loadSaveBundleForUpdate(c, tx, world)
+			if err != nil {
+				return err
+			}
+
+			now := time.Now().UTC()
+			buildings, jobs, completedCount := finalizeReadyConstructions(buildings, jobs, now)
+			jobs, err = reconcileConstructionQueueSchedule(tx, jobs, save, activeEffects)
+			if err != nil {
+				return err
+			}
+
+			if completedCount > 0 {
+				if err := persistSaveBundle(tx, save, jobs, buildings); err != nil {
+					return err
+				}
+			}
+
+			message := "queue loaded"
+			if completedCount > 0 {
+				message = fmt.Sprintf("%d construction(s) terminée(s) automatiquement", completedCount)
+			}
+			response = buildQueueResponse(save, jobs, buildings, activeEffects, message)
+			return nil
+		})
 		if err != nil {
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		jobs, err := decodeConstructionQueue(save.ConstructionQueueJSON)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid construction queue data"})
-			return
-		}
-		buildings, _ := decodeBuildings(save.BuildingsJSON)
-		activeEffects, _ := decodeObject(save.ActiveEffectsJSON)
-		c.JSON(http.StatusOK, buildQueueResponse(save, jobs, buildings, activeEffects, "queue loaded"))
+		c.JSON(http.StatusOK, response)
 	})
 
 	private.POST("/construction/start", func(c *gin.Context) {
@@ -913,6 +932,40 @@ func reconcileConstructionQueueSchedule(tx *gorm.DB, jobs []ConstructionJobDTO, 
 	}
 
 	return jobs, nil
+}
+
+func finalizeReadyConstructions(buildings []map[string]any, jobs []ConstructionJobDTO, now time.Time) ([]map[string]any, []ConstructionJobDTO, int) {
+	if len(jobs) == 0 {
+		return buildings, jobs, 0
+	}
+
+	remaining := make([]ConstructionJobDTO, 0, len(jobs))
+	completedCount := 0
+
+	for _, job := range jobs {
+		status := strings.ToLower(strings.TrimSpace(job.Status))
+		if status == "cancelled" {
+			continue
+		}
+
+		isReady := false
+		if status == "completed" {
+			isReady = true
+		}
+		if job.CompletedAt != nil && !job.CompletedAt.After(now) {
+			isReady = true
+		}
+
+		if isReady {
+			buildings = applyCompletedBuilding(buildings, job, now)
+			completedCount++
+			continue
+		}
+
+		remaining = append(remaining, job)
+	}
+
+	return buildings, remaining, completedCount
 }
 
 func calculateSpeedUpGemCost(remaining time.Duration) int {

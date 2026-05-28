@@ -451,6 +451,10 @@ func (s *WorldGameService) PlayerState(ctx context.Context, playerID uint) (map[
 	if err != nil {
 		return nil, err
 	}
+	save, err = s.reconcilePopulationState(ctx, playerID)
+	if err != nil {
+		return nil, err
+	}
 	var player models.Users
 	if err := s.db.WithContext(ctx).First(&player, playerID).Error; err != nil {
 		return nil, err
@@ -477,6 +481,146 @@ func (s *WorldGameService) PlayerState(ctx context.Context, playerID uint) (map[
 		"weather":   weather,
 		"messages":  messages,
 	}, nil
+}
+
+func (s *WorldGameService) reconcilePopulationState(ctx context.Context, playerID uint) (*models.PlayerSave, error) {
+	var out models.PlayerSave
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var save models.PlayerSave
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("player_id = ?", playerID).
+			First(&save).Error; err != nil {
+			return err
+		}
+
+		housingCapacity := int64(0)
+		buildings := []map[string]any{}
+		if len(save.BuildingsJSON) > 0 {
+			_ = json.Unmarshal(save.BuildingsJSON, &buildings)
+		}
+		for _, item := range buildings {
+			key := strings.ToLower(strings.TrimSpace(fmt.Sprint(item["buildingKey"])))
+			if !isHousingBuildingKey(key) {
+				continue
+			}
+			level := int64(intFromAny(item["level"]))
+			if level < 0 {
+				level = 0
+			}
+			housingCapacity += level * 50
+		}
+
+		var activeConflicts int64
+		if err := tx.Model(&models.Conflict{}).
+			Where("world_id = ? AND status = ? AND (continent_id IS NULL OR continent_id = ?)", save.WorldID, ConflictStatusActive, save.ContinentID).
+			Count(&activeConflicts).Error; err != nil {
+			return err
+		}
+
+		var weatherEvents []models.WeatherEvent
+		if err := tx.Where("world_id = ? AND continent_id = ? AND starts_at <= ? AND ends_at >= ?", save.WorldID, save.ContinentID, time.Now(), time.Now()).
+			Find(&weatherEvents).Error; err != nil {
+			return err
+		}
+		weatherPressure := int64(0)
+		for _, event := range weatherEvents {
+			weatherPressure += int64(clamp(event.Severity, 0, 100))
+		}
+		if len(weatherEvents) > 0 {
+			weatherPressure = weatherPressure / int64(len(weatherEvents))
+		}
+
+		currentPop := save.Population
+		targetPop := housingCapacity
+		if targetPop < 0 {
+			targetPop = 0
+		}
+
+		maxDelta := int64(25)
+		if currentPop > 0 {
+			delta := int64(float64(currentPop) * 0.03)
+			if delta > maxDelta {
+				maxDelta = delta
+			}
+		}
+
+		foodEnough := save.Food >= maxInt64(100, currentPop/4)
+		energyEnough := save.Energy >= maxInt64(100, currentPop/4)
+		stableEnough := save.Satisfaction >= 35
+
+		nextPop := currentPop
+		if targetPop == 0 {
+			nextPop = 0
+		} else if currentPop < targetPop && foodEnough && energyEnough && stableEnough {
+			grow := targetPop - currentPop
+			if grow > maxDelta {
+				grow = maxDelta
+			}
+			nextPop = currentPop + grow
+		} else if currentPop > targetPop {
+			shrink := currentPop - targetPop
+			maxShrink := maxDelta * 2
+			if shrink > maxShrink {
+				shrink = maxShrink
+			}
+			nextPop = currentPop - shrink
+		}
+
+		crisisPressure := int64(clamp(int(activeConflicts*20+weatherPressure), 0, 100))
+		if crisisPressure > 0 && nextPop > 0 {
+			loss := (nextPop * crisisPressure) / 500
+			if loss < 1 {
+				loss = 1
+			}
+			nextPop -= loss
+		}
+		if nextPop < 0 {
+			nextPop = 0
+		}
+		if nextPop > targetPop {
+			nextPop = targetPop
+		}
+
+		nextSatisfaction := save.Satisfaction
+		if crisisPressure >= 60 {
+			nextSatisfaction = clamp(nextSatisfaction-2, 0, 100)
+		} else if crisisPressure <= 15 && foodEnough && energyEnough {
+			nextSatisfaction = clamp(nextSatisfaction+1, 0, 100)
+		}
+
+		if nextPop != save.Population || nextSatisfaction != save.Satisfaction {
+			now := time.Now().UTC()
+			if err := tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(map[string]any{
+				"population":     nextPop,
+				"satisfaction":   nextSatisfaction,
+				"version":        save.Version + 1,
+				"last_synced_at": &now,
+			}).Error; err != nil {
+				return err
+			}
+		}
+
+		refreshed, err := s.GetPlayerSave(ctx, playerID)
+		if err != nil {
+			return err
+		}
+		out = *refreshed
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func isHousingBuildingKey(key string) bool {
+	normalized := strings.ReplaceAll(strings.TrimSpace(strings.ToLower(key)), "-", "_")
+	switch normalized {
+	case "habitation", "housing", "house", "residence", "residential":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *WorldGameService) CreatePlayerCity(ctx context.Context, playerID uint, input PlayerCityCreateInput) (map[string]any, error) {
@@ -3004,7 +3148,7 @@ func providerEnvNames(name string) (string, string) {
 func worldAITimeout() time.Duration {
 	seconds, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WORLD_AI_TIMEOUT_SECONDS")))
 	if err != nil || seconds <= 0 {
-		seconds = 25
+		seconds = 60
 	}
 	return time.Duration(seconds) * time.Second
 }

@@ -410,7 +410,12 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 	})
 
 	private.GET("/world/diplomacy/emissaries/status", func(c *gin.Context) {
-		available, total := emissaryAvailability()
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		available, total := emissaryAvailability(database, c.Request.Context(), save)
 		writeWorldResponse(c, gin.H{
 			"available":       available,
 			"total":           total,
@@ -424,7 +429,7 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		available, total := emissaryAvailability()
+		available, total := emissaryAvailability(database, c.Request.Context(), save)
 		if available <= 0 {
 			_ = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_emissary_send", "emissary", "none", "rejected", "no emissary available", nil)
 			c.JSON(http.StatusConflict, gin.H{
@@ -435,11 +440,51 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			return
 		}
 		payload := bindOptionalMap(c)
+		targetContinent := strings.TrimSpace(toString(payload["targetContinentId"]))
+		missionType := strings.TrimSpace(strings.ToLower(toString(payload["missionType"])))
+		if targetContinent == "" {
+			targetContinent = strings.TrimSpace(toString(payload["targetContinent"]))
+		}
+		if targetContinent == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "targetContinentId is required"})
+			return
+		}
+		if missionType == "" {
+			missionType = "diplomatic-contact"
+		}
+		now := time.Now().UTC()
+		eta := now.Add(2 * time.Hour)
+		payload["targetContinentId"] = targetContinent
+		payload["missionType"] = missionType
+		payload["status"] = "en_route"
+		payload["launchedAt"] = now.Format(time.RFC3339)
+		payload["eta"] = eta.Format(time.RFC3339)
+
 		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_emissary_send", "emissary", stableActionID(payload), "accepted", "", payload)
+		if err == nil {
+			relatedEventsJSON, _ := json.Marshal([]string{"emissary_mission"})
+			_ = database.WithContext(c.Request.Context()).Create(&models.DailyAIMessage{
+				PlayerID:          save.PlayerID,
+				WorldID:           save.WorldID,
+				ContinentID:       save.ContinentID,
+				Title:             "Mission diplomatique lancée",
+				Message:           "Émissaire envoyé vers la cible " + targetContinent + " pour mission " + missionType + ". Retour estimé sous 2h.",
+				Tone:              "avertissement",
+				RelatedEventsJSON: datatypes.JSON(relatedEventsJSON),
+				IsRead:            false,
+			})
+		}
 		writeWorldResponse(c, gin.H{
 			"sent":      true,
 			"status":    "en_route",
-			"serverNow": time.Now().UTC(),
+			"serverNow": now,
+			"eta":       eta,
+			"mission": gin.H{
+				"targetContinentId": targetContinent,
+				"missionType":       missionType,
+				"status":            "en_route",
+				"durationMinutes":   120,
+			},
 			"available": available - 1,
 			"total":     total,
 		}, err)
@@ -611,11 +656,18 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			return
 		}
 		payload := bindOptionalMap(c)
+		plan := weatherActionPlan(actionKey)
+		if len(plan) > 0 {
+			for key, value := range plan {
+				payload[key] = value
+			}
+		}
 		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "weather_action", "weather_action", actionKey, "accepted", "", payload)
 		writeWorldResponse(c, gin.H{
 			"accepted":  true,
 			"actionKey": actionKey,
 			"serverNow": time.Now().UTC(),
+			"plan":      plan,
 		}, err)
 	})
 
@@ -643,7 +695,12 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 				"activeEvents":    len(weather),
 				"averageSeverity": avg,
 				"globalRiskLabel": riskLabel(avg),
-				"generatedAt":     time.Now().UTC(),
+				"plans": []gin.H{
+					weatherActionPlan("deploy-aid"),
+					weatherActionPlan("preposition-resources"),
+					weatherActionPlan("activate-defense-protocol"),
+				},
+				"generatedAt": time.Now().UTC(),
 			},
 		}, nil)
 	})
@@ -943,10 +1000,67 @@ func clamp(value int, min int, max int) int {
 	return value
 }
 
-func emissaryAvailability() (available int, total int) {
-	// Tant qu'aucun modèle de capacité d'émissaire n'est branché,
-	// on renvoie explicitement 0/0 pour éviter des données fictives.
-	return 0, 0
+func emissaryAvailability(database *gorm.DB, ctx contextLike, save *models.PlayerSave) (available int, total int) {
+	if save == nil {
+		return 0, 0
+	}
+	total = 1
+	if save.CityLevel >= 4 {
+		total = 2
+	}
+	if save.CityLevel >= 7 {
+		total = 3
+	}
+	var inProgress int64
+	if database != nil {
+		since := time.Now().UTC().Add(-2 * time.Hour)
+		_ = database.WithContext(ctx).
+			Model(&models.PlayerActionLog{}).
+			Where("player_id = ? AND action_type = ? AND status = ? AND created_at >= ?", save.PlayerID, "diplomacy_emissary_send", "accepted", since).
+			Count(&inProgress).Error
+	}
+	available = total - int(inProgress)
+	if available < 0 {
+		available = 0
+	}
+	return available, total
+}
+
+func weatherActionPlan(actionKey string) gin.H {
+	switch strings.TrimSpace(actionKey) {
+	case "deploy-aid":
+		return gin.H{
+			"actionKey":       "deploy-aid",
+			"name":            "Déploiement d'aide d'urgence",
+			"durationMinutes": 90,
+			"activationDelay": 5,
+			"cost":            gin.H{"credits": 2000, "energy": 150},
+			"effects":         gin.H{"populationLossReduction": 20, "satisfactionBonus": 4},
+			"conditions":      []string{"Risque météo ≥ modéré"},
+		}
+	case "preposition-resources":
+		return gin.H{
+			"actionKey":       "preposition-resources",
+			"name":            "Prépositionnement des ressources",
+			"durationMinutes": 180,
+			"activationDelay": 10,
+			"cost":            gin.H{"credits": 1200, "food": 300, "energy": 100},
+			"effects":         gin.H{"severityMitigation": 12, "energyLossReduction": 10},
+			"conditions":      []string{"Au moins un événement météo actif"},
+		}
+	case "activate-defense-protocol":
+		return gin.H{
+			"actionKey":       "activate-defense-protocol",
+			"name":            "Activation du protocole de défense",
+			"durationMinutes": 240,
+			"activationDelay": 15,
+			"cost":            gin.H{"credits": 3000, "energy": 280},
+			"effects":         gin.H{"infrastructureProtection": 25, "conflictRiskReduction": 8, "satisfactionPenalty": 2},
+			"conditions":      []string{"Risque global élevé ou critique"},
+		}
+	default:
+		return gin.H{}
+	}
 }
 
 func registerAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.DB) {

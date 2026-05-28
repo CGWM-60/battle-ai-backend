@@ -90,12 +90,22 @@ func runWorldRoutineLoop(db *gorm.DB, interval time.Duration) {
 		}{}).Table("worlds").Select("id").Where("status = ?", service.WorldStatusActive).Find(&worlds).Error
 		if err == nil {
 			worldService := service.NewWorldGameService(db)
+			failedWorlds := 0
 			for _, world := range worlds {
-				_, _, err = worldService.GenerateWorldFourPageRoutine(ctx, world.Id, "cron-routine-4-pages")
-				if err != nil {
-					recordWorldCronRun("routine_4_pages", "failed", err.Error())
-					log.Printf("[world-sim] step=routine4pages world_id=%d status=failed err=%v", world.Id, err)
+				worldCtx, worldCancel := context.WithTimeout(context.Background(), worldRoutinePerWorldTimeout())
+				_, _, worldErr := worldService.GenerateWorldFourPageRoutine(worldCtx, world.Id, "cron-routine-4-pages")
+				worldCancel()
+				if worldErr != nil {
+					failedWorlds++
+					recordWorldCronRun("routine_4_pages", "failed", worldErr.Error())
+					log.Printf("[world-sim] step=routine4pages world_id=%d status=failed err=%v", world.Id, worldErr)
 				}
+			}
+			if failedWorlds == 0 {
+				err = nil
+			} else {
+				err = nil
+				log.Printf("[world-sim] step=routine4pages status=partial worlds=%d failed=%d", len(worlds), failedWorlds)
 			}
 		}
 		cancel()
@@ -163,7 +173,15 @@ func worldSimulationInterval(envName string, fallback int, unit time.Duration) t
 func worldSimulationTimeout() time.Duration {
 	seconds, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WORLD_SIMULATION_TIMEOUT_SECONDS")))
 	if err != nil || seconds <= 0 {
-		seconds = 60
+		seconds = 120
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func worldRoutinePerWorldTimeout() time.Duration {
+	seconds, err := strconv.Atoi(strings.TrimSpace(os.Getenv("WORLD_ROUTINE_PER_WORLD_TIMEOUT_SECONDS")))
+	if err != nil || seconds <= 0 {
+		seconds = 45
 	}
 	return time.Duration(seconds) * time.Second
 }
