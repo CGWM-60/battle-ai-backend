@@ -381,6 +381,10 @@ func (s *WorldGameService) ArchiveEmptyWorlds(ctx context.Context) (map[string]a
 }
 
 func (s *WorldGameService) EnsurePlayerSave(ctx context.Context, playerID uint) (*models.PlayerSave, error) {
+	if err := s.ensurePlayerUserRecord(ctx, playerID); err != nil {
+		return nil, err
+	}
+
 	var save models.PlayerSave
 	err := s.db.WithContext(ctx).
 		Preload("World").
@@ -434,6 +438,41 @@ func (s *WorldGameService) EnsurePlayerSave(ctx context.Context, playerID uint) 
 		return nil, err
 	}
 	return s.GetPlayerSave(ctx, playerID)
+}
+
+func (s *WorldGameService) ensurePlayerUserRecord(ctx context.Context, playerID uint) error {
+	if playerID == 0 {
+		return fmt.Errorf("invalid player id")
+	}
+
+	var user models.Users
+	err := s.db.WithContext(ctx).Unscoped().First(&user, playerID).Error
+	if err == nil {
+		if user.DeletedAt.Valid {
+			if restoreErr := s.db.WithContext(ctx).
+				Model(&models.Users{}).
+				Unscoped().
+				Where("id = ?", playerID).
+				Update("deleted_at", nil).Error; restoreErr != nil {
+				return restoreErr
+			}
+		}
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+
+	placeholder := models.Users{
+		Id:       playerID,
+		Pseudo:   fmt.Sprintf("Player %d", playerID),
+		Password: "purged-account",
+		Email:    fmt.Sprintf("player-%d@local.invalid", playerID),
+		Avatar:   "",
+		Xp:       0,
+		Coin:     0,
+	}
+	return s.db.WithContext(ctx).Create(&placeholder).Error
 }
 
 func (s *WorldGameService) GetPlayerSave(ctx context.Context, playerID uint) (*models.PlayerSave, error) {
