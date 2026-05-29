@@ -594,7 +594,17 @@ func registerWeatherRoutes(private *gin.RouterGroup, database *gorm.DB, world *s
 	})
 
 	private.POST("/weather/plans/:id/start", func(c *gin.Context) {
-		actionKey := strings.TrimSpace(c.Param("id"))
+		raw := strings.TrimSpace(c.Param("id"))
+		// Normalize common aliases / old keys coming from UI fallbacks
+		actionKey := raw
+		switch raw {
+		case "preposition", "preposition-resources":
+			actionKey = "preposition-resources"
+		case "defense-protocol", "activate-defense-protocol":
+			actionKey = "activate-defense-protocol"
+		case "deploy-aid", "deployAid":
+			actionKey = "deploy-aid"
+		}
 		if actionKey == "" {
 			writeWorldResponse(c, nil, badRequestError("INVALID_PLAN_ID", "Identifiant de plan invalide.", nil))
 			return

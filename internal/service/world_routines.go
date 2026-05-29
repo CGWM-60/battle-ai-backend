@@ -107,7 +107,7 @@ func (s *WorldGameService) GetRecommendedWeatherPlans(continentProfile string) [
 			Targets:     "3 régions prioritaires",
 		},
 		{
-			ID:          "preposition",
+			ID:          "preposition-resources",
 			Title:       "Prépositionner ressources",
 			Cost:        map[string]any{"credits": 1200, "food": 300, "energy": 100},
 			DurationMin: 180,
@@ -118,7 +118,7 @@ func (s *WorldGameService) GetRecommendedWeatherPlans(continentProfile string) [
 			Targets:     "4 régions de production",
 		},
 		{
-			ID:          "defense-protocol",
+			ID:          "activate-defense-protocol",
 			Title:       "Activer protocole de défense",
 			Cost:        map[string]any{"credits": 3000, "energy": 280},
 			DurationMin: 240,

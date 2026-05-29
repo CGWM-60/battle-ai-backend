@@ -1234,35 +1234,60 @@ func emissaryAvailability(database *gorm.DB, ctx contextLike, save *models.Playe
 }
 
 func weatherActionPlan(actionKey string) gin.H {
-	switch strings.TrimSpace(actionKey) {
+	key := strings.TrimSpace(actionKey)
+	switch key {
 	case "deploy-aid":
 		return gin.H{
-			"actionKey":       "deploy-aid",
+			"id":              key,
+			"actionKey":       key,
 			"name":            "Déploiement d'aide d'urgence",
+			"title":           "Déployer aide d'urgence",
 			"durationMinutes": 90,
+			"durationMin":     90,
 			"activationDelay": 5,
 			"cost":            gin.H{"credits": 2000, "energy": 150},
 			"effects":         gin.H{"populationLossReduction": 20, "satisfactionBonus": 4},
+			"effect":          "Protège population",
+			"riskPercent":     25,
+			"risk":            "25%",
+			"finalImpact":     "-40% pertes civils en cas de crise",
+			"whyUseful":       "Utile immédiatement si sévérité élevée sur civils (cyclone/séisme). Protège la population.",
 			"conditions":      []string{"Risque météo ≥ modéré"},
 		}
 	case "preposition-resources":
 		return gin.H{
-			"actionKey":       "preposition-resources",
+			"id":              key,
+			"actionKey":       key,
 			"name":            "Prépositionnement des ressources",
+			"title":           "Prépositionner ressources",
 			"durationMinutes": 180,
+			"durationMin":     180,
 			"activationDelay": 10,
 			"cost":            gin.H{"credits": 1200, "food": 300, "energy": 100},
 			"effects":         gin.H{"severityMitigation": 12, "energyLossReduction": 10},
+			"effect":          "Protège production",
+			"riskPercent":     15,
+			"risk":            "15%",
+			"finalImpact":     "+25% résilience production",
+			"whyUseful":       "Utile avant tempête prolongée. Protège fermes et énergie.",
 			"conditions":      []string{"Au moins un événement météo actif"},
 		}
 	case "activate-defense-protocol":
 		return gin.H{
-			"actionKey":       "activate-defense-protocol",
+			"id":              key,
+			"actionKey":       key,
 			"name":            "Activation du protocole de défense",
+			"title":           "Activer protocole de défense",
 			"durationMinutes": 240,
+			"durationMin":     240,
 			"activationDelay": 15,
 			"cost":            gin.H{"credits": 3000, "energy": 280},
 			"effects":         gin.H{"infrastructureProtection": 25, "conflictRiskReduction": 8, "satisfactionPenalty": 2},
+			"effect":          "Protège bâtiments",
+			"riskPercent":     35,
+			"risk":            "35%",
+			"finalImpact":     "-50% dégâts infrastructures",
+			"whyUseful":       "Utile si risque élevé sur structures critiques. Protège les bâtiments.",
 			"conditions":      []string{"Risque global élevé ou critique"},
 		}
 	default:
