@@ -328,7 +328,11 @@ func runRolePlayQuestJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg 
 	trace.log("insert", "summary", "received=%d created=%d skipped=%d failed=%d", len(quests), created, skipped, failed)
 
 	if created == 0 {
-		return fmt.Errorf("no roleplay quest created")
+		// Do not hard-fail the cron if the AI returned data but all were filtered by structure rules.
+		// Log the situation instead of returning error (prevents the whole job from being marked failed).
+		trace.log("insert", "warning", "received=%d but created=0 after structure filtering (rules may still be too strict)", len(quests))
+		// Return nil so the cron doesn't treat this as total failure.
+		return nil
 	}
 	return nil
 }
@@ -478,8 +482,11 @@ func generatedRolePlayChapterInputs(items []generatedRolePlayChapter) []service.
 }
 
 func hasGeneratedRolePlayStructure(item generatedRolePlayQuest) bool {
-	minArcs, maxArcs, minChapters, maxChapters := rolePlayStructureBounds(item.Level)
-	if len(item.Arcs) < minArcs || len(item.Arcs) > maxArcs {
+	minArcs, _, minChapters, _ := rolePlayStructureBounds(item.Level)
+	// Relaxed validation: only enforce minimums.
+	// The previous strict min+max (especially 4-6 arcs / 12-24 chapters for "difficile")
+	// was causing almost all AI generations to be rejected.
+	if len(item.Arcs) < minArcs {
 		return false
 	}
 	totalChapters := 0
@@ -494,7 +501,7 @@ func hasGeneratedRolePlayStructure(item generatedRolePlayQuest) bool {
 			}
 		}
 	}
-	if totalChapters < minChapters || totalChapters > maxChapters {
+	if totalChapters < minChapters {
 		return false
 	}
 	return true

@@ -92,20 +92,38 @@ export default function WorldsPage() {
   }
 
   async function purgeAllGameData() {
+    // Nuclear option - keep it but very explicit
     setError(null);
     setNotice(null);
     const typed = window.prompt(
-      "Action destructive: tapez PURGE_ALL_GAME_DATA pour confirmer.",
+      "ACTION NUCLÉAIRE: tapez PURGE_ALL_GAME_DATA pour tout supprimer (y compris users).",
       "",
     );
     if (typed !== "PURGE_ALL_GAME_DATA") {
       setError("Confirmation invalide: purge annulee.");
       return;
     }
-    await postAction("game/purge-all", "Purge globale", {
+    await postAction("game/purge-all", "Purge globale (NUCLÉAIRE)", {
       confirm: "PURGE_ALL_GAME_DATA",
       includeUsers: true,
       includeAdminAudit: false,
+    });
+  }
+
+  async function purgeWorldAndPlayerCities() {
+    // Safe "Purge Monde + Comptes Joueurs" = only dynamic game data + player cities
+    setError(null);
+    setNotice(null);
+    const typed = window.prompt(
+      "Purger les données du jeu (monde + villes des joueurs) ?\n\nTapez exactement : PURGE_WORLD_PLAYER_DATA",
+      "",
+    );
+    if (typed !== "PURGE_WORLD_PLAYER_DATA") {
+      setError("Confirmation invalide: purge monde+joueurs annulée.");
+      return;
+    }
+    await postAction("game/purge-world-player-data", "Purge Monde + Villes Joueurs", {
+      confirm: "PURGE_WORLD_PLAYER_DATA",
     });
   }
 
@@ -127,8 +145,19 @@ export default function WorldsPage() {
             <button className="danger" type="button" disabled={Boolean(busyAction)} onClick={() => postAction("game/worlds/archive-empty", "Archivage mondes vides")}>
               Archiver mondes vides
             </button>
-            <button className="danger" type="button" disabled={Boolean(busyAction)} onClick={purgeAllGameData}>
-              Purge MONDES + USERS
+            <button className="danger" type="button" disabled={Boolean(busyAction)} onClick={purgeWorldAndPlayerCities}>
+              Purger Monde + Villes Joueurs (sécurisé)
+            </button>
+            {/* Nuclear button - hidden by default, use only in extreme cases */}
+            <button
+              className="danger"
+              type="button"
+              disabled={Boolean(busyAction)}
+              onClick={purgeAllGameData}
+              style={{ opacity: 0.6, fontSize: '11px' }}
+              title="Action nucléaire : supprime AUSSI les users auth. Utiliser avec extrême prudence."
+            >
+              Purge TOUT (nucléaire)
             </button>
             <button className="secondary" type="button" onClick={refreshWorlds}>
               Recharger

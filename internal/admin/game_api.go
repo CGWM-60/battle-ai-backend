@@ -27,6 +27,8 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.POST("/worlds/reconcile-counts", s.gameReconcileWorldCountsAPI(world))
 	game.POST("/worlds/archive-empty", s.gameArchiveEmptyWorldsAPI(world))
 	game.POST("/purge-all", s.gamePurgeAllAPI())
+	// Safe targeted purge: only world game simulation + player cities/saves (no users, no definitions, no admin logs)
+	game.POST("/purge-world-player-data", s.gamePurgeWorldPlayerDataAPI())
 	game.GET("/worlds/:id", s.gameGetWorldAPI)
 	game.PATCH("/worlds/:id", s.gamePatchModelAPI(&models.World{}, "world"))
 	game.POST("/worlds/:id/simulate", s.gameSimulateWorldAPI(world))
@@ -411,6 +413,95 @@ func (s *Server) gamePurgeAllAPI() gin.HandlerFunc {
 			"timestamp":         time.Now().UTC(),
 		}
 		s.gameAudit(c, "purge_all", "game_data", "all", req, result)
+		gameJSON(c, result, nil)
+	}
+}
+
+// gamePurgeWorldPlayerDataAPI is the SAFE "Purge Monde + Comptes Joueurs" action.
+// It only deletes dynamic game world simulation data + player cities/saves.
+// It does NOT touch:
+//   - users (real auth accounts)
+//   - admin_audit_logs
+//   - any *_definitions or catalog tables (building, research, resources...)
+//   - worlds / continents (map structure is kept)
+//   - live/battle/roleplay unrelated systems
+func (s *Server) gamePurgeWorldPlayerDataAPI() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		type purgeRequest struct {
+			Confirm string `json:"confirm"`
+		}
+
+		var req purgeRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+
+		if strings.TrimSpace(req.Confirm) != "PURGE_WORLD_PLAYER_DATA" {
+			gameJSON(c, nil, errors.New("confirm must be PURGE_WORLD_PLAYER_DATA"))
+			return
+		}
+
+		deleted := map[string]int64{}
+		err := s.db.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			// Only dynamic world game + player city data.
+			// This corresponds to "tout ce qui touche au jeu" (the world 4-tabs game) + player cities.
+			targets := []struct {
+				key   string
+				model any
+			}{
+				{key: "player_action_logs", model: &models.PlayerActionLog{}},
+				{key: "player_world_metrics", model: &models.PlayerWorldMetric{}},
+				{key: "player_buildings", model: &models.PlayerBuilding{}},
+				{key: "player_saves", model: &models.PlayerSave{}},
+
+				{key: "conflict_actions", model: &models.ConflictAction{}},
+				{key: "conflicts", model: &models.Conflict{}},
+
+				{key: "game_event_participations", model: &models.GameEventParticipation{}},
+				{key: "game_event_claims", model: &models.GameEventClaim{}},
+				{key: "game_events", model: &models.GameEvent{}},
+
+				{key: "weather_events", model: &models.WeatherEvent{}},
+				{key: "ai_world_decisions", model: &models.AIWorldDecision{}},
+				{key: "world_routine_snapshots", model: &models.WorldRoutineSnapshot{}},
+				{key: "daily_ai_messages", model: &models.DailyAIMessage{}},
+
+				// Social layer tied to the world game
+				{key: "guild_contributions", model: &models.GuildContribution{}},
+				{key: "guild_invites", model: &models.GuildInvite{}},
+				{key: "guild_members", model: &models.GuildMember{}},
+				{key: "guilds", model: &models.Guild{}},
+
+				// Game chat (world related)
+				{key: "chat_messages", model: &models.ChatMessage{}},
+			}
+
+			for _, t := range targets {
+				res := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Unscoped().Delete(t.model)
+				if res.Error != nil {
+					return res.Error
+				}
+				deleted[t.key] = res.RowsAffected
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+
+		result := gin.H{
+			"purged":    true,
+			"mode":      "world_player_data_only",
+			"confirm":   req.Confirm,
+			"deleted":   deleted,
+			"timestamp": time.Now().UTC(),
+			"note":      "Seules les données dynamiques du jeu monde + villes des joueurs ont été purgées. Les comptes auth, les définitions et les logs admin sont intacts.",
+		}
+		s.gameAudit(c, "purge_world_player_data", "game_data", "world+players", req, result)
 		gameJSON(c, result, nil)
 	}
 }

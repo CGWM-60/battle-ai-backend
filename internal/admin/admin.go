@@ -1625,8 +1625,10 @@ func adminGeneratedRolePlayChapterInputs(items []generatedRolePlayChapter) []ser
 }
 
 func hasAdminGeneratedRolePlayStructure(item generatedRolePlayQuest) bool {
-	minArcs, maxArcs, minChapters, maxChapters := rolePlayStructureBounds(item.Level)
-	if len(item.Arcs) < minArcs || len(item.Arcs) > maxArcs {
+	minArcs, _, minChapters, _ := rolePlayStructureBounds(item.Level)
+	// Relaxed: only minimum structure requirements (same relaxation as scheduler).
+	// Strict max bounds were causing near-zero creation rate.
+	if len(item.Arcs) < minArcs {
 		return false
 	}
 	totalChapters := 0
@@ -1641,7 +1643,7 @@ func hasAdminGeneratedRolePlayStructure(item generatedRolePlayQuest) bool {
 			}
 		}
 	}
-	if totalChapters < minChapters || totalChapters > maxChapters {
+	if totalChapters < minChapters {
 		return false
 	}
 	return true
