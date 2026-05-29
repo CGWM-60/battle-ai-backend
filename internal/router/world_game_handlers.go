@@ -1,8 +1,10 @@
 package router
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -908,7 +910,13 @@ func fetchCommerceRoutes(database *gorm.DB, world *service.WorldGameService, c *
 	if err != nil {
 		return nil, err
 	}
-	return commerceRoutesFromConflicts(database, c.Request.Context(), conflicts), nil
+	baseRoutes := commerceRoutesFromConflicts(database, c.Request.Context(), conflicts)
+
+	// NEW: synthesize additional routes from the player's recent commerce actions (agreements, route creation, optimize).
+	// This makes "newAgreement", "createExport/Import", "optimizeRoutes" actually visible in the commerce tab.
+	playerRoutes := playerInitiatedCommerceRoutes(database, c.Request.Context(), currentUserID(c))
+	all := append(baseRoutes, playerRoutes...)
+	return all, nil
 }
 
 func formatConflictItems(database *gorm.DB, ctx contextLike, conflicts []models.Conflict) []gin.H {
@@ -1074,6 +1082,90 @@ func commerceRoutesFromConflicts(database *gorm.DB, ctx contextLike, conflicts [
 			"efficiency": clamp(100-conflict.Intensity, 0, 100),
 		})
 	}
+	return routes
+}
+
+// playerInitiatedCommerceRoutes reads recent PlayerActionLog entries for commerce actions
+// (newAgreement, create route, optimize, etc.) and turns them into visible simulated routes.
+// This is what makes player commerce actions feel "real" in the UI lists.
+func playerInitiatedCommerceRoutes(database *gorm.DB, ctx context.Context, playerID uint) []gin.H {
+	if playerID == 0 {
+		return nil
+	}
+
+	var logs []models.PlayerActionLog
+	since := time.Now().UTC().Add(-72 * time.Hour)
+	database.WithContext(ctx).
+		Where("player_id = ? AND action LIKE ? AND created_at >= ? AND status = ?", playerID, "commerce_%", since, "accepted").
+		Order("created_at DESC").
+		Limit(25).
+		Find(&logs)
+
+	routes := make([]gin.H, 0, len(logs))
+	seen := map[string]bool{}
+
+	for _, log := range logs {
+		meta := parseJSONObject(log.MetadataJSON)
+		action := strings.ToLower(log.Action)
+
+		// Build a nice display name from metadata or target (defensive)
+		partner := firstNonEmpty(
+			toString(meta["target"]),
+			toString(meta["faction"]),
+			toString(meta["partner"]),
+			toString(meta["to"]),
+			log.TargetID,
+		)
+		resource := firstNonEmpty(
+			toString(meta["resource"]),
+			toString(meta["cargo"]),
+			toString(meta["type"]),
+			"Ressources mixtes",
+		)
+		volume := firstNonEmptyInt64(
+			toInt64(meta["volume"]),
+			toInt64(meta["quantity"]),
+			1200,
+		)
+
+		id := "player_" + log.TargetID
+		if id == "player_" || id == "player_manual" {
+			id = "player_" + strconv.FormatUint(uint64(log.Id), 10)
+		}
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+
+		status := "active"
+		efficiency := 78
+		if strings.Contains(action, "optimize") {
+			efficiency = 92
+			status = "optimisee"
+		}
+		if strings.Contains(action, "agreement") {
+			status = "negocie"
+			efficiency = 82
+		}
+
+		routeName := fmt.Sprintf("Accord %s", partner)
+		if partner == "" || partner == "manual" {
+			routeName = "Route commerciale initiée"
+		}
+
+		routes = append(routes, gin.H{
+			"id":         id,
+			"route":      routeName,
+			"cargo":      resource,
+			"volume":     volume,
+			"status":     status,
+			"efficiency": efficiency,
+			"source":     "player",
+			"action":     log.Action,
+			"createdAt":  log.CreatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+
 	return routes
 }
 
@@ -2410,4 +2502,24 @@ func writeWorldResponse(c *gin.Context, payload any, err error) {
 		},
 		"meta": meta,
 	})
+}
+
+// --- small helpers for player commerce synthesis (used by fetchCommerceRoutes) ---
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		trim := strings.TrimSpace(v)
+		if trim != "" && trim != "0" && trim != "manual" {
+			return trim
+		}
+	}
+	return ""
+}
+
+func firstNonEmptyInt64(values ...int64) int64 {
+	for _, v := range values {
+		if v > 0 {
+			return v
+		}
+	}
+	return 0
 }

@@ -517,7 +517,9 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 	})
 
 	private.GET("/trade/agreements", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"agreements": []gin.H{}}, nil)
+		// Synthesize visible agreements from recent player commerce actions (newAgreement etc.)
+		agreements := synthesizePlayerAgreementsFromLogs(database, c)
+		writeWorldResponse(c, gin.H{"agreements": agreements}, nil)
 	})
 	private.POST("/trade/agreements/:id/accept", func(c *gin.Context) {
 		if strings.TrimSpace(c.Param("id")) == "" {
@@ -860,4 +862,65 @@ func registerWorldRegionAndReportsRoutes(private *gin.RouterGroup, database *gor
 
 	private.GET("/world/events/:id", getOwnedWorldEntity[models.GameEvent](database, world, "game event", "world_id = ? AND (continent_id IS NULL OR continent_id = ?)"))
 	private.GET("/world/conflicts/:id", getOwnedWorldEntity[models.Conflict](database, world, "conflict", "world_id = ? AND (continent_id IS NULL OR continent_id = ?)"))
+}
+
+// synthesizePlayerAgreementsFromLogs turns recent commerce_agreement_create logs into visible agreements for the commerce tab.
+func synthesizePlayerAgreementsFromLogs(database *gorm.DB, c *gin.Context) []gin.H {
+	playerID := currentUserID(c)
+	if playerID == 0 {
+		return []gin.H{}
+	}
+
+	var logs []models.PlayerActionLog
+	since := time.Now().UTC().Add(-72 * time.Hour)
+	database.WithContext(c.Request.Context()).
+		Where("player_id = ? AND (action = ? OR action LIKE ?) AND created_at >= ? AND status = ?",
+			playerID, "commerce_agreement_create", "commerce_%", since, "accepted").
+		Order("created_at DESC").Limit(15).Find(&logs)
+
+	out := make([]gin.H, 0, len(logs))
+	for _, log := range logs {
+		meta := parseJSONObject(log.MetadataJSON)
+		partner := firstNonEmptyPhase2(toString(meta["target"]), toString(meta["faction"]), log.TargetID)
+		mode := toString(meta["mode"])
+		if mode == "" {
+			mode = "create"
+		}
+		out = append(out, gin.H{
+			"id":        "agr_" + strconv.FormatUint(uint64(log.Id), 10),
+			"partner":   partner,
+			"mode":      mode,
+			"status":    "negocie",
+			"risk":      toInt64OrDefault(meta["risk"], 40),
+			"durationH": toInt64OrDefault(meta["duration"], 24),
+			"source":    "player",
+			"createdAt": log.CreatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	return out
+}
+
+func firstNonEmptyPhase2(values ...string) string {
+	for _, v := range values {
+		trim := strings.TrimSpace(v)
+		if trim != "" && trim != "0" && trim != "manual" {
+			return trim
+		}
+	}
+	return "Partenaire inconnu"
+}
+
+func toInt64OrDefault(value any, def int64) int64 {
+	switch v := value.(type) {
+	case int:
+		return int64(v)
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	case float32:
+		return int64(v)
+	default:
+		return def
+	}
 }
