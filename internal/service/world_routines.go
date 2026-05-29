@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"math"
 	"strings"
 	"time"
 
 	"cgwm/battle/internal/models"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -228,7 +230,52 @@ func (s *WorldGameService) UpdateCityPopulationAndStability(ctx context.Context,
 	save.Satisfaction = newSatisfaction
 	save.UpdatedAt = time.Now().UTC()
 
-	return s.db.WithContext(ctx).Save(&save).Error
+	// === Write temporary debuff effects for evil AI / bad conditions ===
+	// This feeds the Flutter production engine (activeEffects multipliers) so the top bar
+	// shows regressions on population/energy/food when IA méchante hits (famine, low stability, etc.).
+	if delta < 0 || satisfaction < 40 || foodPerCapita < 0.6 {
+		applyTemporaryDebuffEffects(save, "ia_mechante", 0.92) // -8% on relevant resources for a while
+	}
+
+	return s.db.WithContext(ctx).Save(save).Error
+}
+
+// applyTemporaryDebuffEffects adds short-lived negative multipliers to the player's activeEffects["effects"]
+// for the evil AI / bad world events. This makes the resource regressions visible in the top bar.
+func applyTemporaryDebuffEffects(save *models.PlayerSave, source string, multiplier float64) {
+	activeEffects := map[string]any{}
+	if len(save.ActiveEffectsJSON) > 0 {
+		_ = json.Unmarshal(save.ActiveEffectsJSON, &activeEffects)
+	}
+	if activeEffects == nil {
+		activeEffects = map[string]any{}
+	}
+
+	effectsList, _ := activeEffects["effects"].([]any)
+	if effectsList == nil {
+		effectsList = []any{}
+	}
+
+	now := time.Now().UTC()
+	// Temporary debuff (e.g. 4 hours)
+	expires := now.Add(4 * time.Hour)
+
+	// Apply to the main production targets that can regress
+	targets := []string{"population", "energy", "food", "credits"}
+	for _, t := range targets {
+		effectsList = append(effectsList, map[string]any{
+			"type":       "ia_debuff",
+			"target":     t,
+			"multiplier": multiplier,
+			"startsAt":   now.Format(time.RFC3339),
+			"endsAt":     expires.Format(time.RFC3339),
+			"source":     source,
+		})
+	}
+
+	activeEffects["effects"] = effectsList
+	data, _ := json.Marshal(activeEffects)
+	save.ActiveEffectsJSON = datatypes.JSON(data)
 }
 
 func (s *WorldGameService) RunWorldMaintenanceTick(ctx context.Context) map[string]any {

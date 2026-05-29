@@ -158,6 +158,14 @@ func (s *WorldGameService) CompleteResearch(ctx context.Context, playerID uint, 
 		if err := updateResearchProgress(tx, save.Id, progress); err != nil {
 			return err
 		}
+
+		// === IMPORTANT: Apply research effects to activeEffects for production impact ===
+		// This makes research bonuses (and later IA debuffs) visible in the Flutter top bar
+		// via the LocalResourceProductionService (population, energy, food, credits deltas).
+		if err := applyResearchCompletionEffects(tx, save, node, current.Level); err != nil {
+			return err
+		}
+
 		result = ResearchActionResult{Node: node, Progress: progress}
 		return nil
 	})
@@ -267,6 +275,95 @@ func shouldReturnGlobalResearchCatalog(buildingKey string) bool {
 	default:
 		return false
 	}
+}
+
+// applyResearchCompletionEffects writes production multipliers from the completed research
+// into the player's ActiveEffectsJSON["effects"] list.
+// This is the core piece so that research bonuses appear in the Flutter top bar
+// (population, energy, food, credits per hour deltas) via activeEffects.
+func applyResearchCompletionEffects(tx *gorm.DB, save *models.PlayerSave, node models.ResearchNodeDefinition, newLevel int) error {
+	activeEffects := map[string]any{}
+	if len(save.ActiveEffectsJSON) > 0 {
+		_ = json.Unmarshal(save.ActiveEffectsJSON, &activeEffects)
+	}
+	if activeEffects == nil {
+		activeEffects = map[string]any{}
+	}
+
+	effectsList, _ := activeEffects["effects"].([]any)
+	if effectsList == nil {
+		effectsList = []any{}
+	}
+
+	now := time.Now().UTC()
+	// Permanent bonus for research (endsAt far in future or use a very long duration)
+	// For simplicity, we set endsAt 10 years in future (permanent for practical purposes).
+	expires := now.AddDate(10, 0, 0)
+
+	// Derive production multipliers from the research node (domain + key based, since EffectsJSON is often empty in current seed).
+	// This covers the main research themes without omission.
+	bonuses := deriveProductionBonusesFromResearch(node, newLevel)
+
+	for _, b := range bonuses {
+		effect := map[string]any{
+			"type":       "research_bonus",
+			"target":     b.target,
+			"multiplier": b.multiplier,
+			"startsAt":   now.Format(time.RFC3339),
+			"endsAt":     expires.Format(time.RFC3339),
+			"source":     "research:" + node.Key,
+			"level":      newLevel,
+		}
+		effectsList = append(effectsList, effect)
+	}
+
+	activeEffects["effects"] = effectsList
+
+	data, err := json.Marshal(activeEffects)
+	if err != nil {
+		return err
+	}
+
+	return tx.Model(&models.PlayerSave{}).
+		Where("id = ?", save.Id).
+		Update("active_effects_json", datatypes.JSON(data)).Error
+}
+
+type productionBonus struct {
+	target     string
+	multiplier float64
+}
+
+// deriveProductionBonusesFromResearch maps research nodes to production multipliers
+// for population, energy, food, credits.
+// This ensures research has real gameplay impact on the resource engine.
+func deriveProductionBonusesFromResearch(node models.ResearchNodeDefinition, level int) []productionBonus {
+	domain := strings.ToLower(node.Domain)
+	key := strings.ToLower(node.Key)
+	bonuses := []productionBonus{}
+
+	// Base bonus scaling with level (small but cumulative)
+	base := 1.0 + (float64(level) * 0.01) // +1% per level as example
+
+	if strings.Contains(domain, "énergie") || strings.Contains(domain, "energy") || strings.Contains(domain, "durabilité") || strings.Contains(key, "solar") || strings.Contains(key, "energy") {
+		bonuses = append(bonuses, productionBonus{target: "energy", multiplier: 1.0 + (base * 0.08)})
+	}
+	if strings.Contains(domain, "économique") || strings.Contains(domain, "economic") || strings.Contains(domain, "prospérité") || strings.Contains(key, "credit") || strings.Contains(key, "commerce") {
+		bonuses = append(bonuses, productionBonus{target: "credits", multiplier: 1.0 + (base * 0.10)})
+	}
+	if strings.Contains(domain, "stabilité") || strings.Contains(domain, "stability") || strings.Contains(domain, "civile") || strings.Contains(key, "population") || strings.Contains(key, "habitation") {
+		bonuses = append(bonuses, productionBonus{target: "population", multiplier: 1.0 + (base * 0.05)})
+	}
+	if strings.Contains(domain, "nourriture") || strings.Contains(domain, "food") || strings.Contains(domain, "ferme") || strings.Contains(domain, "sustainability") {
+		bonuses = append(bonuses, productionBonus{target: "food", multiplier: 1.0 + (base * 0.07)})
+	}
+
+	// Fallback: if nothing matched, give a small general credits bonus (so every research has some impact)
+	if len(bonuses) == 0 {
+		bonuses = append(bonuses, productionBonus{target: "credits", multiplier: 1.0 + (base * 0.03)})
+	}
+
+	return bonuses
 }
 
 type researchSeedLevelDTO struct {
