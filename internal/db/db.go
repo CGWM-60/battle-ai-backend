@@ -82,6 +82,8 @@ func DbConnect() *gorm.DB {
 		&models.AIWorldDecision{},
 		&models.WorldRoutineSnapshot{},
 		&models.PlayerWorldMetric{},
+		&models.ArmyUnit{},
+		&models.ArmyTrainingQueue{},
 		&models.ResourceDefinition{},
 		&models.ResearchTreeDefinition{},
 		&models.ResearchNodeDefinition{},
@@ -149,7 +151,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 			Description:            "Laboratoire avance pour accelerer les technologies urbaines.",
 			Category:               "research",
 			ResearchTreeKey:        "technologie_science",
-			MaxLevel:               25,
+			MaxLevel:               30,
 			BaseCostJSON:           jsonValue(`{"credits":900,"energy":80,"durationMinutes":12}`),
 			LevelCostFormulaJSON:   jsonValue(`{"creditsMultiplier":1.22,"energyMultiplier":1.14,"durationMultiplier":1.1}`),
 			EffectsJSON:            jsonValue(`{"research":60,"xp":15}`),
@@ -163,7 +165,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 			Description:            "Noeud de calcul urbain capable d'analyser les crises NEXUS.",
 			Category:               "ai",
 			ResearchTreeKey:        "technologie_science",
-			MaxLevel:               20,
+			MaxLevel:               30,
 			BaseCostJSON:           jsonValue(`{"credits":1250,"energy":120,"durationMinutes":18}`),
 			LevelCostFormulaJSON:   jsonValue(`{"creditsMultiplier":1.25,"energyMultiplier":1.16,"durationMultiplier":1.12}`),
 			EffectsJSON:            jsonValue(`{"aiInsight":1,"stability":2}`),
@@ -177,7 +179,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 			Description:            "Reseau defensif contre conflits, sabotage et pression des factions.",
 			Category:               "defense",
 			ResearchTreeKey:        "defense_militaire",
-			MaxLevel:               25,
+			MaxLevel:               30,
 			BaseCostJSON:           jsonValue(`{"credits":780,"energy":70,"durationMinutes":10}`),
 			LevelCostFormulaJSON:   jsonValue(`{"creditsMultiplier":1.21,"energyMultiplier":1.13,"durationMultiplier":1.09}`),
 			EffectsJSON:            jsonValue(`{"defense":75,"conflictRisk":-3}`),
@@ -191,7 +193,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 			Description:            "Centre administratif pour la stabilite civile, la gouvernance et les services publics.",
 			Category:               "civic",
 			ResearchTreeKey:        "stabilite_civile",
-			MaxLevel:               25,
+			MaxLevel:               30,
 			BaseCostJSON:           jsonValue(`{"credits":1000,"energy":40,"durationMinutes":15}`),
 			LevelCostFormulaJSON:   jsonValue(`{"creditsMultiplier":1.2,"energyMultiplier":1.1,"durationMultiplier":1.1}`),
 			EffectsJSON:            jsonValue(`{"authority":20,"stability":3}`),
@@ -205,7 +207,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 			Description:            "Noeud economique pour commerce local, industrie, finance et echanges internationaux.",
 			Category:               "economy",
 			ResearchTreeKey:        "prosperite_economique",
-			MaxLevel:               25,
+			MaxLevel:               30,
 			BaseCostJSON:           jsonValue(`{"credits":1150,"energy":55,"durationMinutes":16}`),
 			LevelCostFormulaJSON:   jsonValue(`{"creditsMultiplier":1.21,"energyMultiplier":1.12,"durationMultiplier":1.1}`),
 			EffectsJSON:            jsonValue(`{"creditsProduction":80,"commerce":25}`),
@@ -219,7 +221,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 			Description:            "Batiment dedie aux relations, alliances, renseignement et influence globale.",
 			Category:               "diplomacy",
 			ResearchTreeKey:        "diplomatie_influence",
-			MaxLevel:               20,
+			MaxLevel:               30,
 			BaseCostJSON:           jsonValue(`{"credits":1200,"energy":60,"durationMinutes":18}`),
 			LevelCostFormulaJSON:   jsonValue(`{"creditsMultiplier":1.22,"energyMultiplier":1.13,"durationMultiplier":1.11}`),
 			EffectsJSON:            jsonValue(`{"diplomacy":25,"influence":20}`),
@@ -233,13 +235,27 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 			Description:            "Pole de genie civil pour infrastructures, manufactures et megastructures.",
 			Category:               "engineering",
 			ResearchTreeKey:        "construction_genie_civil",
-			MaxLevel:               25,
+			MaxLevel:               30,
 			BaseCostJSON:           jsonValue(`{"credits":1050,"energy":70,"durationMinutes":15}`),
 			LevelCostFormulaJSON:   jsonValue(`{"creditsMultiplier":1.2,"energyMultiplier":1.15,"durationMultiplier":1.1}`),
 			EffectsJSON:            jsonValue(`{"engineering":30,"constructionSpeed":2}`),
 			UnlockRequirementsJSON: jsonValue(`{"cityLevel":2}`),
 			IsActive:               true,
 			SortOrder:              100,
+		},
+		{
+			Key:                    "barracks",
+			Name:                   "Caserne",
+			Description:            "Infrastructure militaire dédiée à la formation des soldats.",
+			Category:               "military",
+			ResearchTreeKey:        "defense_militaire",
+			MaxLevel:               30,
+			BaseCostJSON:           jsonValue(`{"credits":1200,"food":250,"energy":180,"materials":350,"durationMinutes":20}`),
+			LevelCostFormulaJSON:   jsonValue(`{"creditsMultiplier":1.28,"foodMultiplier":1.28,"energyMultiplier":1.28,"materialsMultiplier":1.28,"durationMultiplier":1.22,"durationMaxDays":30}`),
+			EffectsJSON:            jsonValue(`{"unlocks":{"1":"infanterie_legere","3":"infanterie_lourde","5":"tireur_longue_portee","8":"unite_logistique","12":"unite_elite","15":"multi_interventions","20":"reduced_conflict_losses","25":"global_morale_bonus","30":"global_strategic_bonus"}}`),
+			UnlockRequirementsJSON: jsonValue(`{"cityLevel":2}`),
+			IsActive:               true,
+			SortOrder:              110,
 		},
 	}
 
@@ -258,6 +274,9 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		updates := map[string]any{}
 		if !existing.IsActive {
 			updates["is_active"] = true
+		}
+		if existing.MaxLevel < 30 {
+			updates["max_level"] = 30
 		}
 		if existing.ResearchTreeKey == "" && seed.ResearchTreeKey != "" {
 			updates["research_tree_key"] = seed.ResearchTreeKey

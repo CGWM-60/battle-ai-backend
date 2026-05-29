@@ -231,6 +231,8 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	registerChatRoutes(private, world)
 	registerGuildRoutes(private, database, world)
 	registerBuildingRoutes(private, world)
+	registerArmyRoutes(private, world)
+	registerWorldCompatibilityRoutes(private, world)
 	registerResearchRoutes(private, world)
 	registerConstructionContractRoutes(private, database, world)
 }
@@ -2308,18 +2310,64 @@ func jsonMarshalOrEmpty(value any) (datatypes.JSON, error) {
 }
 
 func writeWorldResponse(c *gin.Context, payload any, err error) {
+	serverTime := time.Now().UTC()
+	meta := gin.H{
+		"serverTime":   serverTime.Format(time.RFC3339),
+		"nextUpdateAt": serverTime.Add(5 * time.Minute).Format(time.RFC3339),
+	}
+
 	if err == nil {
-		c.JSON(http.StatusOK, payload)
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data":    payload,
+			"meta":    meta,
+		})
 		return
 	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
+
+	errorCode := "BAD_REQUEST"
 	message := err.Error()
+	errorDetails := gin.H{}
+	if strings.Contains(message, ":") {
+		parts := strings.SplitN(message, ":", 2)
+		if len(parts) == 2 && strings.TrimSpace(parts[0]) != "" {
+			errorCode = strings.TrimSpace(parts[0])
+			message = strings.TrimSpace(parts[1])
+		}
+	}
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error": gin.H{
+				"code":    "NOT_FOUND",
+				"message": message,
+				"details": errorDetails,
+			},
+			"meta": meta,
+		})
+		return
+	}
+
 	status := http.StatusBadRequest
 	if strings.Contains(message, "database") || strings.Contains(message, "SQL") {
 		status = http.StatusInternalServerError
+		errorCode = "INTERNAL_SERVER_ERROR"
 	}
-	c.JSON(status, gin.H{"error": message})
+	if strings.Contains(strings.ToUpper(errorCode), "NOT_ENOUGH_RESOURCES") {
+		errorCode = "NOT_ENOUGH_RESOURCES"
+	}
+	if strings.Contains(strings.ToUpper(errorCode), "BUILDING_MAX_LEVEL_REACHED") {
+		errorCode = "BUILDING_MAX_LEVEL_REACHED"
+		status = http.StatusConflict
+	}
+	c.JSON(status, gin.H{
+		"success": false,
+		"error": gin.H{
+			"code":    errorCode,
+			"message": message,
+			"details": errorDetails,
+		},
+		"meta": meta,
+	})
 }

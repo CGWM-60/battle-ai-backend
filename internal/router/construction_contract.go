@@ -394,7 +394,7 @@ func resolveConstructionDuration(tx *gorm.DB, buildingKey string, targetLevel in
 		return 0, err
 	}
 	if def.MaxLevel > 0 && targetLevel > def.MaxLevel {
-		return 0, fmt.Errorf("targetLevel %d exceeds max level %d for building %s", targetLevel, def.MaxLevel, key)
+		return 0, fmt.Errorf("BUILDING_MAX_LEVEL_REACHED: Ce bâtiment a déjà atteint le niveau maximum.")
 	}
 
 	return calculateConstructionDuration(key, targetLevel, satisfaction, activeEffects), nil

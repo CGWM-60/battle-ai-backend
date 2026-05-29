@@ -62,7 +62,11 @@ func runWorldSimulationLoop(db *gorm.DB, cycleType string, interval time.Duratio
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), worldSimulationTimeout())
-		_, err := service.NewWorldGameService(db).SimulateWorldCycle(ctx, 0, "cron-"+cycleType, cycleType)
+		worldService := service.NewWorldGameService(db)
+		_, err := worldService.SimulateWorldCycle(ctx, 0, "cron-"+cycleType, cycleType)
+		if err == nil {
+			_ = worldService.RunWorldMaintenanceTick(ctx)
+		}
 		cancel()
 		if err != nil {
 			recordWorldCronRun(cycleType, "failed", err.Error())
