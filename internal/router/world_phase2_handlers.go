@@ -701,8 +701,9 @@ func registerWeatherRoutes(private *gin.RouterGroup, database *gorm.DB, world *s
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		if cooldownActive(database, c, save.PlayerID, "weather_plan_start", actionKey, 15*time.Minute) {
-			writeWorldResponse(c, nil, conflictError("COOLDOWN_ACTIVE", "Plan météo en cooldown.", map[string]any{"cooldownSeconds": 900}))
+		// Short cooldown for better demo experience
+		if cooldownActive(database, c, save.PlayerID, "weather_plan_start", actionKey, 30*time.Second) {
+			writeWorldResponse(c, nil, conflictError("COOLDOWN_ACTIVE", "Plan météo en cooldown (30s).", map[string]any{"cooldownSeconds": 30}))
 			return
 		}
 		costMap, _ := plan["cost"].(gin.H)

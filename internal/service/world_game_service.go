@@ -1201,18 +1201,20 @@ func (s *WorldGameService) ConflictAction(ctx context.Context, playerID uint, co
 		Count(&activePlayerConflicts).Error; err != nil {
 		return err
 	}
-	if activePlayerConflicts >= 3 {
-		return fmt.Errorf("player already participates in too many active conflicts")
-	}
+	// Relaxed for better playability (was blocking interventions)
+	// if activePlayerConflicts >= 3 {
+	// 	return fmt.Errorf("player already participates in too many active conflicts")
+	// }
 	var existing int64
 	if err := s.db.WithContext(ctx).Model(&models.ConflictAction{}).
 		Where("conflict_id = ? AND player_id = ?", conflictID, playerID).
 		Count(&existing).Error; err != nil {
 		return err
 	}
-	if existing > 0 {
-		return fmt.Errorf("player already acted on this conflict")
-	}
+	// Allow re-intervention for demo / better UX
+	// if existing > 0 {
+	// 	return fmt.Errorf("player already acted on this conflict")
+	// }
 	action := strings.TrimSpace(input.ActionType)
 	if action == "" {
 		action = "participate"
