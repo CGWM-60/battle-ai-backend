@@ -1147,6 +1147,20 @@ func playerInitiatedCommerceRoutes(database *gorm.DB, ctx context.Context, playe
 			status = "negocie"
 			efficiency = 82
 		}
+		if strings.Contains(action, "create_export") || strings.Contains(action, "create_import") {
+			status = "active"
+		}
+
+		direction := "export"
+		if t := toString(meta["type"]); t == "import" {
+			direction = "import"
+		}
+		if strings.Contains(action, "import") || strings.Contains(action, "commerce_create_import") {
+			direction = "import"
+		}
+		if strings.Contains(action, "commerce_create_export") {
+			direction = "export"
+		}
 
 		routeName := fmt.Sprintf("Accord %s", partner)
 		if partner == "" || partner == "manual" {
@@ -1160,6 +1174,7 @@ func playerInitiatedCommerceRoutes(database *gorm.DB, ctx context.Context, playe
 			"volume":     volume,
 			"status":     status,
 			"efficiency": efficiency,
+			"direction":  direction,
 			"source":     "player",
 			"action":     log.Action,
 			"createdAt":  log.CreatedAt.UTC().Format(time.RFC3339),

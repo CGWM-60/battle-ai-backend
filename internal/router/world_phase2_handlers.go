@@ -458,7 +458,31 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 	})
 
 	private.POST("/trade/routes/create", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"created": true, "status": "negotiating"}, nil)
+		payload := bindOptionalMap(c)
+		actionType := "commerce_create_route"
+		if t := toString(payload["type"]); t == "export" {
+			actionType = "commerce_create_export"
+		} else if t == "import" {
+			actionType = "commerce_create_import"
+		}
+
+		save, _ := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if save != nil {
+			_ = world.LogPlayerWorldAction(
+				c.Request.Context(),
+				currentUserID(c),
+				save.WorldID,
+				save.ContinentID,
+				actionType,
+				"trade_route",
+				"manual",
+				"accepted",
+				"",
+				payload,
+			)
+		}
+
+		writeWorldResponse(c, gin.H{"created": true, "status": "negotiating", "type": payload["type"]}, nil)
 	})
 	private.POST("/trade/routes/:id/optimize", func(c *gin.Context) {
 		if err := validateRouteOwnership(database, world, c, c.Param("id")); err != nil {
