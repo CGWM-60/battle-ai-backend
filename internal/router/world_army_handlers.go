@@ -312,7 +312,4 @@ func registerWorldCompatibilityRoutes(private *gin.RouterGroup, world *service.W
 		writeWorldResponse(c, gin.H{"buildingId": c.Param("key"), "upgrade": cost}, err)
 	})
 
-	private.GET("/buildings/:key", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"id": c.Param("key"), "maxLevel": 30}, nil)
-	})
 }
