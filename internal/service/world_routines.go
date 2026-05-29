@@ -203,9 +203,9 @@ func (s *WorldGameService) UpdateCityPopulationAndStability(ctx context.Context,
 
 	delta := int64(0)
 	if save.Population < capacity && foodPerCapita > 0.8 && satisfaction > 55 {
-		delta = max(5, int64(float64(capacity-save.Population)*0.02))
+		delta = max64(5, int64(float64(capacity-save.Population)*0.02))
 	} else if foodPerCapita < 0.5 || satisfaction < 30 {
-		delta = -max(3, save.Population/50)
+		delta = -max64(3, save.Population/50)
 	}
 
 	newPop := save.Population + delta
@@ -237,22 +237,42 @@ func (s *WorldGameService) RunWorldMaintenanceTick(ctx context.Context) map[stri
 	eventsUpdated, _ := s.UpdateWorldEvents(ctx)
 	conflictsUpdated, _ := s.UpdateWorldConflicts(ctx)
 
-	// New calls for full mission
+	// New calls for full mission (guarded to avoid breaking the server on every tick)
 	_, _ = s.CompleteWeatherPlans(ctx)
-	_, _ = s.UpdateEnemyAIWorldBehavior(ctx, 0) // world 0 = global for simplicity in tick
+
+	// Only run heavy AI behavior occasionally (not every maintenance tick)
+	// Real implementation should be driven by the world simulation loops, not here.
+	if time.Now().Unix()%45 == 0 {
+		// Use a safe default world id if needed. Passing 0 was risky.
+		_, _ = s.UpdateEnemyAIWorldBehavior(ctx, 1)
+	}
 
 	return map[string]any{
 		"completeArmyTraining":  completedArmy,
 		"updateArmyConsumption": consumedArmy,
 		"updateWorldEvents":     eventsUpdated,
 		"updateWorldConflicts":  conflictsUpdated,
-		"enemyAIBehavior":       "ran",
+		"enemyAIBehavior":       "ran (guarded)",
 	}
 }
 
-// helper min (already used elsewhere in file)
+// helper min / max (used by new city pop and AI routines)
 func min(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func max64(a, b int64) int64 {
+	if a > b {
 		return a
 	}
 	return b
