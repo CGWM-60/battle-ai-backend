@@ -134,31 +134,50 @@ func (r *QuestRepository) rolePlayQuestScope(ctx context.Context) *gorm.DB {
 }
 
 func createRolePlayQuestStructure(tx *gorm.DB, templateID uint, arcs []models.RolePlayQuestArc) error {
-	for arcIndex := range arcs {
-		arc := arcs[arcIndex]
-		chapters := arc.Chapters
-		arc.Id = 0
-		arc.TemplateID = templateID
-		arc.Chapters = nil
-		if arc.Position <= 0 {
-			arc.Position = arcIndex + 1
+	if len(arcs) == 0 {
+		return nil
+	}
+
+	// Prepare arcs for batch insert
+	preparedArcs := make([]models.RolePlayQuestArc, 0, len(arcs))
+	for i := range arcs {
+		a := arcs[i]
+		a.Id = 0
+		a.TemplateID = templateID
+		if a.Position <= 0 {
+			a.Position = i + 1
 		}
-		if err := tx.Create(&arc).Error; err != nil {
-			return err
-		}
-		for chapterIndex := range chapters {
-			chapter := chapters[chapterIndex]
-			chapter.Id = 0
-			chapter.TemplateID = templateID
-			chapter.ArcID = arc.Id
-			if chapter.Position <= 0 {
-				chapter.Position = chapterIndex + 1
+		a.Chapters = nil // chapters handled separately
+		preparedArcs = append(preparedArcs, a)
+	}
+
+	// Batch insert arcs (much faster than individual Creates)
+	if err := tx.CreateInBatches(preparedArcs, 100).Error; err != nil {
+		return err
+	}
+
+	// Now prepare all chapters, mapping ArcID from the inserted arcs
+	allChapters := make([]models.RolePlayQuestChapter, 0, 64)
+	for arcIdx, arc := range preparedArcs {
+		originalChapters := arcs[arcIdx].Chapters
+		for chIdx := range originalChapters {
+			ch := originalChapters[chIdx]
+			ch.Id = 0
+			ch.TemplateID = templateID
+			ch.ArcID = arc.Id
+			if ch.Position <= 0 {
+				ch.Position = chIdx + 1
 			}
-			if err := tx.Create(&chapter).Error; err != nil {
-				return err
-			}
+			allChapters = append(allChapters, ch)
 		}
 	}
+
+	if len(allChapters) > 0 {
+		if err := tx.CreateInBatches(allChapters, 200).Error; err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
