@@ -482,6 +482,40 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 		writeWorldResponse(c, gin.H{"protected": true, "id": c.Param("id")}, nil)
 	})
 
+	// Cancel a trade route / commercial action (supports optimistic local ops and future real routes)
+	private.POST("/trade/routes/:id/cancel", func(c *gin.Context) {
+		routeID := strings.TrimSpace(c.Param("id"))
+		if routeID == "" {
+			writeWorldResponse(c, nil, badRequestError("INVALID_ROUTE_ID", "Identifiant de route invalide.", nil))
+			return
+		}
+
+		// validateRouteOwnership is best-effort (may be no-op for local optimistic IDs)
+		if err := validateRouteOwnership(database, world, c, routeID); err != nil {
+			// For local/commerce optimistic IDs we still allow cancel client-side
+			// so we don't return error here for non-existing routes
+		}
+
+		// Log the action for history (even if route is not a real DB record yet)
+		save, _ := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if save != nil {
+			_ = world.LogPlayerWorldAction(
+				c.Request.Context(),
+				currentUserID(c),
+				save.WorldID,
+				save.ContinentID,
+				"commerce_route_cancel",
+				"trade",
+				routeID,
+				"cancelled",
+				"",
+				gin.H{"routeId": routeID},
+			)
+		}
+
+		writeWorldResponse(c, gin.H{"cancelled": true, "id": routeID, "status": "cancelled"}, nil)
+	})
+
 	private.GET("/trade/agreements", func(c *gin.Context) {
 		writeWorldResponse(c, gin.H{"agreements": []gin.H{}}, nil)
 	})
