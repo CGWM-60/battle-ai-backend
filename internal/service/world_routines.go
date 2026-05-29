@@ -240,10 +240,10 @@ func (s *WorldGameService) RunWorldMaintenanceTick(ctx context.Context) map[stri
 	// New calls for full mission (guarded to avoid breaking the server on every tick)
 	_, _ = s.CompleteWeatherPlans(ctx)
 
-	// Only run heavy AI behavior occasionally (not every maintenance tick)
-	// Real implementation should be driven by the world simulation loops, not here.
-	if time.Now().Unix()%45 == 0 {
-		// Use a safe default world id if needed. Passing 0 was risky.
+	// Run enemy AI behavior regularly so IA locale "fait son boulot" (tension, events, reacts to our new diplomacy/commerce/weather systems).
+	// The tension it produces directly feeds the new /diplomacy/relations and /diplomacy/targets endpoints.
+	if time.Now().Unix()%8 == 0 { // roughly every few minutes depending on tick interval
+		// Use a safe default; in production we would iterate real worlds.
 		_, _ = s.UpdateEnemyAIWorldBehavior(ctx, 1)
 	}
 
