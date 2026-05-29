@@ -54,8 +54,11 @@ func (s *WorldGameService) ResearchCatalog(ctx context.Context, playerID uint, b
 	query := s.db.WithContext(ctx).Preload("Nodes", func(db *gorm.DB) *gorm.DB {
 		return db.Where("is_active = ?", true).Order("sort_order ASC, id ASC")
 	}).Where("is_active = ?", true)
-	if aliases := normalizeResearchBuildingKeys(buildingKey); len(aliases) > 0 {
-		query = query.Where("building_key IN ?", aliases)
+	if !shouldReturnGlobalResearchCatalog(buildingKey) {
+		aliases := normalizeResearchBuildingKeys(buildingKey)
+		if len(aliases) > 0 {
+			query = query.Where("building_key IN ?", aliases)
+		}
 	}
 	var trees []models.ResearchTreeDefinition
 	if err := query.Order("sort_order ASC, id ASC").Find(&trees).Error; err != nil {
@@ -255,6 +258,15 @@ func normalizeResearchBuildingKeys(buildingKey string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func shouldReturnGlobalResearchCatalog(buildingKey string) bool {
+	switch strings.TrimSpace(strings.ToLower(buildingKey)) {
+	case "", "global", "all", "themes", "recherche", "research", "researchcenter", "research_center", "centre_recherche", "centre_de_recherche", "lab", "laboratory":
+		return true
+	default:
+		return false
+	}
 }
 
 type researchSeedLevelDTO struct {

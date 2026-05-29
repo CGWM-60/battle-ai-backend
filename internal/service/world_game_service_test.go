@@ -211,3 +211,32 @@ func TestValidateRequirementsPayloadRejectsInvalidJSON(t *testing.T) {
 		t.Fatalf("expected invalid requirements payload to be rejected")
 	}
 }
+
+func TestShouldReturnGlobalResearchCatalog(t *testing.T) {
+	trueCases := []string{
+		"",
+		"global",
+		"all",
+		"themes",
+		"recherche",
+		"research",
+		"researchcenter",
+		"research_center",
+		"centre_recherche",
+		"centre_de_recherche",
+		"lab",
+		"laboratory",
+	}
+	for _, input := range trueCases {
+		if !shouldReturnGlobalResearchCatalog(input) {
+			t.Fatalf("expected %q to return global catalog", input)
+		}
+	}
+
+	falseCases := []string{"city_hall", "solar_park", "trade_hub", "defense_grid"}
+	for _, input := range falseCases {
+		if shouldReturnGlobalResearchCatalog(input) {
+			t.Fatalf("expected %q to stay building-scoped", input)
+		}
+	}
+}
