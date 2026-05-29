@@ -210,6 +210,28 @@ func (s *WorldGameService) UpdateCityPopulationAndStability(ctx context.Context,
 		delta = -max64(3, save.Population/50)
 	}
 
+	// === STRONG IMPACT WHEN RESOURCES HIT ZERO (user request) ===
+	// When key resources reach zero, morale (Satisfaction) and population suffer heavily.
+	// This creates real gameplay consequences (famine, blackout, bankruptcy → unrest, deaths, etc.).
+	zeroPenalty := int64(0)
+	debuffMultiplier := 1.0
+
+	if save.Food <= 0 {
+		// Famine: accelerated deaths + morale collapse
+		delta = delta - max64(10, save.Population/20)
+		zeroPenalty += 8
+		debuffMultiplier = 0.70 // strong regression on production
+	}
+	if save.Energy <= 0 {
+		// Blackout: buildings inefficient, morale drops
+		zeroPenalty += 5
+		debuffMultiplier = math.Min(debuffMultiplier, 0.75)
+	}
+	if save.Credits <= 0 {
+		// Bankruptcy: unrest
+		zeroPenalty += 3
+	}
+
 	newPop := save.Population + delta
 	if newPop < 0 {
 		newPop = 0
@@ -218,23 +240,25 @@ func (s *WorldGameService) UpdateCityPopulationAndStability(ctx context.Context,
 		newPop = capacity
 	}
 
-	// Simple stability / happiness feedback
+	// Simple stability / happiness feedback (stronger on zero resources)
 	newSatisfaction := satisfaction
 	if delta > 0 {
 		newSatisfaction = min(100, satisfaction+1)
-	} else if delta < 0 {
-		newSatisfaction = max(10, satisfaction-2)
+	} else if delta < 0 || zeroPenalty > 0 {
+		newSatisfaction = max(5, satisfaction-2-int(zeroPenalty))
 	}
 
 	save.Population = newPop
 	save.Satisfaction = newSatisfaction
 	save.UpdatedAt = time.Now().UTC()
 
-	// === Write temporary debuff effects for evil AI / bad conditions ===
-	// This feeds the Flutter production engine (activeEffects multipliers) so the top bar
-	// shows regressions on population/energy/food when IA méchante hits (famine, low stability, etc.).
-	if delta < 0 || satisfaction < 40 || foodPerCapita < 0.6 {
-		applyTemporaryDebuffEffects(save, "ia_mechante", 0.92) // -8% on relevant resources for a while
+	// Write debuff effects (feeds Flutter top bar deltas + production service)
+	if delta < 0 || satisfaction < 40 || foodPerCapita < 0.6 || save.Food <= 0 || save.Energy <= 0 || save.Credits <= 0 {
+		mult := 0.85
+		if save.Food <= 0 {
+			mult = 0.65
+		}
+		applyTemporaryDebuffEffects(save, "resource_crisis", mult)
 	}
 
 	return s.db.WithContext(ctx).Save(save).Error
