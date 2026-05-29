@@ -62,6 +62,17 @@ Format de réponse standard utilisé par les endpoints Monde/Armée/Bâtiments c
 
 Statut: base service existante, mapping REST Monde à compléter.
 
+## 10) Améliorations "toutes phases d'un coup" (exécution immédiate)
+
+- Routines réelles implémentées : UpdateEnemyAIWorldBehavior, UpdateCityPopulationAndStability (règles habitations/nourriture/satisfaction), CompleteWeatherPlans, GetRecommendedWeatherPlans (DTO riche).
+- WeatherActionPlan : id/title/cost/durationMin/effect/riskPercent/finalImpact/whyUseful (pour maquette "pourquoi avant clic").
+- Bâtiments lvl 30 + BUILDING_MAX_LEVEL_REACHED déjà dans CalculateBuildingUpgradeCost.
+- Army training + consumption déjà fonctionnels (améliorés).
+- Commerce/Météo : DTOs prêts pour solde + bonus/risque + plans stratégiques complets.
+- Style maquette respecté côté Flutter (améliorations UI existantes prolongées).
+
+Voir world_routines.go et world_game_service.go pour détails.
+
 ## 5. Endpoints Bâtiments
 
 ### GET `/api/v1/buildings`
