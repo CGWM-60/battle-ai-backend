@@ -1056,21 +1056,36 @@ func (s *WorldGameService) ParticipateEvent(ctx context.Context, playerID uint, 
 	if err != nil {
 		return err
 	}
+
 	var event models.GameEvent
+	// First try with the strict "active" status that the UI expects for participation
 	if err := s.db.WithContext(ctx).
 		Where("id = ? AND world_id = ? AND status = ?", eventID, save.WorldID, EventStatusActive).
 		First(&event).Error; err != nil {
-		return err
+
+		// If not found with active status, check if the event exists at all for this player
+		var anyEvent models.GameEvent
+		if dbErr := s.db.WithContext(ctx).
+			Where("id = ? AND world_id = ?", eventID, save.WorldID).
+			First(&anyEvent).Error; dbErr == nil {
+			// Event exists but is not active → give a clear error instead of generic not found
+			return fmt.Errorf("EVENT_NOT_ACTIVE: Cette quête n'est pas encore active (statut actuel: %s).", anyEvent.Status)
+		}
+
+		// Truly not found or wrong world
+		return err // will become 404
 	}
+
 	if event.PlayerID != nil && *event.PlayerID != playerID {
-		return fmt.Errorf("event is not available for this player")
+		return fmt.Errorf("EVENT_NOT_AVAILABLE: Cet événement n'est pas disponible pour vous.")
 	}
 	if event.ContinentID != nil && *event.ContinentID != save.ContinentID {
-		return fmt.Errorf("event is not available on this continent")
+		return fmt.Errorf("EVENT_WRONG_CONTINENT: Cette quête n'est pas disponible sur votre continent.")
 	}
 	if err := validateEventRequirements(save, event.RequirementsJSON); err != nil {
-		return err
+		return fmt.Errorf("REQUIREMENTS_NOT_MET: %w", err)
 	}
+
 	err = s.db.WithContext(ctx).Create(&models.GameEventParticipation{
 		EventID:  eventID,
 		PlayerID: playerID,
