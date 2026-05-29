@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"cgwm/battle/internal/models"
@@ -53,8 +54,8 @@ func (s *WorldGameService) ResearchCatalog(ctx context.Context, playerID uint, b
 	query := s.db.WithContext(ctx).Preload("Nodes", func(db *gorm.DB) *gorm.DB {
 		return db.Where("is_active = ?", true).Order("sort_order ASC, id ASC")
 	}).Where("is_active = ?", true)
-	if buildingKey != "" {
-		query = query.Where("building_key = ?", buildingKey)
+	if aliases := normalizeResearchBuildingKeys(buildingKey); len(aliases) > 0 {
+		query = query.Where("building_key IN ?", aliases)
 	}
 	var trees []models.ResearchTreeDefinition
 	if err := query.Order("sort_order ASC, id ASC").Find(&trees).Error; err != nil {
@@ -216,6 +217,44 @@ func researchDuration(raw datatypes.JSON, targetLevel int) time.Duration {
 		}
 	}
 	return time.Duration(targetLevel) * time.Hour
+}
+
+func normalizeResearchBuildingKeys(buildingKey string) []string {
+	raw := strings.TrimSpace(strings.ToLower(buildingKey))
+	if raw == "" {
+		return nil
+	}
+	raw = strings.ReplaceAll(raw, "-", "_")
+
+	canonical := raw
+	switch raw {
+	case "parc_solaire", "solar", "solarpark", "solar_panel", "solar_panels":
+		canonical = "solar_park"
+	case "ferme_verticale", "verticalfarm", "farm", "vertical_farm":
+		canonical = "vertical_farm"
+	case "recherche", "research", "researchcenter", "centre_recherche", "centre_de_recherche", "lab", "laboratory":
+		canonical = "research_center"
+	case "centre_ia", "aicenter", "centre_ai", "ai":
+		canonical = "ai_center"
+	}
+
+	set := map[string]struct{}{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		set[value] = struct{}{}
+	}
+
+	add(raw)
+	add(canonical)
+
+	out := make([]string, 0, len(set))
+	for value := range set {
+		out = append(out, value)
+	}
+	return out
 }
 
 type researchSeedLevelDTO struct {

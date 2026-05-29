@@ -347,7 +347,17 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 		}
 		input := service.EventActionInput{ActionType: "intervene"}
 		err = world.ConflictAction(c.Request.Context(), currentUserID(c), id, input)
-		writeWorldResponse(c, gin.H{"accepted": err == nil, "actionType": "intervene"}, err)
+		actionID := strconv.FormatUint(uint64(id), 10)
+		writeWorldResponse(c, gin.H{
+			"accepted":       err == nil,
+			"actionType":     "intervene",
+			"actionId":       actionID,
+			"status":         "in_progress",
+			"canCancel":      true,
+			"canClaim":       false,
+			"cancelEndpoint": "/api/v1/world/actions/" + actionID + "/cancel",
+			"claimEndpoint":  "/api/v1/world/actions/" + actionID + "/claim",
+		}, err)
 	})
 
 	private.GET("/world/diplomacy/relations", func(c *gin.Context) {
@@ -416,6 +426,7 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			reports = append(reports, gin.H{
 				"id":        message.Id,
 				"title":     message.Title,
+				"message":   message.Message,
 				"tone":      message.Tone,
 				"isRead":    message.IsRead,
 				"createdAt": message.CreatedAt,
@@ -444,11 +455,17 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			return
 		}
 		payload := bindOptionalMap(c)
-		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_negotiation_open", "diplomacy", stableActionID(payload), "accepted", "", payload)
+		actionID := stableActionID(payload)
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_negotiation_open", "diplomacy", actionID, "accepted", "", payload)
 		writeWorldResponse(c, gin.H{
-			"opened":    true,
-			"status":    "pending",
-			"serverNow": time.Now().UTC(),
+			"opened":         true,
+			"status":         "pending",
+			"serverNow":      time.Now().UTC(),
+			"actionId":       actionID,
+			"canCancel":      true,
+			"canClaim":       false,
+			"cancelEndpoint": "/api/v1/world/actions/" + actionID + "/cancel",
+			"claimEndpoint":  "/api/v1/world/actions/" + actionID + "/claim",
 		}, err)
 	})
 
@@ -503,7 +520,8 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 		payload["launchedAt"] = now.Format(time.RFC3339)
 		payload["eta"] = eta.Format(time.RFC3339)
 
-		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_emissary_send", "emissary", stableActionID(payload), "accepted", "", payload)
+		actionID := stableActionID(payload)
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_emissary_send", "emissary", actionID, "accepted", "", payload)
 		if err == nil {
 			relatedEventsJSON, _ := json.Marshal([]string{"emissary_mission"})
 			_ = database.WithContext(c.Request.Context()).Create(&models.DailyAIMessage{
@@ -518,10 +536,15 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			})
 		}
 		writeWorldResponse(c, gin.H{
-			"sent":      true,
-			"status":    "en_route",
-			"serverNow": now,
-			"eta":       eta,
+			"sent":           true,
+			"status":         "en_route",
+			"serverNow":      now,
+			"eta":            eta,
+			"actionId":       actionID,
+			"canCancel":      true,
+			"canClaim":       false,
+			"cancelEndpoint": "/api/v1/world/actions/" + actionID + "/cancel",
+			"claimEndpoint":  "/api/v1/world/actions/" + actionID + "/claim",
 			"mission": gin.H{
 				"targetContinentId": targetContinent,
 				"missionType":       missionType,
@@ -576,11 +599,17 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			return
 		}
 		payload := bindOptionalMap(c)
-		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "commerce_agreement_create", "commerce_agreement", stableActionID(payload), "accepted", "", payload)
+		actionID := stableActionID(payload)
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "commerce_agreement_create", "commerce_agreement", actionID, "accepted", "", payload)
 		writeWorldResponse(c, gin.H{
-			"created":   true,
-			"status":    "draft",
-			"serverNow": time.Now().UTC(),
+			"created":        true,
+			"status":         "draft",
+			"serverNow":      time.Now().UTC(),
+			"actionId":       actionID,
+			"canCancel":      true,
+			"canClaim":       false,
+			"cancelEndpoint": "/api/v1/world/actions/" + actionID + "/cancel",
+			"claimEndpoint":  "/api/v1/world/actions/" + actionID + "/claim",
 		}, err)
 	})
 
@@ -595,12 +624,18 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "commerce_routes_optimize", "commerce_routes", "optimize", "accepted", "", gin.H{"routesCount": len(routesJSON)})
+		actionID := "optimize"
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "commerce_routes_optimize", "commerce_routes", actionID, "accepted", "", gin.H{"routesCount": len(routesJSON)})
 		writeWorldResponse(c, gin.H{
 			"optimized":      true,
 			"routesCount":    len(routesJSON),
 			"serverNow":      time.Now().UTC(),
 			"recommendation": commerceRecommendation(routesJSON),
+			"actionId":       actionID,
+			"canCancel":      true,
+			"canClaim":       false,
+			"cancelEndpoint": "/api/v1/world/actions/" + actionID + "/cancel",
+			"claimEndpoint":  "/api/v1/world/actions/" + actionID + "/claim",
 		}, err)
 	})
 
@@ -627,6 +662,17 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 		}
 		if err := query.Order("created_at DESC").First(&logEntry).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
+				if isKnownWorldActionID(actionID) {
+					writeWorldResponse(c, gin.H{
+						"accepted":    true,
+						"actionId":    actionID,
+						"status":      "cancelled_noop",
+						"serverNow":   time.Now().UTC(),
+						"cancelled":   false,
+						"description": "Aucune action active à annuler pour cette clé.",
+					}, nil)
+					return
+				}
 				c.JSON(http.StatusNotFound, gin.H{"error": "action not found"})
 				return
 			}
@@ -808,17 +854,37 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 		}
 		payload := bindOptionalMap(c)
 		plan := weatherActionPlan(actionKey)
+		now := time.Now().UTC()
+		startedAt := now
+		endsAt := now
+		remainingSeconds := 0
+		if durationMinutes, ok := plan["durationMinutes"].(int); ok && durationMinutes > 0 {
+			endsAt = now.Add(time.Duration(durationMinutes) * time.Minute)
+			remainingSeconds = durationMinutes * 60
+		}
 		if len(plan) > 0 {
 			for key, value := range plan {
 				payload[key] = value
 			}
 		}
+		payload["startedAt"] = startedAt.Format(time.RFC3339)
+		payload["endsAt"] = endsAt.Format(time.RFC3339)
+		payload["remainingSeconds"] = remainingSeconds
 		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "weather_action", "weather_action", actionKey, "accepted", "", payload)
 		writeWorldResponse(c, gin.H{
-			"accepted":  true,
-			"actionKey": actionKey,
-			"serverNow": time.Now().UTC(),
-			"plan":      plan,
+			"accepted":         true,
+			"actionKey":        actionKey,
+			"actionId":         actionKey,
+			"status":           "in_progress",
+			"startedAt":        startedAt,
+			"endsAt":           endsAt,
+			"remainingSeconds": remainingSeconds,
+			"canCancel":        true,
+			"canClaim":         false,
+			"cancelEndpoint":   "/api/v1/world/actions/" + actionKey + "/cancel",
+			"claimEndpoint":    "/api/v1/world/actions/" + actionKey + "/claim",
+			"serverNow":        now,
+			"plan":             plan,
 		}, err)
 	})
 
@@ -1074,12 +1140,22 @@ func bindOptionalMap(c *gin.Context) gin.H {
 }
 
 func stableActionID(payload gin.H) string {
-	for _, key := range []string{"id", "targetId", "target", "faction", "route"} {
+	for _, key := range []string{"id", "actionId", "actionKey", "targetId", "target", "faction", "route", "missionId", "conflictId", "targetContinentId"} {
 		if value, ok := payload[key]; ok && strings.TrimSpace(toString(value)) != "" {
 			return toString(value)
 		}
 	}
 	return "manual"
+}
+
+func isKnownWorldActionID(actionID string) bool {
+	normalized := strings.TrimSpace(strings.ToLower(actionID))
+	switch normalized {
+	case "deploy-aid", "preposition-resources", "activate-defense-protocol":
+		return true
+	default:
+		return false
+	}
 }
 
 func toString(value any) string {
