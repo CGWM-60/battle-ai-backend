@@ -78,6 +78,7 @@ func seedDefaultResearchSystem(db *gorm.DB) error {
 		treeIDs[seed.Key] = tree.Id
 	}
 
+	lastNodeByDomain := map[string]string{}
 	for index, seed := range nodes {
 		treeID := treeIDs[seed.DomainKey]
 		resourcesJSON, err := json.Marshal(seed.Resources)
@@ -88,6 +89,16 @@ func seedDefaultResearchSystem(db *gorm.DB) error {
 		if err != nil {
 			return err
 		}
+
+		parentKeys := []string{}
+		if lastKey := strings.TrimSpace(lastNodeByDomain[seed.DomainKey]); lastKey != "" {
+			parentKeys = append(parentKeys, lastKey)
+		}
+		parentKeysJSON, err := json.Marshal(parentKeys)
+		if err != nil {
+			return err
+		}
+
 		node := models.ResearchNodeDefinition{
 			ResearchTreeDefinitionID: treeID,
 			Key:                      seed.Key,
@@ -96,7 +107,7 @@ func seedDefaultResearchSystem(db *gorm.DB) error {
 			Domain:                   seed.Domain,
 			Branch:                   seed.Name,
 			ResourcesJSON:            datatypes.JSON(resourcesJSON),
-			ParentKeysJSON:           jsonValue(`[]`),
+			ParentKeysJSON:           datatypes.JSON(parentKeysJSON),
 			RequirementsJSON:         jsonValue(`{}`),
 			EffectsJSON:              jsonValue(`{}`),
 			LevelProgressionJSON:     datatypes.JSON(progressionJSON),
@@ -109,6 +120,7 @@ func seedDefaultResearchSystem(db *gorm.DB) error {
 		if err := seedResearchNode(db, node); err != nil {
 			return err
 		}
+		lastNodeByDomain[seed.DomainKey] = seed.Key
 	}
 	return nil
 }
@@ -180,6 +192,9 @@ func seedResearchNode(db *gorm.DB, seed models.ResearchNodeDefinition) error {
 	}
 	if len(existing.LevelProgressionJSON) == 0 {
 		updates["level_progression_json"] = seed.LevelProgressionJSON
+	}
+	if len(existing.ParentKeysJSON) == 0 && len(seed.ParentKeysJSON) > 0 {
+		updates["parent_keys_json"] = seed.ParentKeysJSON
 	}
 	if !existing.IsActive {
 		updates["is_active"] = true

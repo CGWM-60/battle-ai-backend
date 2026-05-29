@@ -1617,7 +1617,12 @@ func registerBuildingRoutes(private *gin.RouterGroup, world *service.WorldGameSe
 		writeWorldResponse(c, gin.H{"version": version}, err)
 	})
 	private.GET("/buildings/:key/research-tree", func(c *gin.Context) {
-		payload, err := world.ResearchCatalog(c.Request.Context(), currentUserID(c), c.Param("key"))
+		buildingKey := c.Param("key")
+		scope := strings.TrimSpace(strings.ToLower(c.Query("scope")))
+		if scope == "global" || scope == "all" || scope == "themes" {
+			buildingKey = ""
+		}
+		payload, err := world.ResearchCatalog(c.Request.Context(), currentUserID(c), buildingKey)
 		writeWorldResponse(c, payload, err)
 	})
 	private.GET("/buildings/:key", func(c *gin.Context) {
