@@ -128,36 +128,50 @@ Règles métier:
 
 ## 8. Endpoints Diplomatie
 
-Base existante:
-- `/api/v1/world/diplomacy/relations`
-- `/api/v1/world/diplomacy/treaties`
-- `/api/v1/world/diplomacy/reports`
-- `/api/v1/world/diplomacy/negotiations/open`
-- `/api/v1/world/diplomacy/emissaries/status`
-- `/api/v1/world/diplomacy/emissaries/send`
+Routes exposées:
+- `GET /api/v1/diplomacy/overview`
+- `GET /api/v1/diplomacy/relations`
+- `GET /api/v1/diplomacy/treaties`
+- `POST /api/v1/diplomacy/treaties/{id}/accept`
+- `POST /api/v1/diplomacy/treaties/{id}/reject`
+- `POST /api/v1/diplomacy/treaties/{id}/break`
+- `GET /api/v1/diplomacy/negotiations`
+- `POST /api/v1/diplomacy/negotiations/start`
+- `POST /api/v1/diplomacy/negotiations/{id}/action`
+- `GET /api/v1/diplomacy/emissaries`
+- `POST /api/v1/diplomacy/emissaries/send`
+- `GET /api/v1/diplomacy/reports`
 
-À aligner avec les routes cibles `/api/v1/diplomacy/*`.
+Compatibilité legacy conservée via `/api/v1/world/diplomacy/*`.
 
 ## 9. Endpoints Commerce
 
-Base existante:
-- `/api/v1/world/commerce/routes`
-- `/api/v1/world/commerce/details`
-- `/api/v1/world/commerce/agreements`
-- `/api/v1/world/commerce/routes/optimize`
-- `/api/v1/world/commerce/report`
+Routes exposées:
+- `GET /api/v1/trade/overview`
+- `GET /api/v1/trade/routes`
+- `POST /api/v1/trade/routes/create`
+- `POST /api/v1/trade/routes/{id}/optimize`
+- `POST /api/v1/trade/routes/{id}/pause`
+- `POST /api/v1/trade/routes/{id}/protect`
+- `GET /api/v1/trade/agreements`
+- `POST /api/v1/trade/agreements/{id}/accept`
+- `POST /api/v1/trade/agreements/{id}/reject`
+- `POST /api/v1/trade/agreements/{id}/negotiate`
+- `GET /api/v1/trade/reports`
 
-À aligner avec `/api/v1/trade/*`.
+Compatibilité legacy conservée via `/api/v1/world/commerce/*`.
 
 ## 10. Endpoints Météo & Risques
 
-Base existante:
-- `/api/v1/world/weather/forecast`
-- `/api/v1/world/weather/zones`
-- `/api/v1/world/weather/actions/{actionKey}`
-- `/api/v1/world/weather/report`
+Routes exposées:
+- `GET /api/v1/weather/overview`
+- `GET /api/v1/weather/events`
+- `GET /api/v1/weather/risks`
+- `GET /api/v1/weather/plans`
+- `POST /api/v1/weather/plans/{id}/start`
+- `GET /api/v1/weather/reports`
 
-À aligner avec `/api/v1/weather/*`.
+Compatibilité legacy conservée via `/api/v1/world/weather/*`.
 
 ## 11. Modèles JSON attendus par Flutter
 
@@ -208,6 +222,12 @@ Base existante:
   - `baseDuration * pow(1.22, N-1)`
   - cap à 30 jours.
 - Caserne (`barracks`) de niveau 1 à 30, paliers de déblocage unités implémentés.
+- Validations backend strictes appliquées sur actions critiques:
+  - ownership des unités et routes
+  - statut compatible (`active`, `available`, etc.)
+  - cooldown sur négociations, émissaires et plans météo
+  - contrôle ressources avant action
+  - stratégie autorisée pour interventions conflits
 
 ## 14. Routines serveur
 
@@ -236,6 +256,16 @@ Stubs présents pour extension:
 - `NOT_FOUND`
 - `BAD_REQUEST`
 - `INTERNAL_SERVER_ERROR`
+- `INVALID_PAYLOAD`
+- `INVALID_STRATEGY`
+- `SOLDIER_OWNERSHIP_MISMATCH`
+- `SOLDIER_NOT_AVAILABLE`
+- `CONFLICT_NOT_ACTIVE`
+- `BARRACKS_LEVEL_REQUIRED`
+- `COOLDOWN_ACTIVE`
+- `EMISSARY_NOT_AVAILABLE`
+- `ROUTE_NOT_FOUND`
+- `UNKNOWN_PLAN`
 
 ## 16. TODO Flutter
 

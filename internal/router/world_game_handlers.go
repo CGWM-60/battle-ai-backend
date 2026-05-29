@@ -231,8 +231,9 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	registerChatRoutes(private, world)
 	registerGuildRoutes(private, database, world)
 	registerBuildingRoutes(private, world)
-	registerArmyRoutes(private, world)
+	registerArmyRoutes(private, database, world)
 	registerWorldCompatibilityRoutes(private, world)
+	registerWorldPhase2Routes(private, database, world)
 	registerResearchRoutes(private, world)
 	registerConstructionContractRoutes(private, database, world)
 }
@@ -2321,6 +2322,20 @@ func writeWorldResponse(c *gin.Context, payload any, err error) {
 			"success": true,
 			"data":    payload,
 			"meta":    meta,
+		})
+		return
+	}
+
+	var appErr *apiError
+	if errors.As(err, &appErr) && appErr != nil {
+		c.JSON(appErr.status, gin.H{
+			"success": false,
+			"error": gin.H{
+				"code":    appErr.code,
+				"message": appErr.message,
+				"details": appErr.details,
+			},
+			"meta": meta,
 		})
 		return
 	}
