@@ -35,11 +35,72 @@ func (s *WorldGameService) UpdateQuestProgress(ctx context.Context) (int64, erro
 }
 
 func (s *WorldGameService) UpdateWorldEvents(ctx context.Context) (int64, error) {
+	now := time.Now().UTC()
+
+	// 1. Finish expired events
 	result := s.db.WithContext(ctx).
 		Model(&map[string]any{}).
 		Table("game_events").
-		Where("status = ? AND ends_at < ?", EventStatusActive, time.Now().UTC()).
+		Where("status = ? AND ends_at < ?", EventStatusActive, now).
 		Update("status", EventStatusFinished)
+
+	// 2. Regularly create new quests if there are too few active ones (per world/continent)
+	// This ensures players always have quests to participate in.
+	var activeCount int64
+	s.db.WithContext(ctx).Model(&models.GameEvent{}).
+		Where("status = ? AND (ends_at > ? OR ends_at IS NULL)", EventStatusActive, now).
+		Count(&activeCount)
+
+	if activeCount < 3 {
+		// Create 2-3 varied quests
+		sampleQuests := []models.GameEvent{
+			{
+				Title:       "Patrouille de frontière",
+				Description: "Des rumeurs font état de mouvements suspects près des frontières. Patrouillez et rapportez.",
+				Type:        "patrol",
+				Difficulty:  "medium",
+				Status:      EventStatusActive,
+				StartsAt:    now,
+				EndsAt:      now.Add(6 * time.Hour),
+				RewardsJSON: datatypes.JSON([]byte(`{"credits": 800, "xp": 120}`)),
+				CreatedByAI: true,
+			},
+			{
+				Title:       "Récolte de cristaux rares",
+				Description: "Un gisement de cristaux a été repéré. Organisez une expédition rapide.",
+				Type:        "harvest",
+				Difficulty:  "easy",
+				Status:      EventStatusActive,
+				StartsAt:    now,
+				EndsAt:      now.Add(4 * time.Hour),
+				RewardsJSON: datatypes.JSON([]byte(`{"energy": 400, "food": 300, "xp": 80}`)),
+				CreatedByAI: true,
+			},
+			{
+				Title:       "Négociation avec les nomades",
+				Description: "Une caravane nomade est de passage. Tentez d'établir un accord commercial temporaire.",
+				Type:        "diplomacy",
+				Difficulty:  "hard",
+				Status:      EventStatusActive,
+				StartsAt:    now,
+				EndsAt:      now.Add(8 * time.Hour),
+				RewardsJSON: datatypes.JSON([]byte(`{"credits": 1500, "xp": 200}`)),
+				CreatedByAI: true,
+			},
+		}
+
+		for _, q := range sampleQuests {
+			// Only create if not too many similar already
+			var exists int64
+			s.db.WithContext(ctx).Model(&models.GameEvent{}).
+				Where("title = ? AND status = ?", q.Title, EventStatusActive).
+				Count(&exists)
+			if exists == 0 {
+				_ = s.db.WithContext(ctx).Create(&q).Error
+			}
+		}
+	}
+
 	return result.RowsAffected, result.Error
 }
 
@@ -275,7 +336,7 @@ func applyTemporaryDebuffEffects(save *models.PlayerSave, source string, multipl
 		activeEffects = map[string]any{}
 	}
 
-	effectsList, _ := activeEffects["effects"].([]any)
+	effectsList := toAnySlice(activeEffects["effects"])
 	if effectsList == nil {
 		effectsList = []any{}
 	}

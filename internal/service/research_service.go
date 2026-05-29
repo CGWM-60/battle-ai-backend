@@ -290,7 +290,7 @@ func applyResearchCompletionEffects(tx *gorm.DB, save *models.PlayerSave, node m
 		activeEffects = map[string]any{}
 	}
 
-	effectsList, _ := activeEffects["effects"].([]any)
+	effectsList := toAnySlice(activeEffects["effects"])
 	if effectsList == nil {
 		effectsList = []any{}
 	}

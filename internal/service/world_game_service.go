@@ -691,26 +691,31 @@ func (s *WorldGameService) CreatePlayerCity(ctx context.Context, playerID uint, 
 		}
 		buildingsJSON, _ := json.Marshal(starterBuildings)
 
-		activeEffects := map[string]any{}
-		if len(save.ActiveEffectsJSON) > 0 {
-			_ = json.Unmarshal(save.ActiveEffectsJSON, &activeEffects)
+		// Use the merge helper so any pre-existing "effects" (from prior research or routines)
+		// are not wiped when the player first sets specialization/continent.
+		activeEffectsJSON := mergeActiveEffects(save.ActiveEffectsJSON, datatypes.JSON([]byte(`{}`)))
+
+		// Inject the chosen meta (the merge will keep effects + add/override these)
+		if strings.TrimSpace(input.Specialization) != "" || strings.TrimSpace(input.Continent) != "" {
+			tmp := map[string]any{}
+			if len(activeEffectsJSON) > 0 {
+				_ = json.Unmarshal(activeEffectsJSON, &tmp)
+			}
+			if strings.TrimSpace(input.Specialization) != "" {
+				tmp["specialization"] = strings.TrimSpace(input.Specialization)
+			}
+			if strings.TrimSpace(input.Continent) != "" {
+				tmp["continent"] = strings.TrimSpace(input.Continent)
+			}
+			b, _ := json.Marshal(tmp)
+			activeEffectsJSON = datatypes.JSON(b)
 		}
-		if activeEffects == nil {
-			activeEffects = map[string]any{}
-		}
-		if strings.TrimSpace(input.Specialization) != "" {
-			activeEffects["specialization"] = strings.TrimSpace(input.Specialization)
-		}
-		if strings.TrimSpace(input.Continent) != "" {
-			activeEffects["continent"] = strings.TrimSpace(input.Continent)
-		}
-		activeEffectsJSON, _ := json.Marshal(activeEffects)
 
 		updates := map[string]any{
 			"city_name":               cityName,
 			"buildings_json":          datatypes.JSON(buildingsJSON),
 			"construction_queue_json": emptyJSONObject,
-			"active_effects_json":     datatypes.JSON(activeEffectsJSON),
+			"active_effects_json":     activeEffectsJSON,
 			"version":                 save.Version + 1,
 			"last_synced_at":          &now,
 		}
@@ -909,7 +914,9 @@ func (s *WorldGameService) SyncPlayerSave(ctx context.Context, playerID uint, in
 			"construction_queue_json": emptyJSON(input.ConstructionQueueJSON),
 			"research_json":           emptyJSON(input.ResearchJSON),
 			"inventory_json":          emptyJSON(input.InventoryJSON),
-			"active_effects_json":     emptyJSON(input.ActiveEffectsJSON),
+			// Use merge so that server-written "effects" (research + IA debuffs) are preserved.
+			// Client sync can only contribute continent/specialization etc.
+			"active_effects_json":     mergeActiveEffects(locked.ActiveEffectsJSON, input.ActiveEffectsJSON),
 			"version":                 locked.Version + 1,
 			"last_client_version":     input.Version,
 			"last_synced_at":          &now,
@@ -3316,6 +3323,58 @@ func emptyJSON(value datatypes.JSON) datatypes.JSON {
 	return value
 }
 
+// mergeActiveEffects ensures that server-authoritative production multipliers
+// (research bonuses written by CompleteResearch + IA debuffs + resource crisis effects
+// written by world routines) are NEVER overwritten by client syncs.
+// The client may only update safe metadata keys (continent, specialization...).
+// This fixes the "No effects list" bug reported in Flutter LocalResourceProductionService.
+func mergeActiveEffects(serverJSON, clientJSON datatypes.JSON) datatypes.JSON {
+	server := map[string]any{}
+	if len(serverJSON) > 0 {
+		_ = json.Unmarshal(serverJSON, &server)
+	}
+	if server == nil {
+		server = map[string]any{}
+	}
+
+	client := map[string]any{}
+	if len(clientJSON) > 0 {
+		_ = json.Unmarshal(clientJSON, &client)
+	}
+	if client == nil {
+		client = map[string]any{}
+	}
+
+	// 1. Protect the "effects" array at all costs (this is what Flutter's
+	//    LocalResourceProductionService.parseEffects looks for under activeEffects.effects)
+	if serverEffects, ok := server["effects"]; ok && serverEffects != nil {
+		// keep whatever the server (research + routines) last wrote
+		server["effects"] = serverEffects
+	} else if clientEffects, ok := client["effects"]; ok && clientEffects != nil {
+		// if server had none but client somehow had (shouldn't happen), keep it
+		server["effects"] = clientEffects
+	}
+
+	// 2. Overlay safe client metadata (continent/specialization chosen at city creation or changed)
+	safeMetaKeys := []string{"continent", "specialization", "playerNotes", "preferredTradePartners"}
+	for _, k := range safeMetaKeys {
+		if v, ok := client[k]; ok && v != nil {
+			server[k] = v
+		}
+	}
+
+	// 3. For any other client keys that are not "effects", let them through (defensive)
+	for k, v := range client {
+		if k == "effects" {
+			continue
+		}
+		server[k] = v
+	}
+
+	data, _ := json.Marshal(server)
+	return datatypes.JSON(data)
+}
+
 func defaultMap(value map[string]any, fallback map[string]any) map[string]any {
 	if len(value) == 0 {
 		return fallback
@@ -3331,6 +3390,30 @@ func limitOrDefault(limit int) int {
 		return 200
 	}
 	return limit
+}
+
+// toAnySlice safely converts a JSON-unmarshaled array (which is usually []interface{})
+// into []any regardless of exact concrete type. Prevents silent nil from type assertion.
+func toAnySlice(v any) []any {
+	if v == nil {
+		return nil
+	}
+	switch arr := v.(type) {
+	case []any:
+		return arr
+	case []map[string]any:
+		out := make([]any, len(arr))
+		for i, m := range arr {
+			out[i] = m
+		}
+		return out
+	default:
+		// last resort: try reflection-lite via json roundtrip (rare)
+		b, _ := json.Marshal(v)
+		var out []any
+		_ = json.Unmarshal(b, &out)
+		return out
+	}
 }
 
 func defaultText(value string, fallback string) string {
