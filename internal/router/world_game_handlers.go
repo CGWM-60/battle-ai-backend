@@ -726,6 +726,17 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 		}
 		if err := query.Order("created_at DESC").First(&logEntry).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
+				if isKnownWorldActionID(actionID) {
+					writeWorldResponse(c, gin.H{
+						"accepted":    true,
+						"actionId":    actionID,
+						"status":      "claimed_noop",
+						"serverNow":   time.Now().UTC(),
+						"claimed":     false,
+						"description": "Aucune action active à réclamer pour cette clé.",
+					}, nil)
+					return
+				}
 				c.JSON(http.StatusNotFound, gin.H{"error": "action not found"})
 				return
 			}
@@ -1151,7 +1162,11 @@ func stableActionID(payload gin.H) string {
 func isKnownWorldActionID(actionID string) bool {
 	normalized := strings.TrimSpace(strings.ToLower(actionID))
 	switch normalized {
+	// Weather actions
 	case "deploy-aid", "preposition-resources", "activate-defense-protocol":
+		return true
+	// Commerce actions (hardcoded IDs)
+	case "optimize", "manual":
 		return true
 	default:
 		return false
