@@ -956,6 +956,7 @@ func (s *WorldGameService) ListWorldEvents(ctx context.Context, worldID uint, co
 	inactive := make([]models.GameEvent, 0, len(events))
 	for _, event := range events {
 		if event.EndsAt.IsZero() {
+			active = append(active, event)
 			continue
 		}
 		if event.EndsAt.After(now) {
@@ -984,6 +985,7 @@ func (s *WorldGameService) ListWorldConflicts(ctx context.Context, worldID uint,
 	inactive := make([]models.Conflict, 0, len(conflicts))
 	for _, conflict := range conflicts {
 		if conflict.EndsAt.IsZero() {
+			active = append(active, conflict)
 			continue
 		}
 		if conflict.EndsAt.After(now) {
