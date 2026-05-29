@@ -618,6 +618,7 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 			return
 		}
 
+		// Try to find a matching world action log first (commerce, weather plans, optimize, etc.)
 		var logEntry models.PlayerActionLog
 		query := database.WithContext(c.Request.Context()).
 			Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).
@@ -627,47 +628,112 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 				Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).
 				Where("target_id = ? OR id = ?", actionID, uint(numericID))
 		}
-		if err := query.Order("created_at DESC").First(&logEntry).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				if isKnownWorldActionID(actionID) {
-					writeWorldResponse(c, gin.H{
-						"accepted":    true,
-						"actionId":    actionID,
-						"status":      "cancelled_noop",
-						"serverNow":   time.Now().UTC(),
-						"cancelled":   false,
-						"description": "Aucune action active à annuler pour cette clé.",
-					}, nil)
-					return
+		logErr := query.Order("created_at DESC").First(&logEntry).Error
+
+		if logErr == nil {
+			// Found a log entry → proceed with normal cancel logging + side effects
+			meta := bindOptionalMap(c)
+			meta["cancelledAt"] = time.Now().UTC().Format(time.RFC3339)
+			meta["sourceAction"] = logEntry.Action
+
+			// If this was a conflict intervention, actually remove the player's participation
+			if strings.EqualFold(logEntry.TargetType, "conflict") || strings.EqualFold(logEntry.Action, "conflict_action") {
+				if conflictID, pErr := strconv.ParseUint(logEntry.TargetID, 10, 64); pErr == nil {
+					_ = database.WithContext(c.Request.Context()).
+						Where("conflict_id = ? AND player_id = ?", uint(conflictID), save.PlayerID).
+						Delete(&models.ConflictAction{}).Error
+					meta["conflictActionRemoved"] = true
 				}
-				c.JSON(http.StatusNotFound, gin.H{"error": "action not found"})
-				return
 			}
-			writeWorldResponse(c, nil, err)
+
+			err = world.LogPlayerWorldAction(
+				c.Request.Context(),
+				currentUserID(c),
+				save.WorldID,
+				save.ContinentID,
+				"world_action_cancel",
+				logEntry.TargetType,
+				logEntry.TargetID,
+				"accepted",
+				"",
+				meta,
+			)
+			writeWorldResponse(c, gin.H{
+				"accepted":  err == nil,
+				"actionId":  actionID,
+				"status":    "cancelled",
+				"serverNow": time.Now().UTC(),
+			}, err)
 			return
 		}
 
-		meta := bindOptionalMap(c)
-		meta["cancelledAt"] = time.Now().UTC().Format(time.RFC3339)
-		meta["sourceAction"] = logEntry.Action
-		err = world.LogPlayerWorldAction(
-			c.Request.Context(),
-			currentUserID(c),
-			save.WorldID,
-			save.ContinentID,
-			"world_action_cancel",
-			logEntry.TargetType,
-			logEntry.TargetID,
-			"accepted",
-			"",
-			meta,
-		)
+		if !errors.Is(logErr, gorm.ErrRecordNotFound) {
+			writeWorldResponse(c, nil, logErr)
+			return
+		}
+
+		// No log entry found
+		if isKnownWorldActionID(actionID) {
+			writeWorldResponse(c, gin.H{
+				"accepted":    true,
+				"actionId":    actionID,
+				"status":      "cancelled_noop",
+				"serverNow":   time.Now().UTC(),
+				"cancelled":   false,
+				"description": "Aucune action active à annuler pour cette clé.",
+			}, nil)
+			return
+		}
+
+		// Numeric ID → check if this is an active conflict intervention for the player
+		if conflictID, pErr := strconv.ParseUint(actionID, 10, 64); pErr == nil {
+			var ca models.ConflictAction
+			if dbErr := database.WithContext(c.Request.Context()).
+				Where("conflict_id = ? AND player_id = ?", uint(conflictID), save.PlayerID).
+				First(&ca).Error; dbErr == nil {
+				// Real intervention exists → delete it (cancel participation)
+				_ = database.WithContext(c.Request.Context()).
+					Where("id = ?", ca.Id).
+					Delete(&models.ConflictAction{}).Error
+
+				_ = world.LogPlayerWorldAction(
+					c.Request.Context(),
+					currentUserID(c),
+					save.WorldID,
+					save.ContinentID,
+					"world_action_cancel",
+					"conflict",
+					actionID,
+					"accepted",
+					"",
+					gin.H{
+						"cancelledAt":           time.Now().UTC().Format(time.RFC3339),
+						"sourceAction":          "conflict_action",
+						"conflictActionRemoved": true,
+					},
+				)
+
+				writeWorldResponse(c, gin.H{
+					"accepted":  true,
+					"actionId":  actionID,
+					"status":    "cancelled",
+					"serverNow": time.Now().UTC(),
+					"description": "Intervention sur le conflit annulée (participation retirée).",
+				}, nil)
+				return
+			}
+		}
+
+		// Last resort: do not hard 404 the client. Return a soft success so UI can clear the card.
+		// The client will still refresh via _load().
 		writeWorldResponse(c, gin.H{
-			"accepted":  err == nil,
-			"actionId":  actionID,
-			"status":    "cancelled",
-			"serverNow": time.Now().UTC(),
-		}, err)
+			"accepted":    true,
+			"actionId":    actionID,
+			"status":      "cancelled_noop",
+			"serverNow":   time.Now().UTC(),
+			"cancelled":   false,
+			"description": "Aucune action active correspondante trouvée (déjà terminée ou inexistante).",
+		}, nil)
 	})
 
 	private.POST("/world/actions/:id/claim", func(c *gin.Context) {
