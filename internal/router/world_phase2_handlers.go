@@ -50,6 +50,9 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 				"activeNegotiations": 0,
 				"risks":              []string{},
 				"history":            []string{},
+				// Aliases for Flutter parsers expecting faction/stance
+				"faction": defaultText(continent.Name, "Non disponible"),
+				"stance":  diplomacyStance(score),
 			})
 		}
 		repLabel := "Neutre"
@@ -93,6 +96,9 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 				"status":        diplomacyStance(score),
 				"trust":         score,
 				"hostility":     100 - score,
+				// Aliases for Flutter parsers expecting faction/stance
+				"faction": defaultText(continent.Name, "Non disponible"),
+				"stance":  diplomacyStance(score),
 			})
 		}
 		writeWorldResponse(c, gin.H{"relations": relations}, nil)
@@ -296,6 +302,71 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 			})
 		}
 		writeWorldResponse(c, gin.H{"reports": reports}, nil)
+	})
+
+	// Aggregated targets for "Nouvel accord", émissaires, négociations (regions + guildes + IA)
+	private.GET("/diplomacy/targets", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		ctx := c.Request.Context()
+
+		// Regions / Continents (exclude own)
+		var continents []models.Continent
+		_ = database.WithContext(ctx).Where("world_id = ?", save.WorldID).Order("`index` ASC").Find(&continents).Error
+		targets := make([]gin.H, 0, 32)
+		for _, ct := range continents {
+			if ct.Id == save.ContinentID {
+				continue
+			}
+			score := clamp(100-ct.TensionLevel, 0, 100)
+			targets = append(targets, gin.H{
+				"id":       "r_" + strconv.FormatUint(uint64(ct.Id), 10),
+				"rawId":    ct.Id,
+				"name":     defaultText(ct.Name, "Région"),
+				"type":     "region",
+				"score":    score,
+				"status":   diplomacyStance(score),
+			})
+		}
+
+		// Guilds (ListGuilds seeds samples if needed)
+		guilds, _ := world.ListGuilds(ctx, currentUserID(c), 50)
+		for _, g := range guilds {
+			targets = append(targets, gin.H{
+				"id":    "g_" + strconv.FormatUint(uint64(g.Id), 10),
+				"rawId": g.Id,
+				"name":  defaultText(g.Name, g.Tag),
+				"type":  "guild",
+				"tag":   g.Tag,
+			})
+		}
+
+		// AI World Factions as targets
+		var aiFactions []models.AIWorldFaction
+		_ = database.WithContext(ctx).Where("world_id = ?", save.WorldID).Limit(20).Find(&aiFactions).Error
+		for _, a := range aiFactions {
+			targets = append(targets, gin.H{
+				"id":    "ai_" + strconv.FormatUint(uint64(a.Id), 10),
+				"rawId": a.Id,
+				"name":  defaultText(a.Name, "IA"),
+				"type":  "ai",
+				"aggro": a.Aggressiveness,
+			})
+		}
+
+		// Fallback synthetic targets if still nothing (never empty)
+		if len(targets) == 0 {
+			targets = append(targets,
+				gin.H{"id": "r_fallback1", "name": "Région voisine", "type": "region"},
+				gin.H{"id": "g_fallback1", "name": "Guilde Marchande", "type": "guild"},
+				gin.H{"id": "ai_fallback1", "name": "IA Locale", "type": "ai"},
+			)
+		}
+
+		writeWorldResponse(c, gin.H{"targets": targets, "total": len(targets)}, nil)
 	})
 }
 

@@ -1660,8 +1660,44 @@ func (s *WorldGameService) ListGuilds(ctx context.Context, playerID uint, limit 
 		return nil, err
 	}
 	var guilds []models.Guild
-	err = s.db.WithContext(ctx).Preload("Members").Where("world_id = ?", save.WorldID).Order("level DESC, xp DESC").Limit(limitOrDefault(limit)).Find(&guilds).Error
-	return guilds, err
+	db := s.db.WithContext(ctx)
+	err = db.Preload("Members").Where("world_id = ?", save.WorldID).Order("level DESC, xp DESC").Limit(limitOrDefault(limit)).Find(&guilds).Error
+	if err != nil {
+		return nil, err
+	}
+	// Ensure at least some guilds exist in the world for diplomacy/commerce targets (no empty lists)
+	if len(guilds) == 0 {
+		samples := []struct {
+			name string
+			tag  string
+		}{
+			{"Syndicat des Marchands", "SMD"},
+			{"Alliance des Éclaireurs", "AEC"},
+			{"Confrérie Technologique", "CTK"},
+		}
+		now := time.Now().UTC()
+		for i, s := range samples {
+			g := models.Guild{
+				WorldID:       save.WorldID,
+				Name:          s.name,
+				Tag:           s.tag,
+				Description:   "Guilde générée automatiquement pour les accords diplomatiques et commerciaux.",
+				Level:         3 + i,
+				XP:            int64(1200 + i*400),
+				MaxMembers:    25,
+				Visibility:    "public",
+				RequiredLevel: 1,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+			if createErr := db.Create(&g).Error; createErr != nil {
+				// ignore duplicate or constraint errors (e.g. unique name/tag per world)
+				continue
+			}
+			guilds = append(guilds, g)
+		}
+	}
+	return guilds, nil
 }
 
 func (s *WorldGameService) BuildingCatalog(ctx context.Context, activeOnly bool) ([]models.BuildingDefinition, error) {
