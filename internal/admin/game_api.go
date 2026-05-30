@@ -1129,6 +1129,9 @@ func gameMustJSON(value any) datatypes.JSON {
 // === Daily Tasks Admin ===
 
 func (s *Server) gameListDailyTasksAPI(c *gin.Context) {
+	// Safety net: ensure table exists even if AutoMigrate was missed in previous deploys
+	_ = s.db.WithContext(c.Request.Context()).AutoMigrate(&models.DailyTask{})
+
 	worldIDStr := c.Query("worldId")
 	limitStr := c.DefaultQuery("limit", "100")
 
@@ -1157,6 +1160,9 @@ func (s *Server) gameListDailyTasksAPI(c *gin.Context) {
 
 func (s *Server) gameGenerateDailyTasksAPI(world *service.WorldGameService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Safety net: ensure table exists even if AutoMigrate was missed in previous deploys
+		_ = s.db.WithContext(c.Request.Context()).AutoMigrate(&models.DailyTask{})
+
 		var input struct {
 			WorldID uint `json:"worldId"`
 			Limit   int  `json:"limit"` // max players to generate for
