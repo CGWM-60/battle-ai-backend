@@ -263,3 +263,25 @@ func TestDeduplicateDailyTasksByNormalizedTypeAndTitle(t *testing.T) {
 		t.Fatalf("expected same title with different type to be kept, got %+v", got[1])
 	}
 }
+
+func TestGenerateDeterministicDailyTasksHasVariedUniqueTitles(t *testing.T) {
+	svc := NewWorldGameService(nil)
+	now := time.Now().UTC()
+	expires := now.Add(24 * time.Hour)
+
+	tasks := svc.generateDeterministicDailyTasks(42, 3, now, expires)
+	if len(tasks) < 22 {
+		t.Fatalf("expected at least 22 tasks, got %d", len(tasks))
+	}
+
+	seen := map[string]bool{}
+	for _, task := range tasks {
+		if task.Title == "" {
+			t.Fatalf("task title should not be empty")
+		}
+		if seen[task.Title] {
+			t.Fatalf("duplicate title found in deterministic tasks: %q", task.Title)
+		}
+		seen[task.Title] = true
+	}
+}

@@ -235,6 +235,8 @@ export default function DailyTasksAdminPage() {
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                 <thead>
                   <tr style={{ background: "#111B2E" }}>
+                    <th style={{ textAlign: "right", padding: "6px 8px" }}>Joueur</th>
+                    <th style={{ textAlign: "right", padding: "6px 8px" }}>Monde</th>
                     <th style={{ textAlign: "left", padding: "6px 8px" }}>Titre</th>
                     <th style={{ textAlign: "left", padding: "6px 8px" }}>Type</th>
                     <th style={{ textAlign: "right", padding: "6px 8px" }}>Objectif</th>
@@ -246,6 +248,8 @@ export default function DailyTasksAdminPage() {
                 <tbody>
                   {grouped[day].map((t) => (
                     <tr key={t.id} style={{ borderTop: "1px solid #1F2A3F" }}>
+                      <td style={{ padding: "6px 8px", textAlign: "right", color: "#8FAFD1" }}>#{t.playerId}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "right", color: "#8FAFD1" }}>#{t.worldId}</td>
                       <td style={{ padding: "6px 8px", color: "#E8F0FE" }}>{t.title}</td>
                       <td style={{ padding: "6px 8px", color: "#7BE04B" }}>{t.taskType}</td>
                       <td style={{ padding: "6px 8px", textAlign: "right" }}>
@@ -278,7 +282,7 @@ export default function DailyTasksAdminPage() {
       )}
 
       <div style={{ marginTop: 24, fontSize: 12, color: "#666" }}>
-        Les tâches sont générées par joueur (via l'IA méchante ou manuellement ici). Le cron automatique tourne à 4h du matin.
+        Les tâches sont générées par joueur (via l'IA méchante ou manuellement ici). Deux lignes similaires peuvent exister pour des joueurs différents. Le cron automatique tourne à 4h du matin.
       </div>
     </AdminShell>
   );

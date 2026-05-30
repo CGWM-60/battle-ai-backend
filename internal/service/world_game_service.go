@@ -3514,7 +3514,7 @@ func deduplicateDailyTasks(tasks []models.DailyTask) []models.DailyTask {
 
 // generateDailyTasksWithAI tries to use the evil AI in the project to create flavorful daily tasks.
 func (s *WorldGameService) generateDailyTasksWithAI(ctx context.Context, playerID uint, worldID uint, now, expires time.Time) []models.DailyTask {
-	prompt := fmt.Sprintf(`Tu es l'IA Méchante d'un monde post-apo cyberpunk.
+	prompt := `Tu es l'IA Méchante d'un monde post-apo cyberpunk.
 Génère entre 22 et 35 tâches quotidiennes variées et immersives pour un joueur.
 Chaque tâche doit avoir :
 - title court et impactant
@@ -3531,7 +3531,7 @@ title, description, taskType, targetValue, rewardType, rewardAmount, durationMin
 Exemple de ton :
 "Les survivants du Secteur 7 ont besoin de 8200 unités d'énergie avant l'aube. Le Conseil t'observe."
 
-Génère des tâches variées et immersives.`)
+Génère des tâches variées et immersives.`
 
 	cfg, ok := worldProviderConfig(defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "mistral"))
 	if !ok {
@@ -3603,10 +3603,47 @@ func (s *WorldGameService) generateDeterministicDailyTasks(playerID uint, worldI
 		{"Construction d'une tour de guet", "Les raids nocturnes augmentent. Construis une tour de guet solide.", "construction", 1, "materials", 750, 75},
 	}
 
-	var tasks []models.DailyTask
-	count := 25 + (int(playerID) % 12) // between ~25-36
+	extraTemplates := []struct {
+		title    string
+		story    string
+		taskType string
+		target   int
+		rewardT  string
+		rewardA  int64
+		duration int
+	}{
+		{"Interception d'un convoi fantôme", "Un convoi sans balise traverse la zone morte. Intercepte sa cargaison avant l'aube.", "military", 3, "credits", 720, 45},
+		{"Stabilisation du dôme agricole", "Le dôme 3 fuit des toxines. Répare les filtres avant la perte totale des cultures.", "construction", 2, "food", 680, 50},
+		{"Extraction de noyaux énergétiques", "Les ruines du métro cachent encore des noyaux instables. Ramène-les en un seul morceau.", "resource", 8200, "energy", 900, 60},
+		{"Traque des drones renégats", "Des drones hors protocole harcèlent les convois. Neutralise leur essaim.", "military", 6, "xp", 340, 55},
+		{"Audit des relais diplomatiques", "Un pacte fragile vacille. Répare les relais de négociation avant l'escalade.", "diplomacy", 2, "credits", 760, 35},
+		{"Cartographie des tunnels toxiques", "La cartographie est incomplète et mortelle. Scanne les tunnels contaminés.", "research", 5, "xp", 360, 45},
+		{"Sabotage des balises adverses", "Le réseau adverse anticipe nos routes. Coupe leurs balises de ciblage.", "sabotage", 2, "gems", 5, 30},
+		{"Réquisition de pièces d'artillerie", "L'atelier central manque de pièces lourdes. Sécurise le stock avant les pillards.", "resource", 5400, "materials", 820, 50},
+		{"Exercice d'évacuation civile", "Une alerte météo approche. Organise l'évacuation des quartiers bas.", "world_event", 4, "xp", 300, 40},
+		{"Patrouille anti-contrebande", "Le marché noir siphonne nos ressources. Démantèle les routes illégales.", "military", 7, "credits", 780, 55},
+		{"Restauration du réseau de capteurs", "Sans capteurs, nous sommes aveugles. Remets en ligne les antennes périphériques.", "construction", 3, "energy", 640, 60},
+		{"Collecte d'échantillons radioactifs", "Le labo réclame des échantillons pour calibrer les contre-mesures.", "research", 6, "xp", 390, 50},
+		{"Ravitaillement des avant-postes", "Les avant-postes tiennent encore, mais sans vivres pour longtemps.", "resource", 9800, "food", 980, 65},
+		{"Négociation d'un cessez-le-feu local", "Deux clans se disputent un puits. Imposer une trêve est plus rentable qu'une guerre.", "diplomacy", 1, "credits", 950, 35},
+		{"Déploiement d'une cellule de contre-espionnage", "Des fuites compromettent nos plans. Identifie les taupes avant minuit.", "sabotage", 1, "gems", 4, 35},
+		{"Réparation du barrage thermique", "Le barrage tient par miracle. Consolide les vannes critiques.", "construction", 2, "materials", 870, 70},
+		{"Campagne de recrutement forcé", "La garnison fond chaque nuit. Constitue un nouveau noyau de recrues.", "military", 10, "xp", 420, 60},
+		{"Nettoyage des ruines industrielles", "Des machines récupérables dorment sous les décombres. Extrais-les rapidement.", "resource", 7300, "materials", 930, 55},
+		{"Analyse des signaux NEXUS brouillés", "Des paquets inconnus inondent le réseau. Déchiffre leur origine.", "research", 4, "energy", 610, 40},
+		{"Sécurisation du corridor marchand", "Un corridor commercial rapporte gros… s'il reste ouvert ce soir.", "world_event", 3, "credits", 1020, 50},
+	}
 
-	for i := 0; i < count && i < len(templates); i++ {
+	var tasks []models.DailyTask
+	targetCount := 25 + (int(playerID) % 12) // ~25-36
+	if targetCount < 22 {
+		targetCount = 22
+	}
+	if targetCount > 40 {
+		targetCount = 40
+	}
+
+	for i := 0; i < targetCount && i < len(templates); i++ {
 		t := templates[i]
 		tasks = append(tasks, models.DailyTask{
 			PlayerID:        playerID,
@@ -3624,19 +3661,23 @@ func (s *WorldGameService) generateDeterministicDailyTasks(playerID uint, worldI
 			ExpiresAt:       &expires,
 		})
 	}
-	// Fill remaining with generic evil AI flavored tasks if needed
-	for len(tasks) < 22 {
+
+	// Fill remaining with varied deterministic missions
+	seed := int(playerID) + int(worldID) + now.YearDay()
+	for i := 0; len(tasks) < targetCount; i++ {
+		t := extraTemplates[(seed+i)%len(extraTemplates)]
+		scaling := (i % 4) + (seed % 3)
 		tasks = append(tasks, models.DailyTask{
 			PlayerID:        playerID,
 			WorldID:         worldID,
-			Title:           fmt.Sprintf("Opération %d - Purge des traîtres", len(tasks)+1),
-			Description:     "L'IA méchante exige que tu élimines toute trace de faiblesse aujourd'hui.",
-			TaskType:        "military",
-			TargetValue:     5 + len(tasks),
+			Title:           fmt.Sprintf("%s — Cellule %02d", t.title, len(tasks)+1),
+			Description:     t.story,
+			TaskType:        t.taskType,
+			TargetValue:     t.target + scaling,
 			CurrentValue:    0,
-			RewardType:      "xp",
-			RewardAmount:    150,
-			DurationMinutes: 40,
+			RewardType:      t.rewardT,
+			RewardAmount:    t.rewardA + int64(15*scaling),
+			DurationMinutes: t.duration,
 			Progress:        0,
 			Status:          "available",
 			ExpiresAt:       &expires,
