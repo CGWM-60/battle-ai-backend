@@ -1885,6 +1885,51 @@ func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 		contribution, err := world.ContributeGuild(c.Request.Context(), currentUserID(c), id, input)
 		writeWorldResponse(c, contribution, err)
 	})
+
+	// Treasury endpoints (Coffre de Guilde - spec point 10)
+	private.GET("/guilds/:id/treasury", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		// For now return a stub - will be replaced by real GuildTreasury service
+		writeWorldResponse(c, gin.H{
+			"guildId":       id,
+			"credits":       12450,
+			"food":          8320,
+			"energy":        4100,
+			"materials":     2890,
+			"rareResources": 120,
+			"influence":     350,
+		}, nil)
+	})
+
+	private.POST("/guilds/:id/treasury/donate", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		var input struct {
+			ResourceType string `json:"resourceType"`
+			Amount       int64  `json:"amount"`
+		}
+		if err := bindPayload(c, &input); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid donation payload"})
+			return
+		}
+		// Stub response - real logic will use GuildTreasury + log + contribution
+		writeWorldResponse(c, gin.H{
+			"success":            true,
+			"guildId":            id,
+			"resourceType":       input.ResourceType,
+			"amount":             input.Amount,
+			"contributionGained": 10,
+			"guildXPGained":      5,
+			"message":            "Don effectué avec succès.",
+		}, nil)
+	})
 }
 
 func registerBuildingRoutes(private *gin.RouterGroup, world *service.WorldGameService) {

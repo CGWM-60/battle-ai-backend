@@ -138,8 +138,18 @@ type Guild struct {
 	OwnerPlayerID uint           `gorm:"index" json:"ownerPlayerId"`
 	Level         int            `json:"level"`
 	XP            int64          `json:"xp"`
+	PowerScore    int64          `json:"powerScore"`
+	LevelScore    int64          `json:"levelScore"`
 	MaxMembers    int            `json:"maxMembers"`
+	MemberCapacity int           `json:"memberCapacity"`
 	Visibility    string         `gorm:"size:32;index" json:"visibility"`
+	JoinPolicy    string         `gorm:"size:32" json:"joinPolicy"`
+	Language      string         `gorm:"size:32" json:"language"`
+	Emblem        string         `gorm:"size:255" json:"emblem"`
+	Banner        string         `gorm:"size:255" json:"banner"`
+	Reputation    int            `json:"reputation"`
+	Influence     int64          `json:"influence"`
+	Status        string         `gorm:"size:32;index" json:"status"`
 	RequiredLevel int            `json:"requiredLevel"`
 	Members       []GuildMember  `gorm:"foreignKey:GuildID" json:"members,omitempty"`
 }
@@ -180,6 +190,34 @@ type GuildContribution struct {
 	Contribution string         `gorm:"size:64;index" json:"contribution"`
 	Amount       int64          `json:"amount"`
 	Payload      datatypes.JSON `gorm:"type:json" json:"payload"`
+}
+
+// GuildTreasury - Coffre commun de la guilde (spec point 10)
+type GuildTreasury struct {
+	Id            uint `gorm:"primaryKey" json:"id"`
+	GuildID       uint           `gorm:"index" json:"guildId"`
+	Guild         Guild          `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	Credits       int64          `json:"credits"`
+	Food          int64          `json:"food"`
+	Energy        int64          `json:"energy"`
+	Materials     int64          `json:"materials"`
+	RareResources int64          `json:"rareResources"`
+	Influence     int64          `json:"influence"`
+	UpdatedAt     time.Time
+}
+
+// GuildTreasuryLog - Historique des mouvements du coffre
+type GuildTreasuryLog struct {
+	Id          uint `gorm:"primaryKey" json:"id"`
+	GuildID     uint           `gorm:"index" json:"guildId"`
+	PlayerID    *uint          `gorm:"index" json:"playerId"`
+	Action      string         `gorm:"size:32;index" json:"action"` // donate, spend, reward, penalty, trade_income, war_reward, quest_reward
+	ResourceType string        `gorm:"size:32" json:"resourceType"`
+	Amount      int64          `json:"amount"`
+	BeforeValue int64          `json:"beforeValue"`
+	AfterValue  int64          `json:"afterValue"`
+	Description string         `gorm:"type:text" json:"description"`
+	CreatedAt   time.Time
 }
 
 type AIWorldFaction struct {
