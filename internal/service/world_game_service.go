@@ -506,15 +506,21 @@ func (s *WorldGameService) PlayerState(ctx context.Context, playerID uint) (map[
 	conflicts, _ := s.ListWorldConflicts(ctx, save.WorldID, save.ContinentID, 50)
 	weather, _ := s.ListActiveWeather(ctx, save.WorldID, save.ContinentID)
 	messages, _ := s.ListDailyMessages(ctx, playerID, 20)
+
+	// Feature 3: Daily unique communication code (min 10+ chars, changes every UTC day, copy-paste ready)
+	dailyCode := generateDailyCommunicationCode(playerID, time.Now().UTC())
+
 	return map[string]any{
 		"pseudo": player.Pseudo,
 		"player": map[string]any{
-			"id":     strconv.FormatUint(uint64(player.Id), 10),
-			"pseudo": player.Pseudo,
-			"guild":  nil,
+			"id":        strconv.FormatUint(uint64(player.Id), 10),
+			"pseudo":    player.Pseudo,
+			"guild":     nil,
+			"dailyCode": dailyCode,
 		},
 		"save":      save,
 		"buildings": buildings,
+		"dailyCode": dailyCode, // Unique daily code for communication (min 10 chars)
 		"events":    events,
 		"conflicts": conflicts,
 		"weather":   weather,
@@ -685,11 +691,8 @@ func (s *WorldGameService) CreatePlayerCity(ctx context.Context, playerID uint, 
 			return fmt.Errorf("player already has an active city")
 		}
 
-		starterBuildings := []map[string]any{
-			{"buildingKey": "habitation", "level": 1, "positionX": 1, "positionY": 1, "state": "placed", "lastCollectedAt": now},
-			{"buildingKey": "solar_park", "level": 1, "positionX": 2, "positionY": 1, "state": "placed", "lastCollectedAt": now},
-		}
-		buildingsJSON, _ := json.Marshal(starterBuildings)
+		// NO starter buildings — player starts with an empty city and must build everything.
+		buildingsJSON, _ := json.Marshal([]map[string]any{})
 
 		// Use the merge helper so any pre-existing "effects" (from prior research or routines)
 		// are not wiped when the player first sets specialization/continent.
@@ -723,17 +726,9 @@ func (s *WorldGameService) CreatePlayerCity(ctx context.Context, playerID uint, 
 			return err
 		}
 
+		// Start with zero buildings. Player must construct everything from scratch.
 		if err := tx.Where("player_id = ?", playerID).Delete(&models.PlayerBuilding{}).Error; err != nil {
 			return err
-		}
-		rows := []models.PlayerBuilding{
-			{PlayerID: playerID, BuildingKey: "habitation", Level: 1, PositionX: 1, PositionY: 1, State: "placed", LastCollectedAt: &now},
-			{PlayerID: playerID, BuildingKey: "solar_park", Level: 1, PositionX: 2, PositionY: 1, State: "placed", LastCollectedAt: &now},
-		}
-		for _, row := range rows {
-			if err := tx.Create(&row).Error; err != nil {
-				return err
-			}
 		}
 		return nil
 	}); err != nil {
@@ -3316,6 +3311,56 @@ func mustJSON(value any) datatypes.JSON {
 		return emptyJSONObject
 	}
 	return datatypes.JSON(data)
+}
+
+// === Daily Tasks Feature (1) - Stub for generation ===
+// Will be called by daily cron (4am) and "IA méchante"
+func (s *WorldGameService) GenerateDailyTasksForPlayer(ctx context.Context, playerID uint, worldID uint) error {
+	// TODO: Real implementation using AI (enemy AI style) to generate 20-40 varied tasks
+	// For now: create a few sample tasks so the system is usable
+	now := time.Now().UTC()
+	tomorrow := now.Add(24 * time.Hour)
+
+	tasks := []models.DailyTask{
+		{
+			PlayerID: playerID, WorldID: worldID,
+			Title: "Produire 5000 nourriture", Description: "Collecte ou production de nourriture aujourd'hui.",
+			TaskType: "resource", TargetValue: 5000, CurrentValue: 0,
+			RewardType: "food", RewardAmount: 800,
+			DurationMinutes: 45, Progress: 0, Status: "available",
+			ExpiresAt: &tomorrow,
+		},
+		{
+			PlayerID: playerID, WorldID: worldID,
+			Title: "Former 3 soldats", Description: "Entraîne des unités dans les casernes.",
+			TaskType: "military", TargetValue: 3, CurrentValue: 0,
+			RewardType: "xp", RewardAmount: 120,
+			DurationMinutes: 60, Progress: 0, Status: "available",
+			ExpiresAt: &tomorrow,
+		},
+		{
+			PlayerID: playerID, WorldID: worldID,
+			Title: "Compléter une quête monde", Description: "Participe à un événement ou conflit aujourd'hui.",
+			TaskType: "world_event", TargetValue: 1, CurrentValue: 0,
+			RewardType: "gems", RewardAmount: 2,
+			DurationMinutes: 30, Progress: 0, Status: "available",
+			ExpiresAt: &tomorrow,
+		},
+	}
+
+	for _, t := range tasks {
+		_ = s.db.WithContext(ctx).Create(&t).Error // ignore duplicates for stub
+	}
+	return nil
+}
+
+// generateDailyCommunicationCode returns a unique, copy-paste friendly code that changes every day.
+// Format: PLAYER-YYYYMMDD-XXXXX (min 10+ chars)
+func generateDailyCommunicationCode(playerID uint, now time.Time) string {
+	datePart := now.UTC().Format("20060102")
+	// Simple but effective hash for uniqueness per player per day
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%d-%s", playerID, datePart))))[:6]
+	return fmt.Sprintf("P%d-%s-%s", playerID, datePart, strings.ToUpper(hash))
 }
 
 func emptyJSON(value datatypes.JSON) datatypes.JSON {

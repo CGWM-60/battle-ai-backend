@@ -47,6 +47,81 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
 		writeWorldResponse(c, save, err)
 	})
+
+	// Daily Tasks endpoints (Feature 1 - A/B)
+	private.GET("/player/daily-tasks", func(c *gin.Context) {
+		playerID := currentUserID(c)
+		save, _ := world.EnsurePlayerSave(c.Request.Context(), playerID)
+		_ = world.GenerateDailyTasksForPlayer(c.Request.Context(), playerID, save.WorldID)
+
+		var tasks []models.DailyTask
+		_ = database.WithContext(c.Request.Context()).
+			Where("player_id = ? AND status IN ?", playerID, []string{"available", "in_progress"}).
+			Order("created_at DESC").
+			Find(&tasks).Error
+
+		writeWorldResponse(c, gin.H{"tasks": tasks}, nil)
+	})
+
+	private.POST("/player/daily-tasks/:id/start", func(c *gin.Context) {
+		playerID := currentUserID(c)
+		taskID := c.Param("id")
+
+		var task models.DailyTask
+		if err := database.WithContext(c.Request.Context()).Where("id = ? AND player_id = ?", taskID, playerID).First(&task).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		}
+
+		if task.Status != "available" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "task not available"})
+			return
+		}
+
+		now := time.Now().UTC()
+		task.Status = "in_progress"
+		task.StartedAt = &now
+		_ = database.WithContext(c.Request.Context()).Save(&task).Error
+
+		writeWorldResponse(c, gin.H{"success": true, "task": task}, nil)
+	})
+
+	private.POST("/player/daily-tasks/:id/claim", func(c *gin.Context) {
+		playerID := currentUserID(c)
+		taskID := c.Param("id")
+
+		var task models.DailyTask
+		if err := database.WithContext(c.Request.Context()).Where("id = ? AND player_id = ?", taskID, playerID).First(&task).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		}
+
+		if task.Status != "in_progress" && task.Status != "completed" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "task not ready to claim"})
+			return
+		}
+
+		// Apply reward (simple version)
+		save, _ := world.EnsurePlayerSave(c.Request.Context(), playerID)
+		switch task.RewardType {
+		case "food":
+			save.Food += task.RewardAmount
+		case "energy":
+			save.Energy += task.RewardAmount
+		case "credits":
+			save.Credits += task.RewardAmount
+		case "xp":
+			save.XP += task.RewardAmount
+		}
+		_ = database.WithContext(c.Request.Context()).Save(&save).Error
+
+		task.Status = "claimed"
+		now := time.Now().UTC()
+		task.CompletedAt = &now
+		_ = database.WithContext(c.Request.Context()).Save(&task).Error
+
+		writeWorldResponse(c, gin.H{"success": true, "reward": gin.H{"type": task.RewardType, "amount": task.RewardAmount}}, nil)
+	})
 	private.POST("/player/save/sync", func(c *gin.Context) {
 		var input service.PlayerSaveSyncInput
 		if err := bindPayload(c, &input); err != nil {

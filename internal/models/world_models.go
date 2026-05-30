@@ -302,6 +302,29 @@ type DailyAIMessage struct {
 	IsRead               bool           `gorm:"index" json:"isRead"`
 }
 
+// DailyTask - Feature: Tâches quotidiennes générées par l'IA méchante (20-40 par jour)
+// Récompenses: ressources, XP, ou gems (petite quantité)
+type DailyTask struct {
+	Id              uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+	PlayerID        uint           `gorm:"index" json:"playerId"`
+	WorldID         uint           `gorm:"index" json:"worldId"`
+	Title           string         `gorm:"size:200" json:"title"`
+	Description     string         `gorm:"type:text" json:"description"`
+	TaskType        string         `gorm:"size:32;index" json:"taskType"` // resource, xp, gem, military, etc.
+	TargetValue     int            `json:"targetValue"`
+	CurrentValue    int            `json:"currentValue"`
+	RewardType      string         `gorm:"size:32" json:"rewardType"` // credits, food, energy, xp, gems
+	RewardAmount    int64          `json:"rewardAmount"`
+	DurationMinutes int            `json:"durationMinutes"` // temps de réalisation
+	Progress        float64        `json:"progress"` // 0.0 - 1.0
+	Status          string         `gorm:"size:32;index" json:"status"` // available, in_progress, completed, claimed, expired
+	ExpiresAt       *time.Time     `gorm:"index" json:"expiresAt"`
+	StartedAt       *time.Time     `json:"startedAt"`
+	CompletedAt     *time.Time     `json:"completedAt"`
+}
+
 type AIWorldDecision struct {
 	Id                 uint `gorm:"primaryKey" json:"id"`
 	CreatedAt          time.Time

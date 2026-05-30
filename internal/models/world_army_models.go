@@ -23,6 +23,7 @@ type ArmyUnit struct {
 	Speed                    int            `json:"speed"`
 	Range                    int            `json:"range"`
 	Morale                   int            `json:"morale"`
+	Power                    int            `json:"power"` // Feature: Puissance - impacts world conflicts interventions and city power display
 	Endurance                int            `json:"endurance"`
 	MaxCarry                 int            `json:"maxCarry"`
 	FoodConsumptionPerHour   int64          `json:"foodConsumptionPerHour"`
