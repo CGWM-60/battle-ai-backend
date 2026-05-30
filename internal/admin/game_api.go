@@ -112,6 +112,7 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	// Daily Tasks admin (manual generation + history table)
 	game.GET("/daily-tasks", s.gameListDailyTasksAPI)
 	game.POST("/daily-tasks/generate", s.gameGenerateDailyTasksAPI(world))
+	game.POST("/daily-tasks/purge", s.gamePurgeDailyTasksAPI)
 
 	game.GET("/chat/messages", s.gameListModelAPI(&[]models.ChatMessage{}, "created_at DESC"))
 	game.DELETE("/chat/messages/:id", s.gameModerateChatAPI(true))
@@ -1205,16 +1206,54 @@ func (s *Server) gameGenerateDailyTasksAPI(world *service.WorldGameService) gin.
 		}
 
 		s.gameAudit(c, "manual_generate_daily_tasks", "world", strconv.FormatUint(uint64(input.WorldID), 10), nil, gin.H{
-			"playersProcessed": len(saves),
+			"playersProcessed":  len(saves),
 			"tasksGeneratedFor": generated,
 		})
 
 		gameJSON(c, gin.H{
-			"success":         true,
-			"worldId":         input.WorldID,
+			"success":          true,
+			"worldId":          input.WorldID,
 			"playersProcessed": len(saves),
-			"generatedFor":    generated,
-			"message":         "Tâches quotidiennes générées manuellement",
+			"generatedFor":     generated,
+			"message":          "Tâches quotidiennes générées manuellement",
 		}, nil)
 	}
+}
+
+func (s *Server) gamePurgeDailyTasksAPI(c *gin.Context) {
+	// Safety net: ensure table exists even if AutoMigrate was missed in previous deploys
+	_ = s.db.WithContext(c.Request.Context()).AutoMigrate(&models.DailyTask{})
+
+	var input struct {
+		WorldID uint `json:"worldId"`
+	}
+	_ = c.ShouldBindJSON(&input)
+
+	query := s.db.WithContext(c.Request.Context()).Model(&models.DailyTask{})
+	if input.WorldID != 0 {
+		query = query.Where("world_id = ?", input.WorldID)
+	}
+
+	result := query.Unscoped().Delete(&models.DailyTask{})
+	if result.Error != nil {
+		gameJSON(c, nil, result.Error)
+		return
+	}
+
+	targetID := "all"
+	if input.WorldID != 0 {
+		targetID = strconv.FormatUint(uint64(input.WorldID), 10)
+	}
+
+	s.gameAudit(c, "manual_purge_daily_tasks", "daily_task", targetID, nil, gin.H{
+		"worldId": input.WorldID,
+		"deleted": result.RowsAffected,
+	})
+
+	gameJSON(c, gin.H{
+		"success": true,
+		"worldId": input.WorldID,
+		"deleted": result.RowsAffected,
+		"message": "Tâches quotidiennes purgées",
+	}, nil)
 }

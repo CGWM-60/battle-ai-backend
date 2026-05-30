@@ -30,13 +30,21 @@ type GenerateResponse = {
   message: string;
 };
 
+type PurgeResponse = {
+  success: boolean;
+  worldId: number;
+  deleted: number;
+  message: string;
+};
+
 export default function DailyTasksAdminPage() {
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [worldId, setWorldId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<"generate" | "purge" | null>(null);
   const [lastGenerate, setLastGenerate] = useState<GenerateResponse | null>(null);
+  const [lastPurge, setLastPurge] = useState<PurgeResponse | null>(null);
 
   async function reload() {
     setLoading(true);
@@ -57,9 +65,10 @@ export default function DailyTasksAdminPage() {
   }, [worldId]);
 
   async function generateNow() {
-    setBusy(true);
+    setBusyAction("generate");
     setError(null);
     setLastGenerate(null);
+    setLastPurge(null);
 
     try {
       const body: any = {};
@@ -85,7 +94,44 @@ export default function DailyTasksAdminPage() {
     } catch (e: any) {
       setError(e?.message || "Génération échouée");
     } finally {
-      setBusy(false);
+      setBusyAction(null);
+    }
+  }
+
+  async function purgeNow() {
+    const worldLabel = worldId ? `du monde ${worldId}` : "de tous les mondes";
+    if (!window.confirm(`Purger les tâches quotidiennes ${worldLabel} ? Cette action est irréversible.`)) {
+      return;
+    }
+
+    setBusyAction("purge");
+    setError(null);
+    setLastGenerate(null);
+    setLastPurge(null);
+
+    try {
+      const body: any = {};
+      if (worldId) body.worldId = parseInt(worldId, 10);
+
+      const res = await fetch(`/admin/api/game/daily-tasks/purge`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`HTTP ${res.status} - ${txt}`);
+      }
+
+      const data: PurgeResponse = await res.json();
+      setLastPurge(data);
+      await reload();
+    } catch (e: any) {
+      setError(e?.message || "Purge échouée");
+    } finally {
+      setBusyAction(null);
     }
   }
 
@@ -120,19 +166,36 @@ export default function DailyTasksAdminPage() {
 
         <button
           onClick={generateNow}
-          disabled={busy}
+          disabled={busyAction !== null}
           style={{
-            background: busy ? "#333" : "#FF8A00",
+            background: busyAction ? "#333" : "#FF8A00",
             color: "black",
             fontWeight: 700,
             padding: "10px 18px",
             borderRadius: 8,
             border: "none",
-            cursor: busy ? "not-allowed" : "pointer",
+            cursor: busyAction ? "not-allowed" : "pointer",
             fontSize: 14,
           }}
         >
-          {busy ? "Génération en cours..." : "⚡ Générer les tâches quotidiennes MAINTENANT"}
+          {busyAction === "generate" ? "Génération en cours..." : "⚡ Générer les tâches quotidiennes MAINTENANT"}
+        </button>
+
+        <button
+          onClick={purgeNow}
+          disabled={busyAction !== null}
+          style={{
+            background: busyAction ? "#333" : "#FF4D4F",
+            color: "white",
+            fontWeight: 700,
+            padding: "10px 18px",
+            borderRadius: 8,
+            border: "none",
+            cursor: busyAction ? "not-allowed" : "pointer",
+            fontSize: 14,
+          }}
+        >
+          {busyAction === "purge" ? "Purge en cours..." : "🧹 Purger les tâches quotidiennes"}
         </button>
 
         <button onClick={reload} style={{ padding: "8px 14px", background: "#0A1628", border: "1px solid #7BE04B", color: "#7BE04B", borderRadius: 6 }}>
@@ -143,6 +206,13 @@ export default function DailyTasksAdminPage() {
       {lastGenerate && (
         <div className="alert ok" style={{ marginBottom: 16 }}>
           {lastGenerate.message} — Monde {lastGenerate.worldId} • {lastGenerate.generatedFor} joueurs impactés
+        </div>
+      )}
+
+      {lastPurge && (
+        <div className="alert ok" style={{ marginBottom: 16 }}>
+          {lastPurge.message} — {lastPurge.deleted} tâche(s) supprimée(s)
+          {lastPurge.worldId ? ` (Monde ${lastPurge.worldId})` : " (tous les mondes)"}
         </div>
       )}
 
