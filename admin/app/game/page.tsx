@@ -74,6 +74,10 @@ export default function GamePage() {
                 <strong>Décisions IA</strong>
                 <span>Voir toutes les décisions NEXUS avec input, output, changements appliqués, provider et erreurs.</span>
               </Link>
+              <Link className="quick-link" href="/game/daily-tasks/">
+                <strong>Tâches Quotidiennes</strong>
+                <span>Générer manuellement les tâches quotidiennes (IA méchante, 20-40 par joueur), et voir le tableau historique groupé par jour avec toutes les tâches générées.</span>
+              </Link>
             </div>
           </section>
           <MetricGrid

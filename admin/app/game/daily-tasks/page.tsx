@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdminShell } from "../../../components/AdminShell";
-import { ErrorState, LoadingState } from "../../../components/LoadState";
-import { formatDate, loadAdminData } from "../../../components/api";
+import { AdminShell } from "../../components/AdminShell";
+import { ErrorState, LoadingState } from "../../components/LoadState";
+import { formatDate, loadAdminData } from "../../components/api";
 
 type DailyTask = {
   id: number;
