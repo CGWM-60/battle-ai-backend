@@ -108,6 +108,10 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 	game.PATCH("/guilds/:id/members/:playerId", s.gameGuildRoleAPI)
 	game.DELETE("/guilds/:id/members/:playerId", s.gameGuildKickAPI)
 
+	// Daily Tasks admin (manual generation + history table)
+	game.GET("/daily-tasks", s.gameListDailyTasksAPI)
+	game.POST("/daily-tasks/generate", s.gameGenerateDailyTasksAPI(world))
+
 	game.GET("/chat/messages", s.gameListModelAPI(&[]models.ChatMessage{}, "created_at DESC"))
 	game.DELETE("/chat/messages/:id", s.gameModerateChatAPI(true))
 	game.POST("/chat/messages/:id/restore", s.gameModerateChatAPI(false))
@@ -1119,4 +1123,85 @@ func gameMustJSON(value any) datatypes.JSON {
 		return datatypes.JSON([]byte(`{}`))
 	}
 	return datatypes.JSON(data)
+}
+
+// === Daily Tasks Admin ===
+
+func (s *Server) gameListDailyTasksAPI(c *gin.Context) {
+	worldIDStr := c.Query("worldId")
+	limitStr := c.DefaultQuery("limit", "100")
+
+	limit, _ := strconv.Atoi(limitStr)
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+
+	db := s.db.WithContext(c.Request.Context()).Model(&models.DailyTask{}).
+		Order("created_at DESC, id DESC").Limit(limit)
+
+	if worldIDStr != "" {
+		if wid, err := strconv.ParseUint(worldIDStr, 10, 64); err == nil {
+			db = db.Where("world_id = ?", wid)
+		}
+	}
+
+	var tasks []models.DailyTask
+	if err := db.Find(&tasks).Error; err != nil {
+		gameJSON(c, nil, err)
+		return
+	}
+
+	gameJSON(c, gin.H{"tasks": tasks, "count": len(tasks)}, nil)
+}
+
+func (s *Server) gameGenerateDailyTasksAPI(world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var input struct {
+			WorldID uint `json:"worldId"`
+			Limit   int  `json:"limit"` // max players to generate for
+		}
+		_ = c.ShouldBindJSON(&input)
+
+		if input.WorldID == 0 {
+			// default to first active world if not specified
+			var w models.World
+			if err := s.db.WithContext(c.Request.Context()).Where("status = ?", "active").First(&w).Error; err == nil {
+				input.WorldID = w.Id
+			}
+		}
+		if input.Limit <= 0 || input.Limit > 200 {
+			input.Limit = 50
+		}
+
+		// Find players with saves in this world
+		var saves []models.PlayerSave
+		if err := s.db.WithContext(c.Request.Context()).
+			Where("world_id = ?", input.WorldID).
+			Order("id ASC").
+			Limit(input.Limit).
+			Find(&saves).Error; err != nil {
+			gameJSON(c, nil, err)
+			return
+		}
+
+		generated := 0
+		for _, save := range saves {
+			if err := world.GenerateDailyTasksForPlayer(c.Request.Context(), save.PlayerID, save.WorldID); err == nil {
+				generated++
+			}
+		}
+
+		s.gameAudit(c, "manual_generate_daily_tasks", "world", strconv.FormatUint(uint64(input.WorldID), 10), nil, gin.H{
+			"playersProcessed": len(saves),
+			"tasksGeneratedFor": generated,
+		})
+
+		gameJSON(c, gin.H{
+			"success":         true,
+			"worldId":         input.WorldID,
+			"playersProcessed": len(saves),
+			"generatedFor":    generated,
+			"message":         "Tâches quotidiennes générées manuellement",
+		}, nil)
+	}
 }
