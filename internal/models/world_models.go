@@ -300,7 +300,7 @@ type GuildWar struct {
 type GuildWarContribution struct {
 	Id         uint   `gorm:"primaryKey" json:"id"`
 	WarID      uint   `gorm:"index" json:"warId"`
-	GuildWar   GuildWar `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	GuildWar   GuildWar `gorm:"foreignKey:WarID;references:Id;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 	PlayerID   uint   `gorm:"index" json:"playerId"`
 	Player     Users  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 	ContributionType string `gorm:"size:32" json:"contributionType"` // units_sent, resources, kills, defense
