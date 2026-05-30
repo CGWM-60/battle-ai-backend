@@ -101,12 +101,16 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 			return
 		}
 
-		// Only allow claim when progress is essentially complete
-		if task.Progress < 0.98 && task.Status != "completed" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "task not ready to claim - progression incomplete"})
+		// Prevent double-claiming
+		if task.Status == "claimed" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "task already claimed"})
 			return
 		}
-
+		// Allow claim when task was started (in_progress) or explicitly completed
+		if task.Status != "in_progress" && task.Status != "completed" && task.Progress < 0.98 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "task not ready to claim"})
+			return
+		}
 		// Apply reward (simple version)
 		save, _ := world.EnsurePlayerSave(c.Request.Context(), playerID)
 		switch task.RewardType {
@@ -795,10 +799,10 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 				)
 
 				writeWorldResponse(c, gin.H{
-					"accepted":  true,
-					"actionId":  actionID,
-					"status":    "cancelled",
-					"serverNow": time.Now().UTC(),
+					"accepted":    true,
+					"actionId":    actionID,
+					"status":      "cancelled",
+					"serverNow":   time.Now().UTC(),
 					"description": "Intervention sur le conflit annulée (participation retirée).",
 				}, nil)
 				return
@@ -1315,7 +1319,7 @@ func playerInitiatedCommerceRoutes(database *gorm.DB, ctx context.Context, playe
 		}
 
 		// Richer data so the 24h cards look complete immediately
-		finalProfit := int64(float64(volume) * 0.18); // ~18% profit estimate
+		finalProfit := int64(float64(volume) * 0.18) // ~18% profit estimate
 		routes = append(routes, gin.H{
 			"id":         id,
 			"route":      routeName,
@@ -1930,9 +1934,9 @@ func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 			return
 		}
 		writeWorldResponse(c, gin.H{
-			"success":   true,
-			"guildId":   id,
-			"message":   "Don effectué avec succès.",
+			"success": true,
+			"guildId": id,
+			"message": "Don effectué avec succès.",
 		}, nil)
 	})
 

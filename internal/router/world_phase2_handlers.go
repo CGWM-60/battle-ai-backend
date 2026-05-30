@@ -323,12 +323,12 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 			}
 			score := clamp(100-ct.TensionLevel, 0, 100)
 			targets = append(targets, gin.H{
-				"id":       "r_" + strconv.FormatUint(uint64(ct.Id), 10),
-				"rawId":    ct.Id,
-				"name":     defaultText(ct.Name, "Région"),
-				"type":     "region",
-				"score":    score,
-				"status":   diplomacyStance(score),
+				"id":     "r_" + strconv.FormatUint(uint64(ct.Id), 10),
+				"rawId":  ct.Id,
+				"name":   defaultText(ct.Name, "Région"),
+				"type":   "region",
+				"score":  score,
+				"status": diplomacyStance(score),
 			})
 		}
 
@@ -626,10 +626,10 @@ func registerWeatherRoutes(private *gin.RouterGroup, database *gorm.DB, world *s
 		}
 
 		writeWorldResponse(c, gin.H{
-			"activeEvents":   len(weather),
+			"activeEvents":    len(weather),
 			"averageSeverity": avg,
-			"globalRisk":     riskLabel(avg),
-			"forecast24h":    forecast,
+			"globalRisk":      riskLabel(avg),
+			"forecast24h":     forecast,
 		}, nil)
 	})
 
@@ -932,15 +932,30 @@ func synthesizePlayerAgreementsFromLogs(database *gorm.DB, c *gin.Context) []gin
 		if mode == "" {
 			mode = "create"
 		}
+		risk := toInt64OrDefault(meta["risk"], 40)
+		title := toString(meta["title"])
+		if title == "" {
+			title = "Accord " + partner
+		}
+		aiDecision := "En cours d'analyse"
+		if risk <= 25 {
+			aiDecision = "Accord favorable"
+		} else if risk >= 60 {
+			aiDecision = "Risqué - négociation conseillée"
+		}
 		out = append(out, gin.H{
-			"id":        "agr_" + strconv.FormatUint(uint64(log.Id), 10),
-			"partner":   partner,
-			"mode":      mode,
-			"status":    "negocie",
-			"risk":      toInt64OrDefault(meta["risk"], 40),
-			"durationH": toInt64OrDefault(meta["duration"], 24),
-			"source":    "player",
-			"createdAt": log.CreatedAt.UTC().Format(time.RFC3339),
+			"id":            "agr_" + strconv.FormatUint(uint64(log.Id), 10),
+			"title":         title,
+			"partner":       partner,
+			"mode":          mode,
+			"status":        "negocie",
+			"risk":          risk,
+			"durationH":     toInt64OrDefault(meta["durationHours"], toInt64OrDefault(meta["duration"], 24)),
+			"source":        "player",
+			"createdAt":     log.CreatedAt.UTC().Format(time.RFC3339),
+			"cost":          toInt64OrDefault(meta["cost"], 0),
+			"estimatedGain": toInt64OrDefault(meta["estimatedGain"], 0),
+			"aiDecision":    aiDecision,
 		})
 	}
 	return out
