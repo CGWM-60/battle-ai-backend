@@ -97,6 +97,7 @@ func DbConnect() *gorm.DB {
 		&models.BuildingAsset{},
 		&models.BuildingCatalogVersion{},
 		&models.AdminAuditLog{},
+		&models.DailyTask{},
 	)
 	if err := seedDefaultBuildingDefinitions(db); err != nil {
 		panic(fmt.Sprintf("failed to seed default building catalog: %v", err))
