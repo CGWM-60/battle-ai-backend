@@ -1232,6 +1232,9 @@ func (s *Server) gamePurgeDailyTasksAPI(c *gin.Context) {
 	query := s.db.WithContext(c.Request.Context()).Model(&models.DailyTask{})
 	if input.WorldID != 0 {
 		query = query.Where("world_id = ?", input.WorldID)
+	} else {
+		// Explicitly allow global purge when no worldId filter is provided.
+		query = query.Session(&gorm.Session{AllowGlobalUpdate: true})
 	}
 
 	result := query.Unscoped().Delete(&models.DailyTask{})

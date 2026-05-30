@@ -939,10 +939,10 @@ func (s *WorldGameService) SyncPlayerSave(ctx context.Context, playerID uint, in
 			"inventory_json":          emptyJSON(input.InventoryJSON),
 			// Use merge so that server-written "effects" (research + IA debuffs) are preserved.
 			// Client sync can only contribute continent/specialization etc.
-			"active_effects_json":     mergeActiveEffects(locked.ActiveEffectsJSON, input.ActiveEffectsJSON),
-			"version":                 locked.Version + 1,
-			"last_client_version":     input.Version,
-			"last_synced_at":          &now,
+			"active_effects_json": mergeActiveEffects(locked.ActiveEffectsJSON, input.ActiveEffectsJSON),
+			"version":             locked.Version + 1,
+			"last_client_version": input.Version,
+			"last_synced_at":      &now,
 		}
 		if err := tx.Model(&locked).Updates(updates).Error; err != nil {
 			return err
@@ -3437,6 +3437,18 @@ func mustJSON(value any) datatypes.JSON {
 func (s *WorldGameService) GenerateDailyTasksForPlayer(ctx context.Context, playerID uint, worldID uint) error {
 	now := time.Now().UTC()
 	tomorrow := now.Add(24 * time.Hour)
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	nextDay := startOfDay.Add(24 * time.Hour)
+
+	// Idempotency guard: if tasks already exist for this player today, do not generate again.
+	// This prevents duplicated daily quests when endpoint/cron/manual generation is called multiple times.
+	var todayCount int64
+	if err := s.db.WithContext(ctx).
+		Model(&models.DailyTask{}).
+		Where("player_id = ? AND created_at >= ? AND created_at < ?", playerID, startOfDay, nextDay).
+		Count(&todayCount).Error; err == nil && todayCount > 0 {
+		return nil
+	}
 
 	// Try to generate with the project's AI (evil AI style)
 	tasks := s.generateDailyTasksWithAI(ctx, playerID, worldID, now, tomorrow)
@@ -3446,15 +3458,58 @@ func (s *WorldGameService) GenerateDailyTasksForPlayer(ctx context.Context, play
 		tasks = s.generateDeterministicDailyTasks(playerID, worldID, now, tomorrow)
 	}
 
+	// Guarantee uniqueness within the generated set (same title/type should only appear once).
+	tasks = deduplicateDailyTasks(tasks)
+
 	// Clear old unclaimed tasks for today (keep claimed history if wanted)
 	s.db.WithContext(ctx).
 		Where("player_id = ? AND status IN ? AND created_at < ?", playerID, []string{"available", "in_progress"}, now.Add(-12*time.Hour)).
 		Delete(&models.DailyTask{})
 
 	for _, t := range tasks {
+		normalizedTitle := strings.ToLower(strings.TrimSpace(t.Title))
+		if normalizedTitle == "" {
+			continue
+		}
+
+		var exists int64
+		err := s.db.WithContext(ctx).
+			Model(&models.DailyTask{}).
+			Where("player_id = ? AND created_at >= ? AND created_at < ? AND task_type = ? AND LOWER(TRIM(title)) = ?", playerID, startOfDay, nextDay, strings.TrimSpace(strings.ToLower(t.TaskType)), normalizedTitle).
+			Count(&exists).Error
+		if err == nil && exists > 0 {
+			continue
+		}
+
 		_ = s.db.WithContext(ctx).Create(&t).Error
 	}
 	return nil
+}
+
+func deduplicateDailyTasks(tasks []models.DailyTask) []models.DailyTask {
+	if len(tasks) <= 1 {
+		return tasks
+	}
+
+	seen := make(map[string]struct{}, len(tasks))
+	unique := make([]models.DailyTask, 0, len(tasks))
+
+	for _, t := range tasks {
+		normalizedTitle := strings.Join(strings.Fields(strings.ToLower(strings.TrimSpace(t.Title))), " ")
+		normalizedType := strings.TrimSpace(strings.ToLower(t.TaskType))
+		if normalizedTitle == "" {
+			continue
+		}
+
+		key := normalizedType + "|" + normalizedTitle
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		unique = append(unique, t)
+	}
+
+	return unique
 }
 
 // generateDailyTasksWithAI tries to use the evil AI in the project to create flavorful daily tasks.
@@ -3530,13 +3585,13 @@ Génère des tâches variées et immersives.`)
 
 func (s *WorldGameService) generateDeterministicDailyTasks(playerID uint, worldID uint, now, expires time.Time) []models.DailyTask {
 	templates := []struct {
-		title     string
-		story     string
-		taskType  string
-		target    int
-		rewardT   string
-		rewardA   int64
-		duration  int
+		title    string
+		story    string
+		taskType string
+		target   int
+		rewardT  string
+		rewardA  int64
+		duration int
 	}{
 		{"Pillage des ruines du Secteur 12", "Les ombres du vieux quartier recèlent encore des caisses de matériaux. Va les récupérer avant que les mutants ne les trouvent.", "resource", 6500, "materials", 950, 55},
 		{"Entraînement des nouvelles recrues", "Le moral est bas dans les casernes. Forme 8 soldats et montre-leur ce que veut dire survivre dans ce monde.", "military", 8, "xp", 280, 70},
@@ -4279,14 +4334,14 @@ func (s *WorldGameService) StartGuildQuest(ctx context.Context, playerID uint, g
 		target = 10
 	}
 	q := models.GuildQuest{
-		GuildID:       guildID,
-		Title:         input.Title,
-		Description:   input.Description,
-		Status:        "active",
-		Progress:      0,
-		Target:        target,
-		RewardXP:      input.RewardXP,
-		StartedByID:   &playerID,
+		GuildID:     guildID,
+		Title:       input.Title,
+		Description: input.Description,
+		Status:      "active",
+		Progress:    0,
+		Target:      target,
+		RewardXP:    input.RewardXP,
+		StartedByID: &playerID,
 	}
 	if err := s.db.WithContext(ctx).Create(&q).Error; err != nil {
 		return nil, err

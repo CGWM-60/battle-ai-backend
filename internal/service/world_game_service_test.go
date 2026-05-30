@@ -240,3 +240,26 @@ func TestShouldReturnGlobalResearchCatalog(t *testing.T) {
 		}
 	}
 }
+
+func TestDeduplicateDailyTasksByNormalizedTypeAndTitle(t *testing.T) {
+	input := []models.DailyTask{
+		{Title: "Pillage du Secteur 7", TaskType: "resource"},
+		{Title: "  pillage   du   secteur 7 ", TaskType: "RESOURCE"},
+		{Title: "Pillage du Secteur 7", TaskType: "military"}, // different type => keep
+		{Title: "Négociation Nomades", TaskType: "diplomacy"},
+		{Title: "", TaskType: "resource"}, // invalid title => removed
+	}
+
+	got := deduplicateDailyTasks(input)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 unique tasks, got %d", len(got))
+	}
+
+	if got[0].Title != "Pillage du Secteur 7" || got[0].TaskType != "resource" {
+		t.Fatalf("first unique task should keep first occurrence, got %+v", got[0])
+	}
+
+	if got[1].TaskType != "military" {
+		t.Fatalf("expected same title with different type to be kept, got %+v", got[1])
+	}
+}
