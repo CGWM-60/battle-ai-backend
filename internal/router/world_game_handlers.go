@@ -60,6 +60,11 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 			Order("created_at DESC").
 			Find(&tasks).Error
 
+		now := time.Now().UTC()
+		for i := range tasks {
+			tasks[i] = computeLiveProgress(tasks[i], now)
+		}
+
 		writeWorldResponse(c, gin.H{"tasks": tasks}, nil)
 	})
 
@@ -96,8 +101,9 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 			return
 		}
 
-		if task.Status != "in_progress" && task.Status != "completed" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "task not ready to claim"})
+		// Only allow claim when progress is essentially complete
+		if task.Progress < 0.98 && task.Status != "completed" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "task not ready to claim - progression incomplete"})
 			return
 		}
 
@@ -2851,4 +2857,29 @@ func firstNonEmptyInt64(values ...int64) int64 {
 		}
 	}
 	return 0
+}
+
+// computeLiveProgress calculates current progress for in_progress tasks based on time.
+func computeLiveProgress(task models.DailyTask, now time.Time) models.DailyTask {
+	if task.Status != "in_progress" || task.StartedAt == nil || task.DurationMinutes <= 0 {
+		return task
+	}
+
+	elapsed := now.Sub(*task.StartedAt).Minutes()
+	progress := elapsed / float64(task.DurationMinutes)
+	if progress > 1 {
+		progress = 1
+	}
+	if progress < 0 {
+		progress = 0
+	}
+
+	task.Progress = progress
+	task.CurrentValue = int(float64(task.TargetValue) * progress)
+
+	if progress >= 0.999 {
+		task.Status = "completed"
+		task.CompletedAt = &now
+	}
+	return task
 }
