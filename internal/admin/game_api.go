@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -1169,6 +1170,12 @@ func (s *Server) gameGenerateDailyTasksAPI(world *service.WorldGameService) gin.
 				input.WorldID = w.Id
 			}
 		}
+
+		if input.WorldID == 0 {
+			gameJSON(c, nil, fmt.Errorf("aucun monde actif trouvé. Veuillez spécifier un worldId ou créer un monde avec status='active'"))
+			return
+		}
+
 		if input.Limit <= 0 || input.Limit > 200 {
 			input.Limit = 50
 		}
