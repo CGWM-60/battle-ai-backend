@@ -1919,15 +1919,14 @@ func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid donation payload"})
 			return
 		}
-		// Stub response - real logic will use GuildTreasury + log + contribution
+		if err := world.DonateToTreasury(c.Request.Context(), currentUserID(c), id, input.ResourceType, input.Amount); err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
 		writeWorldResponse(c, gin.H{
-			"success":            true,
-			"guildId":            id,
-			"resourceType":       input.ResourceType,
-			"amount":             input.Amount,
-			"contributionGained": 10,
-			"guildXPGained":      5,
-			"message":            "Don effectué avec succès.",
+			"success":   true,
+			"guildId":   id,
+			"message":   "Don effectué avec succès.",
 		}, nil)
 	})
 }

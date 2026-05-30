@@ -1658,6 +1658,98 @@ func (s *WorldGameService) ContributeGuild(ctx context.Context, playerID uint, g
 	return &contribution, err
 }
 
+// DonateToTreasury - Logique réelle de donation au coffre de guilde (spec point 10)
+func (s *WorldGameService) DonateToTreasury(ctx context.Context, playerID uint, guildID uint, resourceType string, amount int64) error {
+	if amount <= 0 {
+		return fmt.Errorf("amount must be positive")
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Vérifie que le joueur est membre
+		if _, err := guildMemberForUpdate(tx, guildID, playerID); err != nil {
+			return err
+		}
+
+		// Récupère ou crée le treasury
+		var treasury models.GuildTreasury
+		if err := tx.Where("guild_id = ?", guildID).First(&treasury).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				treasury = models.GuildTreasury{GuildID: guildID}
+				if err := tx.Create(&treasury).Error; err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+
+		before := int64(0)
+		switch resourceType {
+		case "credits":
+			before = treasury.Credits
+			treasury.Credits += amount
+		case "food":
+			before = treasury.Food
+			treasury.Food += amount
+		case "energy":
+			before = treasury.Energy
+			treasury.Energy += amount
+		default:
+			return fmt.Errorf("unsupported resource type: %s", resourceType)
+		}
+
+		if err := tx.Save(&treasury).Error; err != nil {
+			return err
+		}
+
+		// Log du mouvement
+		log := models.GuildTreasuryLog{
+			GuildID:      guildID,
+			PlayerID:     &playerID,
+			Action:       "donate",
+			ResourceType: resourceType,
+			Amount:       amount,
+			BeforeValue:  before,
+			AfterValue:   before + amount,
+			Description:  fmt.Sprintf("Don de %d %s par le joueur", amount, resourceType),
+		}
+		if err := tx.Create(&log).Error; err != nil {
+			return err
+		}
+
+		// Contribution + XP guilde
+		contribution := models.GuildContribution{
+			GuildID:      guildID,
+			PlayerID:     playerID,
+			Contribution: "donation_" + resourceType,
+			Amount:       amount,
+		}
+		if err := tx.Create(&contribution).Error; err != nil {
+			return err
+		}
+
+		xpGain := amount / 50 // 1 XP pour 50 ressources (ajustable)
+		if xpGain < 1 {
+			xpGain = 1
+		}
+
+		if err := tx.Model(&models.Guild{}).Where("id = ?", guildID).UpdateColumn("xp", gorm.Expr("xp + ?", xpGain)).Error; err != nil {
+			return err
+		}
+
+		// Log XP
+		xpLog := models.GuildXPLog{
+			GuildID:     guildID,
+			PlayerID:    &playerID,
+			SourceType:  "donation",
+			SourceID:    &contribution.Id,
+			Amount:      xpGain,
+			Description: fmt.Sprintf("Don de %d %s", amount, resourceType),
+		}
+		return tx.Create(&xpLog).Error
+	})
+}
+
 func (s *WorldGameService) ListGuilds(ctx context.Context, playerID uint, limit int) ([]models.Guild, error) {
 	save, err := s.EnsurePlayerSave(ctx, playerID)
 	if err != nil {

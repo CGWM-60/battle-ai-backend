@@ -220,6 +220,38 @@ type GuildTreasuryLog struct {
 	CreatedAt   time.Time
 }
 
+// GuildXPLog - Historique des gains d'XP de guilde (spec point 5)
+type GuildXPLog struct {
+	Id          uint `gorm:"primaryKey" json:"id"`
+	GuildID     uint  `gorm:"index" json:"guildId"`
+	PlayerID    *uint `gorm:"index" json:"playerId"`
+	SourceType  string `gorm:"size:32;index" json:"sourceType"` // donation, help, quest, war, trade, diplomacy, research, ai_event, world_event, daily_activity
+	SourceID    *uint  `gorm:"index" json:"sourceId"`
+	Amount      int64  `json:"amount"`
+	Description string `gorm:"type:text" json:"description"`
+	CreatedAt   time.Time
+}
+
+// GuildHelpRequest - Demandes d'aide entre membres (spec point 11)
+type GuildHelpRequest struct {
+	Id            uint `gorm:"primaryKey" json:"id"`
+	GuildID       uint           `gorm:"index" json:"guildId"`
+	RequesterID   uint           `gorm:"index" json:"requesterId"`
+	TargetType    string         `gorm:"size:32" json:"targetType"` // construction, research, resource, military
+	TargetID      *uint          `gorm:"index" json:"targetId"`
+	Title         string         `gorm:"size:200" json:"title"`
+	Description   string         `gorm:"type:text" json:"description"`
+	HelpType      string         `gorm:"size:32;index" json:"helpType"` // construction_speedup, research_speedup, resource_support, military_support
+	MaxAssists    int            `json:"maxAssists"`
+	CurrentAssists int           `json:"currentAssists"`
+	EffectPerAssist string        `gorm:"type:text" json:"effectPerAssist"`
+	MaxEffect     string         `gorm:"type:text" json:"maxEffect"`
+	Status        string         `gorm:"size:32;index" json:"status"` // active, completed, expired, cancelled
+	ExpiresAt     *time.Time     `gorm:"index" json:"expiresAt"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type AIWorldFaction struct {
 	Id                uint `gorm:"primaryKey" json:"id"`
 	CreatedAt         time.Time
