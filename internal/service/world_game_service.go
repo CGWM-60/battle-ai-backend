@@ -136,6 +136,34 @@ type GuildInput struct {
 	RequiredLevel int    `json:"requiredLevel"`
 }
 
+// New guild feature inputs
+type GuildHelpRequestInput struct {
+	ResourceType    string `json:"resourceType"`
+	AmountRequested int64  `json:"amountRequested"`
+	Title           string `json:"title"`
+	Description     string `json:"description"`
+}
+
+type GuildQuestInput struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Target      int    `json:"target"`
+	RewardXP    int64  `json:"rewardXP"`
+}
+
+type GuildWarInput struct {
+	TargetGuildID uint   `json:"targetGuildId"`
+	Cause         string `json:"cause"`
+}
+
+type GuildResearchInput struct {
+	TechKey       string `json:"techKey"`
+	Target        int    `json:"target"`
+	CostCredits   int64  `json:"costCredits"`
+	CostEnergy    int64  `json:"costEnergy"`
+	CostMaterials int64  `json:"costMaterials"`
+}
+
 type EventActionInput struct {
 	ActionType string         `json:"actionType"`
 	Payload    datatypes.JSON `json:"payload"`
@@ -4045,6 +4073,228 @@ func guildMemberForUpdate(tx *gorm.DB, guildID uint, playerID uint) (models.Guil
 		return member, fmt.Errorf("guild member not found")
 	}
 	return member, nil
+}
+
+// ==================== NOUVELLES MÉTHODES GUILDE (Quêtes, Guerres, Recherches, Entraide) ====================
+
+// CreateHelpRequest - Crée une demande d'aide de guilde
+func (s *WorldGameService) CreateHelpRequest(ctx context.Context, playerID uint, guildID uint, input GuildHelpRequestInput) (*models.GuildHelpRequest, error) {
+	if input.AmountRequested <= 0 {
+		return nil, fmt.Errorf("montant demandé invalide")
+	}
+	if input.ResourceType == "" {
+		input.ResourceType = "credits"
+	}
+	if _, err := guildMemberForUpdate(s.db, guildID, playerID); err != nil {
+		return nil, err
+	}
+
+	req := models.GuildHelpRequest{
+		GuildID:     guildID,
+		RequesterID: playerID,
+		TargetType:  "resource",
+		Title:       input.Title,
+		Description: input.Description,
+		HelpType:    "resource_support",
+		MaxAssists:  20,
+		Status:      "active",
+	}
+	if err := s.db.WithContext(ctx).Create(&req).Error; err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// ContributeToHelpRequest - Contribue à une demande d'aide
+func (s *WorldGameService) ContributeToHelpRequest(ctx context.Context, playerID uint, guildID uint, requestID uint, amount int64) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if _, err := guildMemberForUpdate(tx, guildID, playerID); err != nil {
+			return err
+		}
+		var req models.GuildHelpRequest
+		if err := tx.Where("id = ? AND guild_id = ?", requestID, guildID).First(&req).Error; err != nil {
+			return err
+		}
+		if req.Status != "active" {
+			return fmt.Errorf("demande déjà close")
+		}
+		req.CurrentAssists++
+		if req.CurrentAssists >= req.MaxAssists {
+			req.Status = "completed"
+		}
+		if err := tx.Save(&req).Error; err != nil {
+			return err
+		}
+		// Optionnel: log contribution + petit XP
+		return tx.Model(&models.Guild{}).Where("id = ?", guildID).UpdateColumn("xp", gorm.Expr("xp + ?", 5)).Error
+	})
+}
+
+// StartGuildQuest - Lance une nouvelle quête de guilde
+func (s *WorldGameService) StartGuildQuest(ctx context.Context, playerID uint, guildID uint, input GuildQuestInput) (*models.GuildQuest, error) {
+	if _, err := guildMemberForUpdate(s.db, guildID, playerID); err != nil {
+		return nil, err
+	}
+	target := input.Target
+	if target <= 0 {
+		target = 10
+	}
+	q := models.GuildQuest{
+		GuildID:       guildID,
+		Title:         input.Title,
+		Description:   input.Description,
+		Status:        "active",
+		Progress:      0,
+		Target:        target,
+		RewardXP:      input.RewardXP,
+		StartedByID:   &playerID,
+	}
+	if err := s.db.WithContext(ctx).Create(&q).Error; err != nil {
+		return nil, err
+	}
+	return &q, nil
+}
+
+// ContributeToGuildQuest - Avance la progression d'une quête
+func (s *WorldGameService) ContributeToGuildQuest(ctx context.Context, playerID uint, guildID uint, questID uint, delta int) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if _, err := guildMemberForUpdate(tx, guildID, playerID); err != nil {
+			return err
+		}
+		var q models.GuildQuest
+		if err := tx.Where("id = ? AND guild_id = ?", questID, guildID).First(&q).Error; err != nil {
+			return err
+		}
+		if q.Status != "active" {
+			return fmt.Errorf("quête déjà terminée")
+		}
+		q.Progress += delta
+		if q.Progress >= q.Target {
+			q.Progress = q.Target
+			q.Status = "completed"
+			q.CompletedAt = func() *time.Time { t := time.Now().UTC(); return &t }()
+			// Récompense XP guilde
+			tx.Model(&models.Guild{}).Where("id = ?", guildID).UpdateColumn("xp", gorm.Expr("xp + ?", q.RewardXP))
+			// Log XP
+			tx.Create(&models.GuildXPLog{
+				GuildID:     guildID,
+				PlayerID:    &playerID,
+				SourceType:  "quest",
+				SourceID:    &q.Id,
+				Amount:      q.RewardXP,
+				Description: "Quête de guilde complétée: " + q.Title,
+			})
+		}
+		return tx.Save(&q).Error
+	})
+}
+
+// DeclareGuildWar - Déclare une guerre contre une autre guilde
+func (s *WorldGameService) DeclareGuildWar(ctx context.Context, playerID uint, guildID uint, input GuildWarInput) (*models.GuildWar, error) {
+	if input.TargetGuildID == 0 || input.TargetGuildID == guildID {
+		return nil, fmt.Errorf("cible invalide")
+	}
+	if _, err := guildMemberForUpdate(s.db, guildID, playerID); err != nil {
+		return nil, err
+	}
+	// Vérifie que la cible existe
+	var target models.Guild
+	if err := s.db.WithContext(ctx).First(&target, input.TargetGuildID).Error; err != nil {
+		return nil, fmt.Errorf("guilde cible introuvable")
+	}
+
+	war := models.GuildWar{
+		AttackerGuildID: guildID,
+		DefenderGuildID: input.TargetGuildID,
+		Status:          "preparing",
+		Cause:           input.Cause,
+		ScoreAttacker:   0,
+		ScoreDefender:   0,
+	}
+	if err := s.db.WithContext(ctx).Create(&war).Error; err != nil {
+		return nil, err
+	}
+	return &war, nil
+}
+
+// StartGuildResearch - Lance une recherche collective
+func (s *WorldGameService) StartGuildResearch(ctx context.Context, playerID uint, guildID uint, input GuildResearchInput) (*models.GuildResearch, error) {
+	if _, err := guildMemberForUpdate(s.db, guildID, playerID); err != nil {
+		return nil, err
+	}
+	if input.TechKey == "" {
+		return nil, fmt.Errorf("techKey requis")
+	}
+	target := input.Target
+	if target <= 0 {
+		target = 100
+	}
+	r := models.GuildResearch{
+		GuildID:       guildID,
+		TechKey:       input.TechKey,
+		Level:         1,
+		Progress:      0,
+		Target:        target,
+		Status:        "active",
+		CostCredits:   input.CostCredits,
+		CostEnergy:    input.CostEnergy,
+		CostMaterials: input.CostMaterials,
+		StartedByID:   &playerID,
+	}
+	if err := s.db.WithContext(ctx).Create(&r).Error; err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// ListGuildQuests - Liste les quêtes d'une guilde
+func (s *WorldGameService) ListGuildQuests(ctx context.Context, guildID uint) ([]models.GuildQuest, error) {
+	var quests []models.GuildQuest
+	err := s.db.WithContext(ctx).Where("guild_id = ?", guildID).Order("created_at DESC").Limit(50).Find(&quests).Error
+	return quests, err
+}
+
+// ListGuildWars - Liste les guerres d'une guilde
+func (s *WorldGameService) ListGuildWars(ctx context.Context, guildID uint) ([]models.GuildWar, error) {
+	var wars []models.GuildWar
+	err := s.db.WithContext(ctx).
+		Where("attacker_guild_id = ? OR defender_guild_id = ?", guildID, guildID).
+		Order("created_at DESC").Limit(20).Find(&wars).Error
+	return wars, err
+}
+
+// ListGuildResearches - Liste les recherches collectives
+func (s *WorldGameService) ListGuildResearches(ctx context.Context, guildID uint) ([]models.GuildResearch, error) {
+	var res []models.GuildResearch
+	err := s.db.WithContext(ctx).Where("guild_id = ?", guildID).Order("created_at DESC").Limit(20).Find(&res).Error
+	return res, err
+}
+
+// ListGuildHelpRequests - Liste les demandes d'aide ouvertes
+func (s *WorldGameService) ListGuildHelpRequests(ctx context.Context, guildID uint) ([]models.GuildHelpRequest, error) {
+	var reqs []models.GuildHelpRequest
+	err := s.db.WithContext(ctx).Where("guild_id = ? AND status = ?", guildID, "active").Order("created_at DESC").Find(&reqs).Error
+	return reqs, err
+}
+
+// ListGuildXPLogs - Historique XP
+func (s *WorldGameService) ListGuildXPLogs(ctx context.Context, guildID uint, limit int) ([]models.GuildXPLog, error) {
+	var logs []models.GuildXPLog
+	if limit <= 0 {
+		limit = 30
+	}
+	err := s.db.WithContext(ctx).Where("guild_id = ?", guildID).Order("created_at DESC").Limit(limit).Find(&logs).Error
+	return logs, err
+}
+
+// ListGuildTreasuryLogs - Historique coffre
+func (s *WorldGameService) ListGuildTreasuryLogs(ctx context.Context, guildID uint, limit int) ([]models.GuildTreasuryLog, error) {
+	var logs []models.GuildTreasuryLog
+	if limit <= 0 {
+		limit = 30
+	}
+	err := s.db.WithContext(ctx).Where("guild_id = ?", guildID).Order("created_at DESC").Limit(limit).Find(&logs).Error
+	return logs, err
 }
 
 func (s *WorldGameService) logPlayerAction(ctx context.Context, playerID uint, worldID *uint, continentID *uint, action string, targetType string, targetID string, status string, errorMessage string, before any, after any, metadata any) error {

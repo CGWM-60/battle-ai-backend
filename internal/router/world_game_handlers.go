@@ -1929,6 +1929,131 @@ func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 			"message":   "Don effectué avec succès.",
 		}, nil)
 	})
+
+	// === REAL GUILD FEATURE ROUTES (Quests, Wars, Research, Help, Logs) - wired to WorldGameService ===
+
+	// Help requests (entraide)
+	private.GET("/guilds/:id/help", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		reqs, err := world.ListGuildHelpRequests(c.Request.Context(), id)
+		writeWorldResponse(c, gin.H{"requests": reqs, "guildId": id}, err)
+	})
+	private.POST("/guilds/:id/help", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		var input service.GuildHelpRequestInput
+		_ = bindPayload(c, &input)
+		req, err := world.CreateHelpRequest(c.Request.Context(), currentUserID(c), id, input)
+		writeWorldResponse(c, req, err)
+	})
+	private.POST("/guilds/:id/help/:reqId/contribute", func(c *gin.Context) {
+		id, _ := parseUintParam(c, "id")
+		reqID, _ := parseUintParam(c, "reqId")
+		var body struct {
+			Amount int64 `json:"amount"`
+		}
+		_ = bindPayload(c, &body)
+		err := world.ContributeToHelpRequest(c.Request.Context(), currentUserID(c), id, reqID, body.Amount)
+		writeWorldResponse(c, gin.H{"success": err == nil}, err)
+	})
+
+	// Guild Quests
+	private.GET("/guilds/:id/quests", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		quests, err := world.ListGuildQuests(c.Request.Context(), id)
+		writeWorldResponse(c, gin.H{"quests": quests, "guildId": id}, err)
+	})
+	private.POST("/guilds/:id/quests", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		var input service.GuildQuestInput
+		_ = bindPayload(c, &input)
+		q, err := world.StartGuildQuest(c.Request.Context(), currentUserID(c), id, input)
+		writeWorldResponse(c, q, err)
+	})
+	private.POST("/guilds/:id/quests/:qId/contribute", func(c *gin.Context) {
+		id, _ := parseUintParam(c, "id")
+		qID, _ := parseUintParam(c, "qId")
+		var body struct {
+			Delta int `json:"delta"`
+		}
+		_ = bindPayload(c, &body)
+		if body.Delta == 0 {
+			body.Delta = 1
+		}
+		err := world.ContributeToGuildQuest(c.Request.Context(), currentUserID(c), id, qID, body.Delta)
+		writeWorldResponse(c, gin.H{"success": err == nil}, err)
+	})
+
+	// Guild Wars
+	private.GET("/guilds/:id/wars", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		wars, err := world.ListGuildWars(c.Request.Context(), id)
+		writeWorldResponse(c, gin.H{"wars": wars, "guildId": id}, err)
+	})
+	private.POST("/guilds/:id/wars", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		var input service.GuildWarInput
+		_ = bindPayload(c, &input)
+		war, err := world.DeclareGuildWar(c.Request.Context(), currentUserID(c), id, input)
+		writeWorldResponse(c, war, err)
+	})
+
+	// Guild Research (collective)
+	private.GET("/guilds/:id/research", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		researches, err := world.ListGuildResearches(c.Request.Context(), id)
+		writeWorldResponse(c, gin.H{"researches": researches, "guildId": id}, err)
+	})
+	private.POST("/guilds/:id/research", func(c *gin.Context) {
+		id, err := parseUintParam(c, "id")
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
+			return
+		}
+		var input service.GuildResearchInput
+		_ = bindPayload(c, &input)
+		r, err := world.StartGuildResearch(c.Request.Context(), currentUserID(c), id, input)
+		writeWorldResponse(c, r, err)
+	})
+
+	// Logs (for overview)
+	private.GET("/guilds/:id/xp-logs", func(c *gin.Context) {
+		id, _ := parseUintParam(c, "id")
+		logs, _ := world.ListGuildXPLogs(c.Request.Context(), id, 30)
+		writeWorldResponse(c, gin.H{"logs": logs}, nil)
+	})
+	private.GET("/guilds/:id/treasury/logs", func(c *gin.Context) {
+		id, _ := parseUintParam(c, "id")
+		logs, _ := world.ListGuildTreasuryLogs(c.Request.Context(), id, 30)
+		writeWorldResponse(c, gin.H{"logs": logs}, nil)
+	})
 }
 
 func registerBuildingRoutes(private *gin.RouterGroup, world *service.WorldGameService) {

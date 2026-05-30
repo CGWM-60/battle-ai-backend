@@ -252,6 +252,98 @@ type GuildHelpRequest struct {
 	UpdatedAt     time.Time
 }
 
+// GuildQuest - Quêtes collectives de guilde (spec point 12)
+type GuildQuest struct {
+	Id            uint   `gorm:"primaryKey" json:"id"`
+	GuildID       uint   `gorm:"index" json:"guildId"`
+	Guild         Guild  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	Title         string `gorm:"size:200" json:"title"`
+	Description   string `gorm:"type:text" json:"description"`
+	Status        string `gorm:"size:32;index" json:"status"` // active, completed, failed, cancelled
+	Progress      int    `json:"progress"`
+	Target        int    `json:"target"`
+	RewardCredits int64  `json:"rewardCredits"`
+	RewardFood    int64  `json:"rewardFood"`
+	RewardEnergy  int64  `json:"rewardEnergy"`
+	RewardMaterials int64 `json:"rewardMaterials"`
+	RewardXP      int64  `json:"rewardXP"`
+	StartedByID   *uint  `gorm:"index" json:"startedById"`
+	StartedBy     *Users `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+	CompletedAt   *time.Time `json:"completedAt"`
+	ExpiresAt     *time.Time `gorm:"index" json:"expiresAt"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+// GuildWar - Guerres entre guildes (spec point 13)
+type GuildWar struct {
+	Id                uint   `gorm:"primaryKey" json:"id"`
+	AttackerGuildID   uint   `gorm:"index" json:"attackerGuildId"`
+	AttackerGuild     Guild  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	DefenderGuildID   uint   `gorm:"index" json:"defenderGuildId"`
+	DefenderGuild     Guild  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	Status            string `gorm:"size:32;index" json:"status"` // preparing, active, ended, cancelled
+	Cause             string `gorm:"type:text" json:"cause"`
+	StartAt           *time.Time `json:"startAt"`
+	EndAt             *time.Time `json:"endAt"`
+	ScoreAttacker     int64  `json:"scoreAttacker"`
+	ScoreDefender     int64  `json:"scoreDefender"`
+	WinnerGuildID     *uint  `gorm:"index" json:"winnerGuildId"`
+	WinnerGuild       *Guild `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+	AttackerPowerUsed int64  `json:"attackerPowerUsed"`
+	DefenderPowerUsed int64  `json:"defenderPowerUsed"`
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+// GuildWarContribution - Contributions des membres pendant une guerre
+type GuildWarContribution struct {
+	Id         uint   `gorm:"primaryKey" json:"id"`
+	WarID      uint   `gorm:"index" json:"warId"`
+	GuildWar   GuildWar `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	PlayerID   uint   `gorm:"index" json:"playerId"`
+	Player     Users  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	ContributionType string `gorm:"size:32" json:"contributionType"` // units_sent, resources, kills, defense
+	Amount     int64  `json:"amount"`
+	PowerDelta int64  `json:"powerDelta"`
+	CreatedAt  time.Time
+}
+
+// GuildResearch - Recherches collectives de guilde (spec point 14)
+type GuildResearch struct {
+	Id            uint   `gorm:"primaryKey" json:"id"`
+	GuildID       uint   `gorm:"index" json:"guildId"`
+	Guild         Guild  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	TechKey       string `gorm:"size:120;index" json:"techKey"`
+	Level         int    `json:"level"`
+	Progress      int    `json:"progress"`
+	Target        int    `json:"target"`
+	Status        string `gorm:"size:32;index" json:"status"` // active, completed, paused
+	CostCredits   int64  `json:"costCredits"`
+	CostEnergy    int64  `json:"costEnergy"`
+	CostMaterials int64  `json:"costMaterials"`
+	EffectJSON    datatypes.JSON `gorm:"type:json" json:"effectJson"`
+	StartedByID   *uint  `gorm:"index" json:"startedById"`
+	CompletedAt   *time.Time `json:"completedAt"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+// GuildDiplomacy - Traités et relations entre guildes
+type GuildDiplomacy struct {
+	Id              uint   `gorm:"primaryKey" json:"id"`
+	GuildAID        uint   `gorm:"index" json:"guildAId"`
+	GuildA          Guild  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	GuildBID        uint   `gorm:"index" json:"guildBId"`
+	GuildB          Guild  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	Type            string `gorm:"size:32;index" json:"type"` // non_aggression, alliance, trade_pact, vassal
+	Status          string `gorm:"size:32;index" json:"status"` // proposed, active, broken, expired
+	TermsJSON       datatypes.JSON `gorm:"type:json" json:"termsJson"`
+	ExpiresAt       *time.Time `json:"expiresAt"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
+
 type AIWorldFaction struct {
 	Id                uint `gorm:"primaryKey" json:"id"`
 	CreatedAt         time.Time
