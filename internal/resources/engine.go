@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"cgwm/battle/internal/models"
@@ -54,8 +55,27 @@ func (e *Engine) GetBalance(ctx context.Context, playerID uint) (ResourceBalance
 	// === Apply cross-domain bonuses (Go = single source of truth) ===
 	// Research bonuses (product of unlocked multipliers)
 	researchMulti := 1.0
-	if e.researchResolver != nil {
-		// TODO(real): load the player's actually unlocked node keys
+	if e.researchResolver != nil && e.db != nil {
+		var save models.PlayerSave
+		if err := e.db.WithContext(ctx).Where("player_id = ?", playerID).First(&save).Error; err == nil && len(save.ResearchJSON) > 0 {
+			var r map[string]any
+			if json.Unmarshal(save.ResearchJSON, &r) == nil {
+				keys := []string{}
+				if u, ok := r["unlocked"].([]any); ok {
+					for _, v := range u {
+						if s, ok := v.(string); ok {
+							keys = append(keys, s)
+						}
+					}
+				}
+				bonuses := e.researchResolver.Compute(keys)
+				for _, m := range bonuses.ProductionMultipliers {
+					researchMulti *= m
+				}
+			}
+		}
+	} else if e.researchResolver != nil {
+		// Fallback (no db): still apply defaults from resolver
 		bonuses := e.researchResolver.Compute([]string{})
 		for _, m := range bonuses.ProductionMultipliers {
 			researchMulti *= m
