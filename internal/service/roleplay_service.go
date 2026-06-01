@@ -242,6 +242,11 @@ func (s *RolePlayService) AppendAction(ctx context.Context, id uint, ownerID uin
 	if input.Content == "" {
 		return nil, fmt.Errorf("content is required")
 	}
+	if clientActionID := rolePlayPayloadString(input.Payload, "clientActionId"); clientActionID != "" {
+		if existing := s.findExistingActionTurn(ctx, session.Id, clientActionID); existing != nil {
+			return existing, nil
+		}
+	}
 	sequence, err := s.roleplay.NextTurnSequence(ctx, session.Id)
 	if err != nil {
 		return nil, err
@@ -260,13 +265,45 @@ func (s *RolePlayService) AppendAction(ctx context.Context, id uint, ownerID uin
 		return nil, err
 	}
 	now := time.Now()
+	sessionSnapshot := mergeRolePlaySessionSnapshot(session.Snapshot, input.Payload)
+	currentScene := rolePlayPayloadString(input.Payload, "scene")
+	if currentScene == "" {
+		currentScene = rolePlayPayloadString(input.Payload, "nextScene")
+	}
+	if currentScene == "" {
+		currentScene = rolePlayPayloadString(input.Payload, "narration")
+	}
+	if currentScene == "" {
+		currentScene = input.Content
+	}
 	_ = s.roleplay.UpdateSessionFields(ctx, session.Id, ownerID, map[string]any{
 		"current_turn":     sequence,
-		"current_scene":    input.Content,
+		"current_scene":    currentScene,
+		"snapshot":         sessionSnapshot,
 		"last_activity_at": &now,
 	})
 	s.updateQuestRunProgressFromPayload(ctx, session, input.Payload, now)
 	return turn, nil
+}
+
+func (s *RolePlayService) findExistingActionTurn(ctx context.Context, sessionID uint, clientActionID string) *models.RolePlaySessionTurn {
+	turns, err := s.roleplay.ListTurns(ctx, sessionID)
+	if err != nil {
+		return nil
+	}
+	for index := range turns {
+		var payload map[string]any
+		if len(turns[index].Payload) == 0 {
+			continue
+		}
+		if err := json.Unmarshal(turns[index].Payload, &payload); err != nil {
+			continue
+		}
+		if rolePlayPayloadString(payload, "clientActionId") == clientActionID {
+			return &turns[index]
+		}
+	}
+	return nil
 }
 
 func (s *RolePlayService) Resume(ctx context.Context, id uint, ownerID uint) (*models.RolePlaySession, []models.RolePlaySessionTurn, error) {
@@ -418,6 +455,77 @@ func sortedChapterIDs(completed map[uint]bool) []uint {
 		}
 	}
 	return ids
+}
+
+func mergeRolePlaySessionSnapshot(current datatypes.JSON, payload map[string]any) datatypes.JSON {
+	snapshot := map[string]any{}
+	if len(current) > 0 {
+		_ = json.Unmarshal(current, &snapshot)
+	}
+	if len(payload) == 0 {
+		data, _ := json.Marshal(snapshot)
+		return datatypes.JSON(data)
+	}
+
+	copyKeys := []string{
+		"nextStep",
+		"currentNodeIndex",
+		"currentArcId",
+		"nextArcId",
+		"currentChapterId",
+		"nextChapterId",
+		"currentArcTitle",
+		"currentChapterTitle",
+		"currentArcPosition",
+		"currentChapterPositionInArc",
+		"currentArcChapterCount",
+		"totalArcCount",
+		"totalChapterCount",
+		"arcTitles",
+		"completedChapterId",
+		"completedChapterIds",
+		"objective",
+		"narration",
+		"scene",
+		"nextOptions",
+		"options",
+	}
+	for _, key := range copyKeys {
+		if value, ok := payload[key]; ok {
+			snapshot[key] = value
+		}
+	}
+	if value, ok := payload["nextStep"]; ok {
+		snapshot["currentStep"] = value
+	}
+	if value, ok := payload["nextArcId"]; ok && value != nil {
+		snapshot["currentArcId"] = value
+	}
+	if value, ok := payload["nextChapterId"]; ok && value != nil {
+		snapshot["currentChapterId"] = value
+	}
+	if value, ok := payload["nextOptions"]; ok {
+		snapshot["currentOptions"] = value
+	} else if value, ok := payload["options"]; ok {
+		snapshot["currentOptions"] = value
+	}
+	snapshot["lastOptionId"] = payload["optionId"]
+	snapshot["lastOptionLabel"] = payload["optionLabel"]
+	snapshot["lastActionAt"] = time.Now().UTC().Format(time.RFC3339)
+
+	data, _ := json.Marshal(snapshot)
+	return datatypes.JSON(data)
+}
+
+func rolePlayPayloadString(payload map[string]any, key string) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	text := strings.TrimSpace(fmt.Sprint(payload[key]))
+	if text == "<nil>" {
+		return ""
+	}
+	return text
 }
 
 func intFromPayload(value any) int {

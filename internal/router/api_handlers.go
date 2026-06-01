@@ -1221,7 +1221,18 @@ func appendRolePlayAction(database *gorm.DB) gin.HandlerFunc {
 		}
 		session, _ := newRolePlayService(database).GetSession(c.Request.Context(), id, currentUserID(c))
 		questCompleted := session != nil && session.Status == constants.RolePlayStatusFinished
-		c.JSON(http.StatusCreated, gin.H{"turn": turn, "session": session, "questCompleted": questCompleted})
+		nextOptions := req.Payload["nextOptions"]
+		if nextOptions == nil {
+			nextOptions = req.Payload["options"]
+		}
+		c.JSON(http.StatusCreated, gin.H{
+			"turn":           turn,
+			"session":        session,
+			"questCompleted": questCompleted,
+			"options":        nextOptions,
+			"choices":        nextOptions,
+			"currentScene":   req.Payload["scene"],
+		})
 	}
 }
 
