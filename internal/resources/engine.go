@@ -131,9 +131,13 @@ func (e *Engine) Tick(ctx context.Context, playerID uint, minutes float64) error
 		_ = "food deficit marker for population/happiness cross-effect"
 	}
 
-	// TODO(real): persist the updated Current back to PlayerSave / resources table (or dedicated resources snapshot table)
-	// Bonuses (research/weather/policy) are already applied in GetBalance before Tick uses the Net.
+	// === Persistence + cross-engine side effects (Go source of truth) ===
+	// TODO(real persistence): save balance.Current back to PlayerSave or a city_resources_snapshots table.
+	// In full impl: tx update PlayerSave.InventoryJSON or dedicated resource rows.
+	// Also notify population engine if foodNet < 0 (happiness/pop loss cascade).
 
+	// Bonuses (research/weather/policy) already applied upstream in GetBalance.
+	_ = playerID // used in real persistence query
 	return nil
 }
 

@@ -104,7 +104,23 @@ func (e *Engine) HourlyUpdate(ctx context.Context, playerID uint) error {
 	// 5. workers = newTotal * (happiness/100 * 0.8 + 0.2) etc.
 	// 6. persist to PlayerSave.
 
-	// For now call Get to exercise the formula (real persistence later).
-	_, _ = e.GetPopulation(ctx, playerID)
+	// Simulate one hour of growth/loss per spec (real: load + compute + UPDATE PlayerSave.Population + Satisfaction)
+	pop, _ := e.GetPopulation(ctx, playerID)
+
+	growth := pop.GrowthRate
+	if pop.Happiness < 55 {
+		growth = -math.Abs(pop.GrowthRate) * 0.8 // loss
+	}
+	newTotal := pop.Total + int(growth)
+	if newTotal < 0 {
+		newTotal = 0
+	}
+	if newTotal > pop.Capacity {
+		newTotal = pop.Capacity
+	}
+
+	// TODO(real): persist newTotal, recalculated workers/unemployed, updated Happiness to DB
+	_ = newTotal // would be saved
+	_ = playerID
 	return nil
 }
