@@ -2071,8 +2071,8 @@ func registerBuildingRoutes(private *gin.RouterGroup, world *service.WorldGameSe
 		version, err := world.CurrentCatalogVersion(c.Request.Context())
 		writeWorldResponse(c, gin.H{"version": version}, err)
 	})
-	private.GET("/buildings/:key/research-tree", func(c *gin.Context) {
-		buildingKey := c.Param("key")
+	private.GET("/buildings/:id/research-tree", func(c *gin.Context) {
+		buildingKey := c.Param("id")
 		scope := strings.TrimSpace(strings.ToLower(c.Query("scope")))
 		if scope == "global" || scope == "all" || scope == "themes" {
 			buildingKey = ""
@@ -2080,14 +2080,14 @@ func registerBuildingRoutes(private *gin.RouterGroup, world *service.WorldGameSe
 		payload, err := world.ResearchCatalog(c.Request.Context(), currentUserID(c), buildingKey)
 		writeWorldResponse(c, payload, err)
 	})
-	private.GET("/buildings/:key", func(c *gin.Context) {
+	private.GET("/buildings/:id", func(c *gin.Context) {
 		catalog, err := world.BuildingCatalog(c.Request.Context(), true)
 		if err != nil {
 			writeWorldResponse(c, nil, err)
 			return
 		}
 		for _, building := range catalog {
-			if building.Key == c.Param("key") {
+			if building.Key == c.Param("id") {
 				c.JSON(http.StatusOK, building)
 				return
 			}

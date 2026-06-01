@@ -299,7 +299,7 @@ func registerWorldCompatibilityRoutes(private *gin.RouterGroup, world *service.W
 		writeWorldResponse(c, gin.H{"queued": true, "type": input.Type, "targetLevel": input.Level, "cost": cost}, err)
 	})
 
-	private.POST("/buildings/:key/upgrade", func(c *gin.Context) {
+	private.POST("/buildings/:id/upgrade", func(c *gin.Context) {
 		var input struct {
 			Type         string `json:"type"`
 			CurrentLevel int    `json:"currentLevel"`
@@ -309,7 +309,7 @@ func registerWorldCompatibilityRoutes(private *gin.RouterGroup, world *service.W
 			input.CurrentLevel = 0
 		}
 		cost, err := world.CalculateBuildingUpgradeCost(input.Type, input.CurrentLevel)
-		writeWorldResponse(c, gin.H{"buildingId": c.Param("key"), "upgrade": cost}, err)
+		writeWorldResponse(c, gin.H{"buildingId": c.Param("id"), "upgrade": cost}, err)
 	})
 
 }
