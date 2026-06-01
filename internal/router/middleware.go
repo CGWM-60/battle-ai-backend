@@ -63,7 +63,11 @@ func securityHeaders() gin.HandlerFunc {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
 		c.Header("Referrer-Policy", "no-referrer")
-		c.Header("Cache-Control", "no-store")
+		if strings.HasPrefix(c.Request.URL.Path, "/admin/_next/static/") {
+			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			c.Header("Cache-Control", "no-store")
+		}
 		c.Next()
 	}
 }
