@@ -82,6 +82,7 @@ func (e *Engine) Activate(ctx context.Context, playerID uint, policyKey string) 
 			active := map[string]any{
 				"key":         policyKey,
 				"until":       time.Now().UTC().Add(time.Duration(p.Duration) * time.Second).Format(time.RFC3339),
+				"duration":    p.Duration, // store original duration so UI can display it correctly
 				"effects":     p.Effects,
 			}
 			fx["active_policy"] = active

@@ -315,7 +315,26 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 			return
 		}
 
-		err := world.ActivatePolicy(c.Request.Context(), currentUserID(c), body.PolicyKey)
+		uid := currentUserID(c)
+
+		// Enforce simple concurrent limit (user request)
+		const maxActivePolicies = 2
+		save, _ := world.EnsurePlayerSave(c.Request.Context(), uid)
+		currentActive := 0
+		if save != nil && len(save.ActiveEffectsJSON) > 0 {
+			var fx map[string]any
+			if json.Unmarshal(save.ActiveEffectsJSON, &fx) == nil && fx != nil {
+				if _, ok := fx["active_policy"].(map[string]any); ok {
+					currentActive = 1 // for now we support one explicit entry; extend if we support multiple
+				}
+			}
+		}
+		if currentActive >= maxActivePolicies {
+			writeWorldResponse(c, nil, fmt.Errorf("limite de %d politiques actives simultanées atteinte", maxActivePolicies))
+			return
+		}
+
+		err := world.ActivatePolicy(c.Request.Context(), uid, body.PolicyKey)
 		writeWorldResponse(c, gin.H{"activated": body.PolicyKey}, err)
 	})
 
@@ -359,10 +378,15 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 						if until.IsZero() || time.Now().UTC().Before(until) {
 							p, exists := policies.DefinedPolicies[key]
 							if exists {
+								// Prefer stored duration (more reliable for UI)
+								dur := p.Duration
+								if d, ok := ap["duration"].(float64); ok && d > 0 {
+									dur = int(d)
+								}
 								activePolicies = append(activePolicies, gin.H{
 									"key":         p.Key,
 									"name":        p.Name,
-									"duration":    p.Duration,
+									"duration":    dur,
 									"effects":     p.Effects,
 									"activeUntil": untilStr,
 								})
@@ -373,7 +397,11 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 			}
 		}
 
-		writeWorldResponse(c, gin.H{"policies": activePolicies}, nil)
+		writeWorldResponse(c, gin.H{
+			"policies":           activePolicies,
+			"currentActive":      len(activePolicies),
+			"maxActivePolicies":  2, // exposed so UI can show the limit
+		}, nil)
 	})
 
 	// TODO: implement real market offers listing
