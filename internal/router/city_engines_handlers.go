@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"cgwm/battle/internal/leaderboard"
-	"cgwm/battle/internal/market"
 	"cgwm/battle/internal/policies"
 	"cgwm/battle/internal/population"
 	"cgwm/battle/internal/pvp"
@@ -23,7 +22,7 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	// City engines (real wiring)
 	resEngine := resources.NewEngine(nil)
 	econEngine := world.GetEconomyEngine() // use the properly DB-wired engine from the service for consistent data
-	marketEng := market.NewEngine(nil) // db via service; persistence active in service instance
+	marketEng := world.GetMarketEngine()   // REAL wired engine (was nil before) - supports IA alive market + continent separation
 	leaderboardEng := leaderboard.NewEngine()
 	pvpEngine := pvp.NewEngine(nil) // real db wiring via service for scheduler/ticks; handlers use direct for now (improves with army service)
 	policyEngine := policies.NewEngine()
@@ -84,14 +83,20 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"ok": err == nil}, err)
 	})
 
-	// Market buy/sell - real engine
+	// Market buy/sell - real engine (with continent tagging for player offers)
 	private.POST("/market/sell", func(c *gin.Context) {
 		var body struct {
 			Resource string  `json:"resource"`
 			Quantity float64 `json:"quantity"`
 		}
 		c.ShouldBindJSON(&body)
-		offerID, _ := marketEng.Sell(currentUserID(c), body.Resource, body.Quantity)
+		uid := currentUserID(c)
+		save, _ := world.EnsurePlayerSave(c.Request.Context(), uid)
+		continentStr := ""
+		if save != nil {
+			continentStr = fmt.Sprintf("%d", save.ContinentID)
+		}
+		offerID, _ := marketEng.Sell(uid, body.Resource, body.Quantity, continentStr)
 		writeWorldResponse(c, gin.H{"offer_id": offerID}, nil)
 	})
 	private.POST("/market/buy", func(c *gin.Context) {
@@ -403,16 +408,15 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		}, nil)
 	})
 
-	// Market offers: IA Global Market + Player offers (from continents)
+	// Market offers: IA Global Market (alive, dynamic qtys + IA buy offers) + real player offers separated by continent_id
 	private.GET("/market/offers", func(c *gin.Context) {
 		iaOffers := marketEng.GetIAMarketOffers()
 
-		// For now player offers are empty (Sell inserts into DB but we don't query them yet).
-		// Later we will load real player offers from the market table.
-		playerOffers := []market.MarketOffer{}
+		// Load real player offers from DB via engine (Sell now persists with source=player + continent_id)
+		cidFilter := c.Query("continent_id")
+		playerOffers := marketEng.GetPlayerOffers(cidFilter)
 
 		allOffers := append(iaOffers, playerOffers...)
-
 		writeWorldResponse(c, gin.H{"offers": allOffers}, nil)
 	})
 }

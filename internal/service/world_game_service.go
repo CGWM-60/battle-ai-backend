@@ -107,6 +107,11 @@ func (s *WorldGameService) GetEconomyEngine() *economy.Engine {
 	return s.economyEngine
 }
 
+// GetMarketEngine returns the properly DB-wired market engine (single source of truth for offers).
+func (s *WorldGameService) GetMarketEngine() *market.Engine {
+	return s.marketEngine
+}
+
 type PlayerSaveSyncInput struct {
 	CityName              string         `json:"cityName"`
 	CityLevel             int            `json:"cityLevel"`
@@ -2273,8 +2278,9 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 		}
 	}
 	if s.marketEngine != nil && (cycleType == "continental" || cycleType == "daily") {
-		// Dynamic pricing every 30min real job, here on continental: base * (offers - demands) / norm
+		// Dynamic pricing + IA market alive (refill low qtys so market doesn't stay empty after buys)
 		_ = s.marketEngine.RecalculatePrices(map[string]float64{}, map[string]float64{}, map[string]float64{})
+		s.marketEngine.RefillIAMarket()
 	}
 	if s.leaderboardEngine != nil && cycleType == "daily" {
 		// Score snapshot hourly in real job, here daily for all demo players
