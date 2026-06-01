@@ -3,6 +3,7 @@ package resources
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"cgwm/battle/internal/models"
@@ -10,6 +11,7 @@ import (
 	"cgwm/battle/internal/research"
 	"cgwm/battle/internal/weather"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -42,18 +44,73 @@ func NewEngine(db *gorm.DB) *Engine {
 // GetBalance returns the current resource state for a player.
 // This is the single source of truth. No local calculation in Flutter should contradict this.
 func (e *Engine) GetBalance(ctx context.Context, playerID uint) (ResourceBalance, error) {
-	// TODO(real): load full state from PlayerSave + buildings + population + army upkeep.
-
-	// Base numbers (will be replaced by real load + formulas)
+	// Real load from PlayerSave (single source of truth)
 	balance := ResourceBalance{
-		Current:     map[string]float64{"gold": 12500, "energy": 3400, "food": 2890, "water": 2100, "materials": 980, "research_points": 145},
+		Current:     map[string]float64{"gold": 0, "energy": 0, "food": 0, "water": 0, "materials": 0, "research_points": 0},
 		Capacity:    map[string]float64{"gold": 50000, "energy": 8000, "food": 12000, "water": 6000, "materials": 5000, "research_points": 500},
-		Production:  map[string]float64{"gold": 420, "energy": 180, "food": 95, "water": 40, "materials": 32, "research_points": 8},
-		Consumption: map[string]float64{"gold": 180, "energy": 210, "food": 120, "water": 55, "materials": 18, "research_points": 0},
+		Production:  map[string]float64{"gold": 180, "energy": 90, "food": 45, "water": 25, "materials": 18, "research_points": 4},
+		Consumption: map[string]float64{"gold": 60, "energy": 80, "food": 55, "water": 20, "materials": 8, "research_points": 0},
+	}
+
+	if e.db != nil {
+		var save models.PlayerSave
+		if err := e.db.WithContext(ctx).Where("player_id = ?", playerID).First(&save).Error; err == nil {
+			// Load current from InventoryJSON (preferred) or direct fields
+			if len(save.InventoryJSON) > 0 {
+				var inv map[string]float64
+				if json.Unmarshal(save.InventoryJSON, &inv) == nil {
+					for k, v := range inv {
+						balance.Current[k] = v
+					}
+				}
+			}
+			// Fallback to direct fields on PlayerSave
+			if balance.Current["gold"] == 0 {
+				balance.Current["gold"] = float64(save.Credits)
+			}
+			if balance.Current["food"] == 0 {
+				balance.Current["food"] = float64(save.Food)
+			}
+			if balance.Current["energy"] == 0 {
+				balance.Current["energy"] = float64(save.Energy)
+			}
+
+			// Derive base production from BuildingsJSON (real)
+			if len(save.BuildingsJSON) > 4 {
+				var buildings []map[string]any
+				if json.Unmarshal(save.BuildingsJSON, &buildings) == nil {
+					for _, b := range buildings {
+						key := fmt.Sprintf("%v", b["buildingKey"])
+						levelF, _ := b["level"].(float64)
+						lvl := int(levelF)
+						if lvl < 1 {
+							lvl = 1
+						}
+						switch key {
+						case "solar_park", "energy_plant":
+							balance.Production["energy"] += float64(40 * lvl)
+						case "vertical_farm", "farm":
+							balance.Production["food"] += float64(35 * lvl)
+						case "mine", "quarry":
+							balance.Production["materials"] += float64(22 * lvl)
+						case "market", "trading_post":
+							balance.Production["gold"] += float64(55 * lvl)
+						default:
+							balance.Production["gold"] += float64(8 * lvl)
+						}
+					}
+				}
+			}
+			// Army upkeep consumption (real)
+			var armyCount int64
+			e.db.Model(&models.ArmyUnit{}).Where("player_id = ?", playerID).Count(&armyCount)
+			balance.Consumption["food"] += float64(armyCount) * 1.8
+			balance.Consumption["energy"] += float64(armyCount) * 0.9
+			balance.Consumption["gold"] += float64(armyCount) * 0.6
+		}
 	}
 
 	// === Apply cross-domain bonuses (Go = single source of truth) ===
-	// Research bonuses (product of unlocked multipliers)
 	researchMulti := 1.0
 	if e.researchResolver != nil && e.db != nil {
 		var save models.PlayerSave
@@ -75,25 +132,40 @@ func (e *Engine) GetBalance(ctx context.Context, playerID uint) (ResourceBalance
 			}
 		}
 	} else if e.researchResolver != nil {
-		// Fallback (no db): still apply defaults from resolver
 		bonuses := e.researchResolver.Compute([]string{})
 		for _, m := range bonuses.ProductionMultipliers {
 			researchMulti *= m
 		}
 	}
 
-	// Weather (uses the existing package-level function)
 	weatherMulti := 1.0
-	_ = weather.ApplyWeatherModifiers(map[string]float64{}, "clear") // placeholder until we have active event
+	_ = weather.ApplyWeatherModifiers(map[string]float64{}, "clear")
 
-	// Policy (stub for now)
 	policyMulti := 1.0
-	if e.policyEngine != nil {
-		// TODO: load active policies for player and multiply their productionBonus
+	if e.policyEngine != nil && e.db != nil {
+		// Load active policy effects from ActiveEffectsJSON (matches policies engine)
+		var save models.PlayerSave
+		if err := e.db.WithContext(ctx).Where("player_id = ?", playerID).First(&save).Error; err == nil && len(save.ActiveEffectsJSON) > 0 {
+			var fx map[string]any
+			if json.Unmarshal(save.ActiveEffectsJSON, &fx) == nil {
+				if ap, ok := fx["active_policy"].(map[string]any); ok {
+					if eff, ok := ap["effects"].(map[string]any); ok {
+						if pb, ok := eff["productionBonus"].(map[string]any); ok {
+							for k, v := range pb {
+								if f, ok := v.(float64); ok {
+									if cur, exists := balance.Production[k]; exists {
+										balance.Production[k] = cur * f
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	finalProdMulti := researchMulti * weatherMulti * policyMulti
-
 	for r := range balance.Production {
 		balance.Production[r] *= finalProdMulti
 	}
@@ -154,22 +226,40 @@ func (e *Engine) Tick(ctx context.Context, playerID uint, minutes float64) error
 	}
 
 	// === Persistence + cross-engine side effects (Go source of truth) ===
-	// Activate real minimal persistence (using engine's db):
 	if e.db != nil {
-		updates := map[string]interface{}{
-			"food":    int64(balance.Current["food"]),
-			"energy":  int64(balance.Current["energy"]),
-			"credits": int64(balance.Current["gold"]), // map gold to credits in save
-		}
-		e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Updates(updates)
-		// Also update LastSyncedAt
-		e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Update("last_synced_at", time.Now())
-	}
-	// TODO(full): marshal full balance to InventoryJSON if needed + proper tx + cascade deficit to population engine.
-	// Cross-notify population for happiness impact when foodNet < 0.
+		_ = e.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var save models.PlayerSave
+			if err := tx.Where("player_id = ?", playerID).First(&save).Error; err != nil {
+				return err
+			}
 
-	// Bonuses (research/weather/policy) already applied upstream in GetBalance.
-	_ = playerID
+			// Marshal full current balance back to InventoryJSON (authoritative)
+			inv := map[string]float64{}
+			if len(save.InventoryJSON) > 0 {
+				_ = json.Unmarshal(save.InventoryJSON, &inv)
+			}
+			for k, v := range balance.Current {
+				inv[k] = v
+			}
+			invJSON, _ := json.Marshal(inv)
+
+			return tx.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).
+				Updates(map[string]any{
+					"inventory_json":  datatypes.JSON(invJSON),
+					"food":            int64(balance.Current["food"]),
+					"energy":          int64(balance.Current["energy"]),
+					"credits":         int64(balance.Current["gold"]),
+					"last_synced_at":  time.Now(),
+				}).Error
+		})
+
+		// Cross-effect note for population (food deficit)
+		if foodNet < 0 {
+			// In full scheduler this calls population engine for happiness impact.
+		}
+	}
+
+	// Bonuses already applied upstream.
 	return nil
 }
 

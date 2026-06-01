@@ -435,3 +435,79 @@ func baseStatsForUnit(unitType string) unitProfile {
 		return unitProfile{Health: 220, Attack: 45, Defense: 35, Speed: 14, Range: 12, MaxCarry: 28, FoodConsumption: 5, EnergyConsumption: 4, CreditCost: 4, TrainingDurationSeconds: 480, FoodCost: 40, EnergyCost: 35, CreditCostTrain: 150}
 	}
 }
+
+// DisbandUnits (interaction 6) - removes units and refunds partial resources.
+func (s *WorldGameService) DisbandUnits(ctx context.Context, playerID uint, unitType string, count int) (int, error) {
+	if count <= 0 {
+		return 0, fmt.Errorf("count must be > 0")
+	}
+	return count, s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var units []models.ArmyUnit
+		if err := tx.Where("player_id = ? AND unit_type = ? AND status = ?", playerID, unitType, "available").Limit(count).Find(&units).Error; err != nil {
+			return err
+		}
+		if len(units) == 0 {
+			return fmt.Errorf("no available units of that type")
+		}
+		actual := 0
+		for i := range units {
+			if actual >= count {
+				break
+			}
+			if err := tx.Delete(&units[i]).Error; err != nil {
+				return err
+			}
+			actual++
+		}
+		// Partial refund
+		stats := baseStatsForUnit(unitType)
+		refund := int64(actual) * (stats.CreditCostTrain / 2)
+		return tx.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).
+			Update("credits", gorm.Expr("credits + ?", refund)).Error
+	})
+}
+
+// HealUnits (interaction 7) - heals injured units.
+func (s *WorldGameService) HealUnits(ctx context.Context, playerID uint, unitType string, count int) (int, error) {
+	if count <= 0 {
+		return 0, nil
+	}
+	var injured []models.ArmyUnit
+	if err := s.db.WithContext(ctx).Where("player_id = ? AND unit_type = ? AND status = ?", playerID, unitType, "injured").Limit(count).Find(&injured).Error; err != nil {
+		return 0, err
+	}
+	healed := 0
+	for i := range injured {
+		if healed >= count {
+			break
+		}
+		injured[i].Health = 100
+		injured[i].Status = "available"
+		if err := s.db.WithContext(ctx).Save(&injured[i]).Error; err != nil {
+			return healed, err
+		}
+		healed++
+	}
+	return healed, nil
+}
+
+// SetDefenseAssignment (interaction 8) - assigns units to defense.
+func (s *WorldGameService) SetDefenseAssignment(ctx context.Context, playerID uint, units map[string]int) error {
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for ut, qty := range units {
+			if qty <= 0 {
+				continue
+			}
+			// Simple: mark up to qty available units as "assigned" for defense
+			var avail []models.ArmyUnit
+			tx.Where("player_id = ? AND unit_type = ? AND status = ?", playerID, ut, "available").Limit(qty).Find(&avail)
+			for i := range avail {
+				avail[i].Status = "assigned"
+				if err := tx.Save(&avail[i]).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
+}
