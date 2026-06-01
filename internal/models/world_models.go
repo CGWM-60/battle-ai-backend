@@ -593,3 +593,19 @@ type AdminAuditLog struct {
 	IPAddress  string         `gorm:"size:80" json:"ipAddress"`
 	UserAgent  string         `gorm:"size:255" json:"userAgent"`
 }
+
+// MarketOffer represents buy/sell orders on the global IA market and player continental markets.
+// Used for the "Marché IA Mondial" (alive, dynamic quantities + IA buy offers) and per-continent player markets.
+type MarketOffer struct {
+	ID           string         `gorm:"primaryKey;size:64" json:"id"`
+	CityID       string         `gorm:"size:64;index:idx_market_city,priority:1" json:"cityId"`
+	Source       string         `gorm:"size:32;index" json:"source"`      // "ia_global" | "player"
+	ContinentID  string         `gorm:"size:32;index:idx_market_continent" json:"continentId"`
+	Direction    string         `gorm:"size:16;index" json:"direction"`   // "sell" (default) or "buy" (IA wants to acquire)
+	Resource     string         `gorm:"size:64;index" json:"resource"`
+	Quantity     float64        `gorm:"type:double;index" json:"quantity"`
+	PricePerUnit float64        `gorm:"type:double" json:"pricePerUnit"`
+	ExpiresAt    time.Time      `gorm:"index" json:"expiresAt"`
+	CreatedAt    time.Time      `json:"createdAt"`
+	UpdatedAt    time.Time      `json:"updatedAt"`
+}

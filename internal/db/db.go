@@ -98,6 +98,7 @@ func DbConnect() *gorm.DB {
 		&models.BuildingCatalogVersion{},
 		&models.AdminAuditLog{},
 		&models.DailyTask{},
+		&models.MarketOffer{}, // IA Global + player continental market offers (source, direction, continent_id)
 	)
 	if err := seedDefaultBuildingDefinitions(db); err != nil {
 		panic(fmt.Sprintf("failed to seed default building catalog: %v", err))

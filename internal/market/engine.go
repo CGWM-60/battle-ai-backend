@@ -4,19 +4,21 @@ import (
 	"fmt"
 	"time"
 
+	"cgwm/battle/internal/models"
+
 	"gorm.io/gorm"
 )
 
 type MarketOffer struct {
-	ID           string    `json:"id"`
-	CityID       string    `json:"cityId"`
-	Source       string    `json:"source"` // "ia_global" | "player"
-	ContinentID  string    `json:"continentId"`
-	Direction    string    `json:"direction"` // "sell" (offer to buy from) or "buy" (IA/player wants to acquire)
-	Resource     string    `json:"resource"`
-	Quantity     float64   `json:"quantity"`
-	PricePerUnit float64   `json:"pricePerUnit"`
-	ExpiresAt    time.Time `json:"expiresAt"`
+	ID           string    `gorm:"primaryKey;size:64" json:"id"`
+	CityID       string    `gorm:"size:64;index" json:"cityId"`
+	Source       string    `gorm:"size:32;index" json:"source"` // "ia_global" | "player"
+	ContinentID  string    `gorm:"size:32;index" json:"continentId"`
+	Direction    string    `gorm:"size:16;index" json:"direction"` // "sell" (offer to buy from) or "buy" (IA/player wants to acquire)
+	Resource     string    `gorm:"size:64;index" json:"resource"`
+	Quantity     float64   `gorm:"type:double" json:"quantity"`
+	PricePerUnit float64   `gorm:"type:double" json:"pricePerUnit"`
+	ExpiresAt    time.Time `gorm:"index" json:"expiresAt"`
 }
 
 type Engine struct {
@@ -53,21 +55,23 @@ func (e *Engine) RecalculatePrices(totalOffers, totalDemands map[string]float64,
 func (e *Engine) Sell(playerID uint, resource string, quantity float64, continentID string) (string, error) {
 	offerID := "offer_" + time.Now().Format("20060102150405")
 	if e.db != nil {
+		_ = e.db.AutoMigrate(&models.MarketOffer{})
 		// Player sell offer -> source player, direction sell (others can buy it), tagged with real continent
 		price := 1.5 // could be dynamic from GetPrices
-		e.db.Exec(`INSERT INTO market_offers (id, city_id, source, continent_id, direction, resource, quantity, price_per_unit, expires_at) 
+		_ = e.db.Exec(`INSERT INTO market_offers (id, city_id, source, continent_id, direction, resource, quantity, price_per_unit, expires_at) 
 		           VALUES (?, ?, 'player', ?, 'sell', ?, ?, ?, ?)`,
-			offerID, fmt.Sprintf("%d", playerID), continentID, resource, quantity, price, time.Now().Add(24*time.Hour))
+			offerID, fmt.Sprintf("%d", playerID), continentID, resource, quantity, price, time.Now().Add(24*time.Hour)).Error
 	}
 	return offerID, nil
 }
 
 func (e *Engine) Buy(playerID uint, offerID string, quantity float64) error {
 	if e.db != nil {
+		_ = e.db.AutoMigrate(&models.MarketOffer{})
 		// Reduce remaining qty on the offer (works for both "sell" offers and "buy" offers / wanted qty).
 		// If drops to 0 or below, remove the offer (fulfilled).
-		e.db.Exec("UPDATE market_offers SET quantity = quantity - ? WHERE id = ?", quantity, offerID)
-		e.db.Exec("DELETE FROM market_offers WHERE id = ? AND quantity <= 0", offerID)
+		_ = e.db.Exec("UPDATE market_offers SET quantity = quantity - ? WHERE id = ?", quantity, offerID).Error
+		_ = e.db.Exec("DELETE FROM market_offers WHERE id = ? AND quantity <= 0", offerID).Error
 	}
 	return nil
 }
@@ -80,14 +84,23 @@ func (e *Engine) FulfillBuyOffer(playerID uint, offerID string, quantity float64
 
 // GetIAMarketOffers returns offers from the Global IA Market (evil world market).
 // Makes the market "vivant": auto-refills low quantity offers, seeds initial sell + buy offers if empty.
+// Safety net: ensures the market_offers table exists (AutoMigrate) even if the binary started before a full DB migration.
 func (e *Engine) GetIAMarketOffers() []MarketOffer {
 	if e.db == nil {
 		return nil
 	}
 
+	// Safety net (like DailyTask in admin handlers): create table + columns if missing.
+	// This prevents the 1146 "Table doesn't exist" spam on first requests after deploying the IA market feature.
+	_ = e.db.AutoMigrate(&models.MarketOffer{})
+
 	// Try to load existing IA offers
 	var offers []MarketOffer
-	e.db.Where("city_id = ?", "ia_global").Find(&offers)
+	if err := e.db.Where("city_id = ?", "ia_global").Find(&offers).Error; err != nil {
+		// Log once per unusual failure but don't crash the endpoint
+		fmt.Printf("[market] warning: failed to load ia_global offers: %v\n", err)
+		return nil
+	}
 
 	now := time.Now().UTC()
 	basePrices := e.GetPrices()
@@ -101,23 +114,27 @@ func (e *Engine) GetIAMarketOffers() []MarketOffer {
 			qty := 650.0 + float64(i*40)
 
 			offerID := "ia_sell_" + res
-			e.db.Exec(`INSERT INTO market_offers (id, city_id, source, continent_id, direction, resource, quantity, price_per_unit, expires_at) 
+			if err := e.db.Exec(`INSERT INTO market_offers (id, city_id, source, continent_id, direction, resource, quantity, price_per_unit, expires_at) 
 			           VALUES (?, 'ia_global', 'ia_global', '', 'sell', ?, ?, ?, ?)`,
-				offerID, res, qty, price, now.Add(72*time.Hour))
+				offerID, res, qty, price, now.Add(72*time.Hour)).Error; err != nil {
+				fmt.Printf("[market] seed warning (ia_sell_%s): %v\n", res, err)
+			}
 
 			// Seed 3 IA buy offers (IA wants to acquire these from players at decent price)
 			if res == "food" || res == "materials" || res == "energy" {
 				buyPrice := base * 0.85 // IA pays slightly below base to players
 				buyQty := 400.0
 				buyID := "ia_buy_" + res
-				e.db.Exec(`INSERT INTO market_offers (id, city_id, source, continent_id, direction, resource, quantity, price_per_unit, expires_at) 
+				if err := e.db.Exec(`INSERT INTO market_offers (id, city_id, source, continent_id, direction, resource, quantity, price_per_unit, expires_at) 
 				           VALUES (?, 'ia_global', 'ia_global', '', 'buy', ?, ?, ?, ?)`,
-					buyID, res, buyQty, buyPrice, now.Add(48*time.Hour))
+					buyID, res, buyQty, buyPrice, now.Add(48*time.Hour)).Error; err != nil {
+					fmt.Printf("[market] seed warning (ia_buy_%s): %v\n", res, err)
+				}
 			}
 		}
 
-		// Reload after seeding
-		e.db.Where("city_id = ?", "ia_global").Find(&offers)
+		// Reload after seeding (ignore error; next call will retry)
+		_ = e.db.Where("city_id = ?", "ia_global").Find(&offers).Error
 	}
 
 	// --- Make IA market alive: periodic-ish refill on access (quantities decrease on player buys, we top-up low ones) ---
@@ -127,18 +144,18 @@ func (e *Engine) GetIAMarketOffers() []MarketOffer {
 			// Top up the offer (simulates IA production / restock)
 			topUp := 300.0
 			newQty := offers[i].Quantity + topUp
-			e.db.Exec("UPDATE market_offers SET quantity = ? WHERE id = ?", newQty, offers[i].ID)
+			_ = e.db.Exec("UPDATE market_offers SET quantity = ? WHERE id = ?", newQty, offers[i].ID).Error
 			offers[i].Quantity = newQty
 			refilled = true
 		}
 		// Also refresh expiration occasionally
 		if offers[i].ExpiresAt.Before(now.Add(6 * time.Hour)) {
-			e.db.Exec("UPDATE market_offers SET expires_at = ? WHERE id = ?", now.Add(72*time.Hour), offers[i].ID)
+			_ = e.db.Exec("UPDATE market_offers SET expires_at = ? WHERE id = ?", now.Add(72*time.Hour), offers[i].ID).Error
 		}
 	}
 	if refilled {
 		// reload to be sure
-		e.db.Where("city_id = ?", "ia_global").Find(&offers)
+		_ = e.db.Where("city_id = ?", "ia_global").Find(&offers).Error
 	}
 
 	return offers
@@ -149,9 +166,12 @@ func (e *Engine) RefillIAMarket() {
 	if e.db == nil {
 		return
 	}
+	// Safety net
+	_ = e.db.AutoMigrate(&models.MarketOffer{})
+
 	// Example scheduled boost: add stock to all IA offers that are low or randomly
-	e.db.Exec(`UPDATE market_offers SET quantity = quantity + 150 WHERE city_id = 'ia_global' AND quantity < 200 AND direction = 'sell'`)
-	e.db.Exec(`UPDATE market_offers SET quantity = quantity + 80 WHERE city_id = 'ia_global' AND quantity < 150 AND direction = 'buy'`)
+	_ = e.db.Exec(`UPDATE market_offers SET quantity = quantity + 150 WHERE city_id = 'ia_global' AND quantity < 200 AND direction = 'sell'`).Error
+	_ = e.db.Exec(`UPDATE market_offers SET quantity = quantity + 80 WHERE city_id = 'ia_global' AND quantity < 150 AND direction = 'buy'`).Error
 }
 
 // GetDB exposes the DB for handlers that need direct queries (temporary until engine has richer query methods).
@@ -162,11 +182,16 @@ func (e *Engine) GetPlayerOffers(continentID string) []MarketOffer {
 	if e.db == nil {
 		return nil
 	}
+	_ = e.db.AutoMigrate(&models.MarketOffer{})
+
 	var out []MarketOffer
 	q := e.db.Where("source = ?", "player")
 	if continentID != "" {
 		q = q.Where("continent_id = ?", continentID)
 	}
-	q.Find(&out)
+	if err := q.Find(&out).Error; err != nil {
+		fmt.Printf("[market] warning: GetPlayerOffers failed: %v\n", err)
+		return nil
+	}
 	return out
 }
