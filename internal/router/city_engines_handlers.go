@@ -10,7 +10,6 @@ import (
 	"cgwm/battle/internal/population"
 	"cgwm/battle/internal/pvp"
 	"cgwm/battle/internal/research"
-	"cgwm/battle/internal/resources"
 	"cgwm/battle/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -20,7 +19,7 @@ import (
 // This is called from registerWorldGameRoutes.
 func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGameService) {
 	// City engines (real wiring)
-	resEngine := resources.NewEngine(nil)
+	resEngine := world.GetResourceEngine()
 	econEngine := world.GetEconomyEngine() // use the properly DB-wired engine from the service for consistent data
 	marketEng := world.GetMarketEngine()   // REAL wired engine (was nil before) - supports IA alive market + continent separation
 	leaderboardEng := leaderboard.NewEngine()
@@ -101,8 +100,8 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 			Quantity float64 `json:"quantity"`
 		}
 		c.ShouldBindJSON(&body)
-		_ = marketEng.Buy(currentUserID(c), body.OfferID, body.Quantity)
-		writeWorldResponse(c, gin.H{"ok": true}, nil)
+		err := world.ExecuteMarketOffer(c.Request.Context(), currentUserID(c), body.OfferID, body.Quantity)
+		writeWorldResponse(c, gin.H{"ok": err == nil}, err)
 	})
 
 	// Policies available - now returns proper objects so the dialog can show names

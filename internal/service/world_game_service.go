@@ -112,6 +112,11 @@ func (s *WorldGameService) GetMarketEngine() *market.Engine {
 	return s.marketEngine
 }
 
+// GetResourceEngine returns the DB-wired resource engine used by city handlers.
+func (s *WorldGameService) GetResourceEngine() *resources.Engine {
+	return s.resourceEngine
+}
+
 // SellResourceOnContinentMarket validates and deducts a player resource before
 // publishing the offer on the player's continent market.
 func (s *WorldGameService) SellResourceOnContinentMarket(ctx context.Context, playerID uint, resource string, quantity float64) (string, error) {
@@ -199,6 +204,81 @@ func (s *WorldGameService) SellResourceOnContinentMarket(ctx context.Context, pl
 	return offerID, nil
 }
 
+// ExecuteMarketOffer transfers resources/credits for both player purchases and
+// IA buy offers, then reduces the remaining offer quantity.
+func (s *WorldGameService) ExecuteMarketOffer(ctx context.Context, playerID uint, offerID string, quantity float64) error {
+	if strings.TrimSpace(offerID) == "" {
+		return fmt.Errorf("offer_id is required")
+	}
+	if quantity <= 0 {
+		return fmt.Errorf("quantity must be greater than zero")
+	}
+	amount := int64(quantity)
+	if float64(amount) < quantity {
+		amount++
+	}
+	if amount <= 0 {
+		return fmt.Errorf("quantity must be greater than zero")
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var offer models.MarketOffer
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ?", offerID).
+			First(&offer).Error; err != nil {
+			return err
+		}
+		if offer.Quantity < float64(amount) {
+			return fmt.Errorf("quantity exceeds remaining offer stock")
+		}
+
+		var save models.PlayerSave
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("player_id = ?", playerID).
+			First(&save).Error; err != nil {
+			return err
+		}
+		inventory := map[string]float64{}
+		if len(save.InventoryJSON) > 0 {
+			_ = json.Unmarshal(save.InventoryJSON, &inventory)
+		}
+
+		resource := normalizeMarketResource(offer.Resource)
+		totalCredits := int64(offer.PricePerUnit*float64(amount) + 0.999999)
+		if strings.EqualFold(offer.Direction, "buy") {
+			if err := deductMarketResource(&save, inventory, resource, amount); err != nil {
+				return err
+			}
+			save.Credits += totalCredits
+		} else {
+			if save.Credits < totalCredits {
+				return fmt.Errorf("credits insuffisants")
+			}
+			save.Credits -= totalCredits
+			addMarketResource(&save, inventory, resource, amount)
+			if offer.Source == "player" && offer.CityID != "" && offer.CityID != fmt.Sprintf("%d", playerID) {
+				sellerID, parseErr := strconv.ParseUint(offer.CityID, 10, 64)
+				if parseErr == nil {
+					if err := tx.Model(&models.PlayerSave{}).
+						Where("player_id = ?", uint(sellerID)).
+						Update("credits", gorm.Expr("credits + ?", totalCredits)).Error; err != nil {
+						return err
+					}
+				}
+			}
+		}
+
+		if err := persistMarketSaveTx(tx, &save, inventory); err != nil {
+			return err
+		}
+		remaining := offer.Quantity - float64(amount)
+		if remaining <= 0 {
+			return tx.Delete(&models.MarketOffer{}, "id = ?", offer.ID).Error
+		}
+		return tx.Model(&models.MarketOffer{}).Where("id = ?", offer.ID).Update("quantity", remaining).Error
+	})
+}
+
 func normalizeMarketResource(resource string) string {
 	switch strings.TrimSpace(strings.ToLower(resource)) {
 	case "gold", "credit", "credits", "coin", "coins":
@@ -217,6 +297,21 @@ func normalizeMarketResource(resource string) string {
 		return "research_points"
 	default:
 		return strings.TrimSpace(strings.ToLower(resource))
+	}
+}
+
+func addMarketResource(save *models.PlayerSave, inventory map[string]float64, resource string, amount int64) {
+	switch resource {
+	case "gold":
+		save.Credits += amount
+	case "food":
+		save.Food += amount
+	case "energy":
+		save.Energy += amount
+	case "gems":
+		save.Gems += amount
+	default:
+		inventory[resource] = inventory[resource] + float64(amount)
 	}
 }
 
@@ -250,6 +345,27 @@ func deductMarketResource(save *models.PlayerSave, inventory map[string]float64,
 		inventory[resource] = current - float64(amount)
 	}
 	return nil
+}
+
+func persistMarketSaveTx(tx *gorm.DB, save *models.PlayerSave, inventory map[string]float64) error {
+	inventory["gold"] = float64(save.Credits)
+	inventory["credits"] = float64(save.Credits)
+	inventory["food"] = float64(save.Food)
+	inventory["energy"] = float64(save.Energy)
+	inventory["gems"] = float64(save.Gems)
+	inventoryJSON, _ := json.Marshal(inventory)
+	now := time.Now()
+	save.Version++
+	save.LastSyncedAt = &now
+	return tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(map[string]any{
+		"food":           save.Food,
+		"energy":         save.Energy,
+		"credits":        save.Credits,
+		"gems":           save.Gems,
+		"inventory_json": datatypes.JSON(inventoryJSON),
+		"version":        save.Version,
+		"last_synced_at": now,
+	}).Error
 }
 
 type PlayerSaveSyncInput struct {

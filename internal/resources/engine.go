@@ -19,7 +19,7 @@ import (
 type ResourceBalance struct {
 	Current     map[string]float64 `json:"current"`
 	Capacity    map[string]float64 `json:"capacity"`
-	Production  map[string]float64 `json:"production"`  // per hour
+	Production  map[string]float64 `json:"production"` // per hour
 	Consumption map[string]float64 `json:"consumption"`
 	Net         map[string]float64 `json:"net"`
 }
@@ -46,11 +46,10 @@ func NewEngine(db *gorm.DB) *Engine {
 func (e *Engine) GetBalance(ctx context.Context, playerID uint) (ResourceBalance, error) {
 	// Real load from PlayerSave (single source of truth)
 	balance := ResourceBalance{
-		// Demo positive starting inventory so market sell dialog works (select resource + quantity)
-		Current:     map[string]float64{"gold": 2450, "energy": 890, "food": 1340, "water": 620, "materials": 780, "research_points": 45},
-		Capacity:    map[string]float64{"gold": 50000, "energy": 8000, "food": 12000, "water": 6000, "materials": 5000, "research_points": 500},
-		Production:  map[string]float64{"gold": 180, "energy": 90, "food": 45, "water": 25, "materials": 18, "research_points": 4},
-		Consumption: map[string]float64{"gold": 60, "energy": 80, "food": 55, "water": 20, "materials": 8, "research_points": 0},
+		Current:     map[string]float64{"gold": 0, "credits": 0, "energy": 0, "food": 0, "gems": 0},
+		Capacity:    map[string]float64{"gold": 50000, "credits": 50000, "energy": 8000, "food": 12000, "gems": 999999, "water": 6000, "materials": 5000, "research_points": 500},
+		Production:  map[string]float64{"gold": 0, "credits": 0, "energy": 0, "food": 0, "water": 0, "materials": 0, "research_points": 0},
+		Consumption: map[string]float64{"gold": 0, "credits": 0, "energy": 0, "food": 0, "water": 0, "materials": 0, "research_points": 0},
 	}
 
 	if e.db != nil {
@@ -65,16 +64,12 @@ func (e *Engine) GetBalance(ctx context.Context, playerID uint) (ResourceBalance
 					}
 				}
 			}
-			// Fallback to direct fields on PlayerSave
-			if balance.Current["gold"] == 0 {
-				balance.Current["gold"] = float64(save.Credits)
-			}
-			if balance.Current["food"] == 0 {
-				balance.Current["food"] = float64(save.Food)
-			}
-			if balance.Current["energy"] == 0 {
-				balance.Current["energy"] = float64(save.Energy)
-			}
+			// Direct PlayerSave fields are authoritative for core HUD resources.
+			balance.Current["gold"] = float64(save.Credits)
+			balance.Current["credits"] = float64(save.Credits)
+			balance.Current["food"] = float64(save.Food)
+			balance.Current["energy"] = float64(save.Energy)
+			balance.Current["gems"] = float64(save.Gems)
 
 			// Derive base production from BuildingsJSON (real)
 			if len(save.BuildingsJSON) > 4 {
@@ -246,11 +241,11 @@ func (e *Engine) Tick(ctx context.Context, playerID uint, minutes float64) error
 
 			return tx.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).
 				Updates(map[string]any{
-					"inventory_json":  datatypes.JSON(invJSON),
-					"food":            int64(balance.Current["food"]),
-					"energy":          int64(balance.Current["energy"]),
-					"credits":         int64(balance.Current["gold"]),
-					"last_synced_at":  time.Now(),
+					"inventory_json": datatypes.JSON(invJSON),
+					"food":           int64(balance.Current["food"]),
+					"energy":         int64(balance.Current["energy"]),
+					"credits":        int64(balance.Current["gold"]),
+					"last_synced_at": time.Now(),
 				}).Error
 		})
 
