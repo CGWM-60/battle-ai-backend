@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"cgwm/battle/internal/service"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -332,8 +334,8 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 			})
 		}
 
-		// Guilds (ListGuilds seeds samples if needed)
-		guilds, _ := world.ListGuilds(ctx, currentUserID(c), 50)
+		// Guilds from the player's current continent only.
+		guilds, _ := world.ListGuilds(ctx, currentUserID(c), save.ContinentID, 50)
 		for _, g := range guilds {
 			targets = append(targets, gin.H{
 				"id":    "g_" + strconv.FormatUint(uint64(g.Id), 10),
@@ -355,15 +357,6 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 				"type":  "ai",
 				"aggro": a.Aggressiveness,
 			})
-		}
-
-		// Fallback synthetic targets if still nothing (never empty)
-		if len(targets) == 0 {
-			targets = append(targets,
-				gin.H{"id": "r_fallback1", "name": "Région voisine", "type": "region"},
-				gin.H{"id": "g_fallback1", "name": "Guilde Marchande", "type": "guild"},
-				gin.H{"id": "ai_fallback1", "name": "IA Locale", "type": "ai"},
-			)
 		}
 
 		writeWorldResponse(c, gin.H{"targets": targets, "total": len(targets)}, nil)
@@ -545,27 +538,17 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 		agreements := synthesizePlayerAgreementsFromLogs(database, c)
 		writeWorldResponse(c, gin.H{"agreements": agreements}, nil)
 	})
-	private.POST("/trade/agreements/:id/accept", func(c *gin.Context) {
-		if strings.TrimSpace(c.Param("id")) == "" {
-			writeWorldResponse(c, nil, badRequestError("INVALID_AGREEMENT_ID", "Identifiant d'accord invalide.", nil))
-			return
-		}
-		writeWorldResponse(c, gin.H{"status": "accepted", "id": c.Param("id")}, nil)
-	})
-	private.POST("/trade/agreements/:id/reject", func(c *gin.Context) {
-		if strings.TrimSpace(c.Param("id")) == "" {
-			writeWorldResponse(c, nil, badRequestError("INVALID_AGREEMENT_ID", "Identifiant d'accord invalide.", nil))
-			return
-		}
-		writeWorldResponse(c, gin.H{"status": "rejected", "id": c.Param("id")}, nil)
-	})
-	private.POST("/trade/agreements/:id/negotiate", func(c *gin.Context) {
-		if strings.TrimSpace(c.Param("id")) == "" {
-			writeWorldResponse(c, nil, badRequestError("INVALID_AGREEMENT_ID", "Identifiant d'accord invalide.", nil))
-			return
-		}
-		writeWorldResponse(c, gin.H{"status": "negotiating", "id": c.Param("id")}, nil)
-	})
+	private.POST("/trade/agreements/create", tradeAgreementCreateHandler(database, world))
+	private.POST("/trade/agreements/new", tradeAgreementCreateHandler(database, world))
+	private.POST("/trade/agreements/:id/accept", tradeAgreementDecisionHandler(database, world, "accepted"))
+	private.POST("/trade/agreements/:id/reject", tradeAgreementDecisionHandler(database, world, "rejected"))
+	private.POST("/trade/agreements/:id/negotiate", tradeAgreementDecisionHandler(database, world, "negotiating"))
+	private.POST("/trade/agreement/:id/accept", tradeAgreementDecisionHandler(database, world, "accepted"))
+	private.POST("/trade/agreement/:id/reject", tradeAgreementDecisionHandler(database, world, "rejected"))
+	private.POST("/trade/agreement/:id/negotiate", tradeAgreementDecisionHandler(database, world, "negotiating"))
+	private.POST("/trade/agreements/accept", tradeAgreementDecisionHandler(database, world, "accepted"))
+	private.POST("/trade/agreements/reject", tradeAgreementDecisionHandler(database, world, "rejected"))
+	private.POST("/trade/agreements/negotiate", tradeAgreementDecisionHandler(database, world, "negotiating"))
 
 	private.GET("/trade/reports", func(c *gin.Context) {
 		routes, err := fetchCommerceRoutes(database, world, c)
@@ -609,20 +592,22 @@ func registerWeatherRoutes(private *gin.RouterGroup, database *gorm.DB, world *s
 			}
 			avg = sum / len(weather)
 		}
-		// Enrich with simple 24h simulated forecast for the UI
 		forecast := []gin.H{}
-		for i := 0; i < 24; i += 4 {
-			sev := clamp(avg+(i-8)*2, 10, 95)
-			eventDesc := "conditions stables"
-			if sev > 60 {
-				eventDesc = "tempête potentielle"
+		if len(weather) > 0 {
+			for i := 0; i < 24; i += 4 {
+				sev := clamp(avg+(i-8)*2, 0, 100)
+				eventDesc := "projection stable"
+				if sev > 60 {
+					eventDesc = "projection de risque élevé"
+				}
+				forecast = append(forecast, gin.H{
+					"hour":     i,
+					"severity": sev,
+					"risk":     riskLabel(sev),
+					"event":    eventDesc,
+					"source":   "projection_from_active_weather",
+				})
 			}
-			forecast = append(forecast, gin.H{
-				"hour":     i,
-				"severity": sev,
-				"risk":     riskLabel(sev),
-				"event":    eventDesc,
-			})
 		}
 
 		writeWorldResponse(c, gin.H{
@@ -665,77 +650,12 @@ func registerWeatherRoutes(private *gin.RouterGroup, database *gorm.DB, world *s
 		writeWorldResponse(c, gin.H{"risks": risks}, nil)
 	})
 
-	private.GET("/weather/plans", func(c *gin.Context) {
-		plans := []gin.H{
-			weatherActionPlan("deploy-aid"),
-			weatherActionPlan("preposition-resources"),
-			weatherActionPlan("activate-defense-protocol"),
-		}
-		writeWorldResponse(c, gin.H{"plans": plans}, nil)
-	})
+	private.GET("/weather/plans", weatherPlansHandler(database, world))
+	private.POST("/weather/plans/start", weatherPlanStartHandler(database, world))
+	private.POST("/weather/plan/start", weatherPlanStartHandler(database, world))
 
-	private.POST("/weather/plans/:id/start", func(c *gin.Context) {
-		raw := strings.TrimSpace(c.Param("id"))
-		// Normalize common aliases / old keys coming from UI fallbacks
-		actionKey := raw
-		switch raw {
-		case "preposition", "preposition-resources":
-			actionKey = "preposition-resources"
-		case "defense-protocol", "activate-defense-protocol":
-			actionKey = "activate-defense-protocol"
-		case "deploy-aid", "deployAid":
-			actionKey = "deploy-aid"
-		}
-		if actionKey == "" {
-			writeWorldResponse(c, nil, badRequestError("INVALID_PLAN_ID", "Identifiant de plan invalide.", nil))
-			return
-		}
-		plan := weatherActionPlan(actionKey)
-		if len(plan) == 0 {
-			writeWorldResponse(c, nil, badRequestError("UNKNOWN_PLAN", "Plan météo inconnu.", nil))
-			return
-		}
-
-		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
-		if err != nil {
-			writeWorldResponse(c, nil, err)
-			return
-		}
-		// Short cooldown for better demo experience
-		if cooldownActive(database, c, save.PlayerID, "weather_plan_start", actionKey, 30*time.Second) {
-			writeWorldResponse(c, nil, conflictError("COOLDOWN_ACTIVE", "Plan météo en cooldown (30s).", map[string]any{"cooldownSeconds": 30}))
-			return
-		}
-		costMap, _ := plan["cost"].(gin.H)
-		creditsCost := toInt64(costMap["credits"])
-		foodCost := toInt64(costMap["food"])
-		energyCost := toInt64(costMap["energy"])
-		if save.Credits < creditsCost || save.Food < foodCost || save.Energy < energyCost {
-			writeWorldResponse(c, nil, conflictError("NOT_ENOUGH_RESOURCES", "Ressources insuffisantes pour démarrer ce plan météo.", map[string]any{
-				"missingFood":    maxInt64Phase2(0, foodCost-save.Food),
-				"missingEnergy":  maxInt64Phase2(0, energyCost-save.Energy),
-				"missingCredits": maxInt64Phase2(0, creditsCost-save.Credits),
-			}))
-			return
-		}
-		err = database.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
-			if err := tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(map[string]any{
-				"credits": save.Credits - creditsCost,
-				"food":    save.Food - foodCost,
-				"energy":  save.Energy - energyCost,
-			}).Error; err != nil {
-				return err
-			}
-			return world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "weather_plan_start", "weather_plan", actionKey, "accepted", "", gin.H{"cost": costMap})
-		})
-		if err != nil {
-			writeWorldResponse(c, nil, err)
-			return
-		}
-		now := time.Now().UTC()
-		durationMinutes, _ := plan["durationMinutes"].(int)
-		writeWorldResponse(c, gin.H{"id": actionKey, "status": "running", "startsAt": now, "finishesAt": now.Add(time.Duration(durationMinutes) * time.Minute), "plan": plan}, nil)
-	})
+	private.POST("/weather/plans/:id/start", weatherPlanStartHandler(database, world))
+	private.POST("/weather/plan/:id/start", weatherPlanStartHandler(database, world))
 
 	private.GET("/weather/reports", func(c *gin.Context) {
 		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
@@ -762,8 +682,118 @@ func registerWeatherRoutes(private *gin.RouterGroup, database *gorm.DB, world *s
 			}},
 		}, nil)
 	})
+}
 
-	_ = database
+func weatherPlanStartHandler(database *gorm.DB, world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		payload := bindOptionalMap(c)
+		raw := firstNonEmptyPhase2(strings.TrimSpace(c.Param("id")), toString(payload["planId"]), toString(payload["id"]), toString(payload["actionKey"]))
+		actionKey := normalizeWeatherActionKey(raw)
+		if actionKey == "" {
+			writeWorldResponse(c, nil, badRequestError("INVALID_PLAN_ID", "Identifiant de plan invalide.", nil))
+			return
+		}
+		plan := weatherActionPlan(actionKey)
+		if len(plan) == 0 {
+			writeWorldResponse(c, nil, badRequestError("UNKNOWN_PLAN", "Plan météo inconnu.", nil))
+			return
+		}
+
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		if cooldownActive(database, c, save.PlayerID, "weather_plan_start", actionKey, 30*time.Second) {
+			writeWorldResponse(c, nil, conflictError("COOLDOWN_ACTIVE", "Plan météo en cooldown (30s).", map[string]any{"cooldownSeconds": 30}))
+			return
+		}
+		costMap, _ := plan["cost"].(gin.H)
+		creditsCost := toInt64(costMap["credits"])
+		foodCost := toInt64(costMap["food"])
+		energyCost := toInt64(costMap["energy"])
+		if save.Credits < creditsCost || save.Food < foodCost || save.Energy < energyCost {
+			writeWorldResponse(c, nil, conflictError("NOT_ENOUGH_RESOURCES", "Ressources insuffisantes pour démarrer ce plan météo.", map[string]any{
+				"missingFood":    maxInt64Phase2(0, foodCost-save.Food),
+				"missingEnergy":  maxInt64Phase2(0, energyCost-save.Energy),
+				"missingCredits": maxInt64Phase2(0, creditsCost-save.Credits),
+			}))
+			return
+		}
+		now := time.Now().UTC()
+		err = database.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(map[string]any{
+				"credits":        save.Credits - creditsCost,
+				"food":           save.Food - foodCost,
+				"energy":         save.Energy - energyCost,
+				"version":        save.Version + 1,
+				"last_synced_at": now,
+			}).Error; err != nil {
+				return err
+			}
+			return world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "weather_plan_start", "weather_plan", actionKey, "accepted", "", gin.H{"cost": costMap})
+		})
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		durationMinutes, _ := plan["durationMinutes"].(int)
+		writeWorldResponse(c, gin.H{"id": actionKey, "status": "in_progress", "startsAt": now, "finishesAt": now.Add(time.Duration(durationMinutes) * time.Minute), "plan": plan}, nil)
+	}
+}
+
+func weatherPlansHandler(database *gorm.DB, world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		plans := []gin.H{
+			weatherActionPlan("deploy-aid"),
+			weatherActionPlan("preposition-resources"),
+			weatherActionPlan("activate-defense-protocol"),
+		}
+		now := time.Now().UTC()
+		for _, plan := range plans {
+			actionKey := toString(plan["id"])
+			durationMinutes, _ := plan["durationMinutes"].(int)
+			var logEntry models.PlayerActionLog
+			err := database.WithContext(c.Request.Context()).
+				Where("player_id = ? AND action = ? AND target_id = ? AND status = ?", save.PlayerID, "weather_plan_start", actionKey, "accepted").
+				Order("created_at DESC").
+				First(&logEntry).Error
+			if err != nil || durationMinutes <= 0 {
+				plan["status"] = "available"
+				continue
+			}
+			finishesAt := logEntry.CreatedAt.UTC().Add(time.Duration(durationMinutes) * time.Minute)
+			if finishesAt.After(now) {
+				plan["status"] = "in_progress"
+				plan["startsAt"] = logEntry.CreatedAt.UTC()
+				plan["finishesAt"] = finishesAt
+				plan["remainingSeconds"] = int(finishesAt.Sub(now).Seconds())
+			} else {
+				plan["status"] = "completed"
+				plan["startsAt"] = logEntry.CreatedAt.UTC()
+				plan["finishesAt"] = finishesAt
+			}
+		}
+		writeWorldResponse(c, gin.H{"plans": plans}, nil)
+	}
+}
+
+func normalizeWeatherActionKey(raw string) string {
+	switch strings.TrimSpace(raw) {
+	case "preposition", "preposition-resources":
+		return "preposition-resources"
+	case "defense-protocol", "activate-defense-protocol":
+		return "activate-defense-protocol"
+	case "deploy-aid", "deployAid":
+		return "deploy-aid"
+	default:
+		return strings.TrimSpace(raw)
+	}
 }
 
 func isAllowedNegotiationAction(actionType string) bool {
@@ -910,6 +940,97 @@ func registerWorldRegionAndReportsRoutes(private *gin.RouterGroup, database *gor
 	private.GET("/world/conflicts/:id", getOwnedWorldEntity[models.Conflict](database, world, "conflict", "world_id = ? AND (continent_id IS NULL OR continent_id = ?)"))
 }
 
+func tradeAgreementDecisionHandler(database *gorm.DB, world *service.WorldGameService, status string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		payload := bindOptionalMap(c)
+		agreementID := strings.TrimSpace(c.Param("id"))
+		if agreementID == "" {
+			agreementID = firstNonEmptyPhase2(toString(payload["agreementId"]), toString(payload["id"]))
+		}
+		if agreementID == "" || agreementID == "Partenaire inconnu" {
+			writeWorldResponse(c, nil, badRequestError("INVALID_AGREEMENT_ID", "Identifiant d'accord invalide.", nil))
+			return
+		}
+
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		sourceLogID := uint(0)
+		rawLogID := strings.TrimPrefix(agreementID, "agr_")
+		if parsed, parseErr := strconv.ParseUint(rawLogID, 10, 64); parseErr == nil {
+			sourceLogID = uint(parsed)
+		}
+		if sourceLogID != 0 {
+			var logEntry models.PlayerActionLog
+			if err := database.WithContext(c.Request.Context()).
+				Where("id = ? AND player_id = ? AND action = ?", sourceLogID, save.PlayerID, "commerce_agreement_create").
+				First(&logEntry).Error; err == nil {
+				meta := parseJSONObject(logEntry.MetadataJSON)
+				meta["agreementStatus"] = status
+				meta["decisionAt"] = time.Now().UTC().Format(time.RFC3339)
+				if toString(payload["mode"]) != "" {
+					meta["decisionMode"] = toString(payload["mode"])
+				}
+				if encoded, marshalErr := json.Marshal(meta); marshalErr == nil {
+					_ = database.WithContext(c.Request.Context()).
+						Model(&models.PlayerActionLog{}).
+						Where("id = ?", logEntry.Id).
+						Update("metadata_json", datatypes.JSON(encoded)).Error
+				}
+			}
+		}
+		logErr := world.LogPlayerWorldAction(
+			c.Request.Context(),
+			save.PlayerID,
+			save.WorldID,
+			save.ContinentID,
+			"commerce_agreement_"+status,
+			"commerce_agreement",
+			agreementID,
+			"accepted",
+			"",
+			gin.H{"agreementId": agreementID, "agreementStatus": status, "payload": payload},
+		)
+		writeWorldResponse(c, gin.H{"status": status, "id": agreementID, "updated": logErr == nil}, logErr)
+	}
+}
+
+func tradeAgreementCreateHandler(database *gorm.DB, world *service.WorldGameService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		payload := bindOptionalMap(c)
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		payload["agreementStatus"] = "negocie"
+		actionID := stableActionID(payload)
+		err = world.LogPlayerWorldAction(c.Request.Context(), save.PlayerID, save.WorldID, save.ContinentID, "commerce_agreement_create", "commerce_agreement", actionID, "accepted", "", payload)
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		var logEntry models.PlayerActionLog
+		_ = database.WithContext(c.Request.Context()).
+			Where("player_id = ? AND action = ? AND target_id = ?", save.PlayerID, "commerce_agreement_create", actionID).
+			Order("created_at DESC").
+			First(&logEntry).Error
+		agreementID := actionID
+		if logEntry.Id != 0 {
+			agreementID = "agr_" + strconv.FormatUint(uint64(logEntry.Id), 10)
+		}
+		writeWorldResponse(c, gin.H{
+			"created":   true,
+			"id":        agreementID,
+			"actionId":  actionID,
+			"status":    "negocie",
+			"agreement": gin.H{"id": agreementID, "status": "negocie", "source": "player"},
+		}, nil)
+	}
+}
+
 // synthesizePlayerAgreementsFromLogs turns recent commerce_agreement_create logs into visible agreements for the commerce tab.
 func synthesizePlayerAgreementsFromLogs(database *gorm.DB, c *gin.Context) []gin.H {
 	playerID := currentUserID(c)
@@ -920,8 +1041,8 @@ func synthesizePlayerAgreementsFromLogs(database *gorm.DB, c *gin.Context) []gin
 	var logs []models.PlayerActionLog
 	since := time.Now().UTC().Add(-72 * time.Hour)
 	database.WithContext(c.Request.Context()).
-		Where("player_id = ? AND (action = ? OR action LIKE ?) AND created_at >= ? AND status = ?",
-			playerID, "commerce_agreement_create", "commerce_%", since, "accepted").
+		Where("player_id = ? AND action = ? AND created_at >= ?",
+			playerID, "commerce_agreement_create", since).
 		Order("created_at DESC").Limit(15).Find(&logs)
 
 	out := make([]gin.H, 0, len(logs))
@@ -937,6 +1058,7 @@ func synthesizePlayerAgreementsFromLogs(database *gorm.DB, c *gin.Context) []gin
 		if title == "" {
 			title = "Accord " + partner
 		}
+		status := firstNonEmptyPhase2(toString(meta["agreementStatus"]), "negocie")
 		aiDecision := "En cours d'analyse"
 		if risk <= 25 {
 			aiDecision = "Accord favorable"
@@ -948,7 +1070,7 @@ func synthesizePlayerAgreementsFromLogs(database *gorm.DB, c *gin.Context) []gin
 			"title":         title,
 			"partner":       partner,
 			"mode":          mode,
-			"status":        "negocie",
+			"status":        status,
 			"risk":          risk,
 			"durationH":     toInt64OrDefault(meta["durationHours"], toInt64OrDefault(meta["duration"], 24)),
 			"source":        "player",

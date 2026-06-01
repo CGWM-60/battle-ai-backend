@@ -1203,6 +1203,93 @@ func (s *WorldGameService) ClaimEvent(ctx context.Context, playerID uint, eventI
 	})
 }
 
+func (s *WorldGameService) ClaimDailyTask(ctx context.Context, playerID uint, taskID string) (*models.DailyTask, *models.PlayerSave, EventReward, error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return nil, nil, EventReward{}, fmt.Errorf("task id is required")
+	}
+	if _, err := s.EnsurePlayerSave(ctx, playerID); err != nil {
+		return nil, nil, EventReward{}, err
+	}
+
+	var task models.DailyTask
+	var save models.PlayerSave
+	reward := EventReward{}
+	now := time.Now().UTC()
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND player_id = ?", taskID, playerID).
+			First(&task).Error; err != nil {
+			return err
+		}
+		if task.Status == "claimed" {
+			return fmt.Errorf("task already claimed")
+		}
+		progress := task.Progress
+		if task.StartedAt != nil && task.DurationMinutes > 0 {
+			elapsed := now.Sub(task.StartedAt.UTC()).Minutes()
+			if elapsedProgress := elapsed / float64(task.DurationMinutes); elapsedProgress > progress {
+				progress = elapsedProgress
+			}
+		}
+		if task.Status != "completed" && progress < 0.98 {
+			return fmt.Errorf("task not ready to claim")
+		}
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("player_id = ?", playerID).
+			First(&save).Error; err != nil {
+			return err
+		}
+
+		before := save
+		reward = dailyTaskReward(task.RewardType, task.RewardAmount)
+		applyRewardToSave(&save, reward)
+		inventoryChanged, inventoryJSON, err := applyDailyTaskInventoryReward(save.InventoryJSON, task.RewardType, task.RewardAmount)
+		if err != nil {
+			return err
+		}
+		if inventoryChanged {
+			save.InventoryJSON = inventoryJSON
+		}
+		save.Version++
+		save.LastSyncedAt = &now
+
+		updates := map[string]any{
+			"xp":             save.XP,
+			"food":           save.Food,
+			"energy":         save.Energy,
+			"credits":        save.Credits,
+			"gems":           save.Gems,
+			"population":     save.Population,
+			"satisfaction":   save.Satisfaction,
+			"version":        save.Version,
+			"last_synced_at": save.LastSyncedAt,
+		}
+		if inventoryChanged {
+			updates["inventory_json"] = save.InventoryJSON
+		}
+		if err := tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(updates).Error; err != nil {
+			return err
+		}
+
+		task.Status = "claimed"
+		task.Progress = 1
+		task.CompletedAt = &now
+		if err := tx.Save(&task).Error; err != nil {
+			return err
+		}
+		return s.logPlayerActionTx(tx, playerID, &save.WorldID, &save.ContinentID, "daily_task_claim", "daily_task", taskID, "accepted", "", before, save, map[string]any{
+			"rewardType":   task.RewardType,
+			"rewardAmount": task.RewardAmount,
+			"reward":       reward,
+		})
+	})
+	if err != nil {
+		return nil, nil, reward, err
+	}
+	return &task, &save, reward, nil
+}
+
 func (s *WorldGameService) ConflictAction(ctx context.Context, playerID uint, conflictID uint, input EventActionInput) error {
 	save, err := s.EnsurePlayerSave(ctx, playerID)
 	if err != nil {
@@ -1482,26 +1569,41 @@ func (s *WorldGameService) JoinGuild(ctx context.Context, playerID uint, guildID
 	if err != nil {
 		return err
 	}
-	var guild models.Guild
-	if err := s.db.WithContext(ctx).First(&guild, guildID).Error; err != nil {
-		return err
-	}
-	if guild.WorldID != save.WorldID {
-		return fmt.Errorf("guild is not in player world")
-	}
-	var count int64
-	if err := s.db.WithContext(ctx).Model(&models.GuildMember{}).Where("guild_id = ?", guildID).Count(&count).Error; err != nil {
-		return err
-	}
-	if int(count) >= guild.MaxMembers {
-		return fmt.Errorf("guild is full")
-	}
-	return s.db.WithContext(ctx).Create(&models.GuildMember{
-		GuildID:  guildID,
-		PlayerID: playerID,
-		Role:     GuildRoleMember,
-		JoinedAt: time.Now(),
-	}).Error
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var guild models.Guild
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&guild, guildID).Error; err != nil {
+			return err
+		}
+		if guild.WorldID != save.WorldID {
+			return fmt.Errorf("guild is not in player world")
+		}
+		var existing models.GuildMember
+		if err := tx.Where("guild_id = ? AND player_id = ?", guildID, playerID).First(&existing).Error; err == nil {
+			return nil
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		var anyMembership int64
+		if err := tx.Model(&models.GuildMember{}).Where("player_id = ?", playerID).Count(&anyMembership).Error; err != nil {
+			return err
+		}
+		if anyMembership > 0 {
+			return fmt.Errorf("player is already in a guild")
+		}
+		var count int64
+		if err := tx.Model(&models.GuildMember{}).Where("guild_id = ?", guildID).Count(&count).Error; err != nil {
+			return err
+		}
+		if int(count) >= guild.MaxMembers {
+			return fmt.Errorf("guild is full")
+		}
+		return tx.Create(&models.GuildMember{
+			GuildID:  guildID,
+			PlayerID: playerID,
+			Role:     GuildRoleMember,
+			JoinedAt: time.Now(),
+		}).Error
+	})
 }
 
 func (s *WorldGameService) LeaveGuild(ctx context.Context, playerID uint, guildID uint) error {
@@ -1778,50 +1880,21 @@ func (s *WorldGameService) DonateToTreasury(ctx context.Context, playerID uint, 
 	})
 }
 
-func (s *WorldGameService) ListGuilds(ctx context.Context, playerID uint, limit int) ([]models.Guild, error) {
+func (s *WorldGameService) ListGuilds(ctx context.Context, playerID uint, continentID uint, limit int) ([]models.Guild, error) {
 	save, err := s.EnsurePlayerSave(ctx, playerID)
 	if err != nil {
 		return nil, err
 	}
+	if continentID == 0 {
+		continentID = save.ContinentID
+	}
 	var guilds []models.Guild
 	db := s.db.WithContext(ctx)
-	err = db.Preload("Members").Where("world_id = ?", save.WorldID).Order("level DESC, xp DESC").Limit(limitOrDefault(limit)).Find(&guilds).Error
-	if err != nil {
-		return nil, err
-	}
-	// Ensure at least some guilds exist in the world for diplomacy/commerce targets (no empty lists)
-	if len(guilds) == 0 {
-		samples := []struct {
-			name string
-			tag  string
-		}{
-			{"Syndicat des Marchands", "SMD"},
-			{"Alliance des Éclaireurs", "AEC"},
-			{"Confrérie Technologique", "CTK"},
-		}
-		now := time.Now().UTC()
-		for i, s := range samples {
-			g := models.Guild{
-				WorldID:       save.WorldID,
-				Name:          s.name,
-				Tag:           s.tag,
-				Description:   "Guilde générée automatiquement pour les accords diplomatiques et commerciaux.",
-				Level:         3 + i,
-				XP:            int64(1200 + i*400),
-				MaxMembers:    25,
-				Visibility:    "public",
-				RequiredLevel: 1,
-				CreatedAt:     now,
-				UpdatedAt:     now,
-			}
-			if createErr := db.Create(&g).Error; createErr != nil {
-				// ignore duplicate or constraint errors (e.g. unique name/tag per world)
-				continue
-			}
-			guilds = append(guilds, g)
-		}
-	}
-	return guilds, nil
+	query := db.Preload("Members").
+		Joins("JOIN player_saves owner_save ON owner_save.player_id = guilds.owner_player_id").
+		Where("guilds.world_id = ? AND owner_save.continent_id = ?", save.WorldID, continentID)
+	err = query.Order("guilds.level DESC, guilds.xp DESC, guilds.id DESC").Limit(limitOrDefault(limit)).Find(&guilds).Error
+	return guilds, err
 }
 
 func (s *WorldGameService) BuildingCatalog(ctx context.Context, activeOnly bool) ([]models.BuildingDefinition, error) {
@@ -3929,6 +4002,53 @@ func applyRewardToSave(save *models.PlayerSave, reward EventReward) {
 	save.Gems += reward.Gems
 	save.Population += reward.Population
 	save.Satisfaction = clamp(save.Satisfaction+reward.Satisfaction, 0, 100)
+}
+
+func dailyTaskReward(rewardType string, amount int64) EventReward {
+	switch strings.ToLower(strings.TrimSpace(rewardType)) {
+	case "xp", "experience":
+		return EventReward{XP: amount}
+	case "food":
+		return EventReward{Food: amount}
+	case "energy":
+		return EventReward{Energy: amount}
+	case "credits", "credit":
+		return EventReward{Credits: amount}
+	case "gems", "gem", "gemmes":
+		return EventReward{Gems: amount}
+	case "population":
+		return EventReward{Population: amount}
+	case "satisfaction":
+		return EventReward{Satisfaction: int(amount)}
+	default:
+		return EventReward{}
+	}
+}
+
+func applyDailyTaskInventoryReward(current datatypes.JSON, rewardType string, amount int64) (bool, datatypes.JSON, error) {
+	key := strings.ToLower(strings.TrimSpace(rewardType))
+	if key != "materials" && key != "material" && key != "rare_resources" && key != "rareresources" {
+		return false, current, nil
+	}
+	if amount <= 0 {
+		return false, current, nil
+	}
+	inventory := map[string]any{}
+	if len(current) > 0 {
+		if err := json.Unmarshal(current, &inventory); err != nil {
+			return false, current, fmt.Errorf("invalid inventory JSON: %w", err)
+		}
+	}
+	resourceKey := "materials"
+	if key == "rare_resources" || key == "rareresources" {
+		resourceKey = "rareResources"
+	}
+	inventory[resourceKey] = int64FromAny(inventory[resourceKey]) + amount
+	next, err := json.Marshal(inventory)
+	if err != nil {
+		return false, current, err
+	}
+	return true, datatypes.JSON(next), nil
 }
 
 func applyPenaltyToSave(save *models.PlayerSave, penalty EventReward) {

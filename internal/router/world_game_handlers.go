@@ -92,45 +92,21 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	})
 
 	private.POST("/player/daily-tasks/:id/claim", func(c *gin.Context) {
-		playerID := currentUserID(c)
-		taskID := c.Param("id")
-
-		var task models.DailyTask
-		if err := database.WithContext(c.Request.Context()).Where("id = ? AND player_id = ?", taskID, playerID).First(&task).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+		task, save, reward, err := world.ClaimDailyTask(c.Request.Context(), currentUserID(c), c.Param("id"))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
 			return
 		}
-
-		// Prevent double-claiming
-		if task.Status == "claimed" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "task already claimed"})
-			return
-		}
-		// Allow claim when task was started (in_progress) or explicitly completed
-		if task.Status != "in_progress" && task.Status != "completed" && task.Progress < 0.98 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "task not ready to claim"})
-			return
-		}
-		// Apply reward (simple version)
-		save, _ := world.EnsurePlayerSave(c.Request.Context(), playerID)
-		switch task.RewardType {
-		case "food":
-			save.Food += task.RewardAmount
-		case "energy":
-			save.Energy += task.RewardAmount
-		case "credits":
-			save.Credits += task.RewardAmount
-		case "xp":
-			save.XP += task.RewardAmount
-		}
-		_ = database.WithContext(c.Request.Context()).Save(&save).Error
-
-		task.Status = "claimed"
-		now := time.Now().UTC()
-		task.CompletedAt = &now
-		_ = database.WithContext(c.Request.Context()).Save(&task).Error
-
-		writeWorldResponse(c, gin.H{"success": true, "reward": gin.H{"type": task.RewardType, "amount": task.RewardAmount}}, nil)
+		writeWorldResponse(c, gin.H{
+			"success": true,
+			"task":    task,
+			"save":    save,
+			"reward": gin.H{
+				"type":   task.RewardType,
+				"amount": task.RewardAmount,
+			},
+			"rewards": reward,
+		}, nil)
 	})
 	private.POST("/player/save/sync", func(c *gin.Context) {
 		var input service.PlayerSaveSyncInput
@@ -1237,8 +1213,7 @@ func commerceRoutesFromConflicts(database *gorm.DB, ctx contextLike, conflicts [
 }
 
 // playerInitiatedCommerceRoutes reads recent PlayerActionLog entries for commerce actions
-// (newAgreement, create route, optimize, etc.) and turns them into visible simulated routes.
-// This is what makes player commerce actions feel "real" in the UI lists.
+// (newAgreement, create route, optimize, etc.) and exposes the player-created routes in UI lists.
 func playerInitiatedCommerceRoutes(database *gorm.DB, ctx context.Context, playerID uint) []gin.H {
 	if playerID == 0 {
 		return nil
@@ -1813,7 +1788,13 @@ func streamChatChannel(world *service.WorldGameService, channel string) gin.Hand
 
 func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *service.WorldGameService) {
 	private.GET("/guilds", func(c *gin.Context) {
-		guilds, err := world.ListGuilds(c.Request.Context(), currentUserID(c), limitFromQuery(c))
+		continentID := uint(0)
+		if raw := strings.TrimSpace(c.Query("continentId")); raw != "" {
+			if parsed, parseErr := strconv.ParseUint(raw, 10, 64); parseErr == nil {
+				continentID = uint(parsed)
+			}
+		}
+		guilds, err := world.ListGuilds(c.Request.Context(), currentUserID(c), continentID, limitFromQuery(c))
 		writeWorldResponse(c, gin.H{"guilds": guilds}, err)
 	})
 	private.POST("/guilds", func(c *gin.Context) {
@@ -1823,7 +1804,10 @@ func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 			return
 		}
 		guild, err := world.CreateGuild(c.Request.Context(), currentUserID(c), input)
-		writeWorldResponse(c, guild, err)
+		if err == nil {
+			_ = database.WithContext(c.Request.Context()).Preload("Members").First(guild, guild.Id).Error
+		}
+		writeWorldResponse(c, gin.H{"guild": guild, "joined": err == nil}, err)
 	})
 	private.GET("/guilds/:id", getOwnedGuild(database, world))
 	private.POST("/guilds/:id/join", func(c *gin.Context) {
@@ -1832,7 +1816,8 @@ func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
 			return
 		}
-		writeWorldResponse(c, gin.H{"joined": true}, world.JoinGuild(c.Request.Context(), currentUserID(c), id))
+		err = world.JoinGuild(c.Request.Context(), currentUserID(c), id)
+		writeWorldResponse(c, gin.H{"joined": err == nil, "guildId": id}, err)
 	})
 	private.POST("/guilds/:id/leave", func(c *gin.Context) {
 		id, err := parseUintParam(c, "id")
@@ -1903,16 +1888,24 @@ func registerGuildRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid guild id"})
 			return
 		}
-		// For now return a stub - will be replaced by real GuildTreasury service
-		writeWorldResponse(c, gin.H{
-			"guildId":       id,
-			"credits":       12450,
-			"food":          8320,
-			"energy":        4100,
-			"materials":     2890,
-			"rareResources": 120,
-			"influence":     350,
-		}, nil)
+		var membership int64
+		if err := database.WithContext(c.Request.Context()).Model(&models.GuildMember{}).
+			Where("guild_id = ? AND player_id = ?", id, currentUserID(c)).
+			Count(&membership).Error; err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		if membership == 0 {
+			writeWorldResponse(c, nil, forbiddenError("GUILD_MEMBERSHIP_REQUIRED", "Vous devez être membre de cette guilde.", nil))
+			return
+		}
+		var treasury models.GuildTreasury
+		err = database.WithContext(c.Request.Context()).Where("guild_id = ?", id).First(&treasury).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			treasury = models.GuildTreasury{GuildID: id}
+			err = nil
+		}
+		writeWorldResponse(c, treasury, err)
 	})
 
 	private.POST("/guilds/:id/treasury/donate", func(c *gin.Context) {
