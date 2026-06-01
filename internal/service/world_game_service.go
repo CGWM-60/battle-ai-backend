@@ -329,12 +329,12 @@ func NewWorldGameService(db *gorm.DB) *WorldGameService {
 	return &WorldGameService{
 		db:                db,
 		resourceEngine:    resources.NewEngine(db),
-		economyEngine:     economy.NewEngine(db), // now supports tax/loan persistence
-		populationEngine:  population.NewEngine(db), // now supports persistence sketches
+		economyEngine:     economy.NewEngine(db),
+		populationEngine:  population.NewEngine(db),
 		pvpEngine:         pvp.NewEngine(db),
-		marketEngine:      market.NewEngine(db), // now supports offer persistence
-		leaderboardEngine: leaderboard.NewEngine(),
-		policyEngine:      policies.NewEngine(),
+		marketEngine:      market.NewEngine(db),
+		leaderboardEngine: leaderboard.NewEngineWithDB(db),
+		policyEngine:      policies.NewEngineWithDB(db),
 	}
 }
 
