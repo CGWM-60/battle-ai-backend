@@ -307,14 +307,15 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"collected": collected}, nil)
 	})
 
-	// Policies - now calls real policy engine
+	// Policies - activation now goes through the service (which has the real DB-wired engine)
 	private.POST("/city/policies/activate", func(c *gin.Context) {
 		var body struct { PolicyKey string `json:"policy_key"` }
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(400, gin.H{"error": "invalid body"})
 			return
 		}
-		err := policyEngine.Activate(c.Request.Context(), currentUserID(c), body.PolicyKey)
+
+		err := world.ActivatePolicy(c.Request.Context(), currentUserID(c), body.PolicyKey)
 		writeWorldResponse(c, gin.H{"activated": body.PolicyKey}, err)
 	})
 

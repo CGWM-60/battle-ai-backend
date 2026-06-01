@@ -78,6 +78,14 @@ type WorldGameService struct {
 	policyEngine     *policies.Engine
 }
 
+// ActivatePolicy is exposed so handlers can trigger real policy activation with DB persistence.
+func (s *WorldGameService) ActivatePolicy(ctx context.Context, playerID uint, policyKey string) error {
+	if s.policyEngine != nil {
+		return s.policyEngine.Activate(ctx, playerID, policyKey)
+	}
+	return fmt.Errorf("policy engine not available")
+}
+
 type PlayerSaveSyncInput struct {
 	CityName              string         `json:"cityName"`
 	CityLevel             int            `json:"cityLevel"`
