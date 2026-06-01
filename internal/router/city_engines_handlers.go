@@ -73,15 +73,15 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"ok": true, "newRate": body.Rate}, nil)
 	})
 
-	// Economy loan - real engine
+	// Economy loan - real engine via service (has DB)
 	private.POST("/city/economy/loan/request", func(c *gin.Context) {
 		var body struct{ Amount float64 `json:"amount"` }
 		c.ShouldBindJSON(&body)
-		_ = econEngine.RequestLoan(c.Request.Context(), currentUserID(c), body.Amount)
-		writeWorldResponse(c, gin.H{"ok": true}, nil)
+		err := world.RequestLoan(c.Request.Context(), currentUserID(c), body.Amount)
+		writeWorldResponse(c, gin.H{"ok": true}, err)
 	})
 	private.POST("/city/economy/loan/repay", func(c *gin.Context) {
-		err := econEngine.RepayLoan(c.Request.Context(), currentUserID(c))
+		err := world.RepayLoan(c.Request.Context(), currentUserID(c))
 		writeWorldResponse(c, gin.H{"ok": err == nil}, err)
 	})
 

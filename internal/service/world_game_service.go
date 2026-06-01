@@ -86,6 +86,22 @@ func (s *WorldGameService) ActivatePolicy(ctx context.Context, playerID uint, po
 	return fmt.Errorf("policy engine not available")
 }
 
+// RequestLoan is exposed for the loan system (adds credits and records debt).
+func (s *WorldGameService) RequestLoan(ctx context.Context, playerID uint, amount float64) error {
+	if s.economyEngine != nil {
+		return s.economyEngine.RequestLoan(ctx, playerID, amount)
+	}
+	return fmt.Errorf("economy engine not available")
+}
+
+// RepayLoan is exposed for the loan system.
+func (s *WorldGameService) RepayLoan(ctx context.Context, playerID uint) error {
+	if s.economyEngine != nil {
+		return s.economyEngine.RepayLoan(ctx, playerID)
+	}
+	return fmt.Errorf("economy engine not available")
+}
+
 type PlayerSaveSyncInput struct {
 	CityName              string         `json:"cityName"`
 	CityLevel             int            `json:"cityLevel"`
