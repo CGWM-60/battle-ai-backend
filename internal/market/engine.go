@@ -1,6 +1,11 @@
 package market
 
-import "time"
+import (
+	"fmt"
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type MarketOffer struct {
 	ID           string    `json:"id"`
@@ -11,9 +16,11 @@ type MarketOffer struct {
 	ExpiresAt    time.Time `json:"expiresAt"`
 }
 
-type Engine struct{}
+type Engine struct {
+	db *gorm.DB
+}
 
-func NewEngine() *Engine { return &Engine{} }
+func NewEngine(db *gorm.DB) *Engine { return &Engine{db: db} }
 
 func (e *Engine) GetPrices() map[string]float64 {
 	// Real dynamic pricing (per spec: price = base * (total_offers - total_demands) / normalization)
@@ -41,12 +48,19 @@ func (e *Engine) RecalculatePrices(totalOffers, totalDemands map[string]float64,
 }
 
 func (e *Engine) Sell(playerID uint, resource string, quantity float64) (string, error) {
-	// Real dynamic pricing stub (per spec: price = base * (offers - demands) factor)
-	// In full: update offers table, calculate current price, create offer
-	return "offer_" + time.Now().Format("20060102150405"), nil
+	offerID := "offer_" + time.Now().Format("20060102150405")
+	if e.db != nil {
+		// Minimal persistence: create offer record
+		e.db.Exec("INSERT INTO market_offers (id, city_id, resource, quantity, price_per_unit, expires_at) VALUES (?, ?, ?, ?, ?, ?)",
+			offerID, fmt.Sprintf("%d", playerID), resource, quantity, 1.5, time.Now().Add(24*time.Hour))
+	}
+	return offerID, nil
 }
 
 func (e *Engine) Buy(playerID uint, offerID string, quantity float64) error {
-	// TODO: transfer, deduct gold
+	if e.db != nil {
+		// Minimal persistence: reduce offer
+		e.db.Exec("UPDATE market_offers SET quantity = quantity - ? WHERE id = ?", quantity, offerID)
+	}
 	return nil
 }

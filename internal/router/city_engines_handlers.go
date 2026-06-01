@@ -23,7 +23,7 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	// City engines (real wiring)
 	resEngine := resources.NewEngine(nil)
 	econEngine := economy.NewEngine(nil) // db passed via service in full wiring; persistence active when using service instance
-	marketEng := market.NewEngine()
+	marketEng := market.NewEngine(nil) // db via service; persistence active in service instance
 	leaderboardEng := leaderboard.NewEngine()
 	pvpEngine := pvp.NewEngine()
 	policyEngine := policies.NewEngine()

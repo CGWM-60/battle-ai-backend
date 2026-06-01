@@ -332,7 +332,7 @@ func NewWorldGameService(db *gorm.DB) *WorldGameService {
 		economyEngine:     economy.NewEngine(db), // now supports tax/loan persistence
 		populationEngine:  population.NewEngine(db), // now supports persistence sketches
 		pvpEngine:         pvp.NewEngine(),
-		marketEngine:      market.NewEngine(),
+		marketEngine:      market.NewEngine(db), // now supports offer persistence
 		leaderboardEngine: leaderboard.NewEngine(),
 		policyEngine:      policies.NewEngine(),
 	}
