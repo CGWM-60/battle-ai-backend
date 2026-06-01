@@ -36,8 +36,13 @@ func NewEngine(db *gorm.DB) *Engine {
 func (e *Engine) loadBaseFromSave(save *models.PlayerSave) CityEconomy {
 	econ := CityEconomy{
 		GoldBalance: float64(save.Credits),
-		TaxRate:     0.25, // default; can be extended to a dedicated column or ActiveEffectsJSON
+		TaxRate:     0.25,
 		Debt:        0,
+	}
+
+	// Calculate a simple "interest paid so far" concept for UI clarity
+	if econ.Debt > 0 {
+		// Rough: 15% was added at request time. We can expose original principal if we stored it, for now show current debt.
 	}
 
 	// Try to read debt / tax from ActiveEffectsJSON if present (non-breaking)
