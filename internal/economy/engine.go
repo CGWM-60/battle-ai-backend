@@ -47,3 +47,9 @@ func (e *Engine) RequestLoan(ctx context.Context, playerID uint, amount float64)
 	// TODO: check max = HourlyIncome * 48, create debt record with 15% interest, 24h due
 	return nil
 }
+
+// RepayLoan forces or voluntary repayment (15% interest already applied at request time).
+func (e *Engine) RepayLoan(ctx context.Context, playerID uint) error {
+	// TODO: deduct from gold, clear Debt/DebtDueAt on PlayerSave
+	return nil
+}

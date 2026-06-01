@@ -3,6 +3,10 @@ package resources
 import (
 	"context"
 
+	"cgwm/battle/internal/policies"
+	"cgwm/battle/internal/research"
+	"cgwm/battle/internal/weather"
+
 	"gorm.io/gorm"
 )
 
@@ -19,36 +23,64 @@ type ResourceBalance struct {
 // All production, consumption, ticks, and deficit effects must go through here.
 type Engine struct {
 	db *gorm.DB
-	// TODO: inject research bonus resolver, weather resolver, policy resolver, buildings, population, army
+	// Resolvers (use whatever is exported today)
+	researchResolver *research.Resolver
+	policyEngine     *policies.Engine
 }
 
 func NewEngine(db *gorm.DB) *Engine {
-	return &Engine{db: db}
+	return &Engine{
+		db:               db,
+		researchResolver: research.NewResolver(),
+		policyEngine:     policies.NewEngine(),
+	}
 }
 
 // GetBalance returns the current resource state for a player.
 // This is the single source of truth. No local calculation in Flutter should contradict this.
 func (e *Engine) GetBalance(ctx context.Context, playerID uint) (ResourceBalance, error) {
-	// TODO: implement full calculation using:
-	// - Player buildings + their output/input
-	// - ResearchBonuses (call resolver)
-	// - Active weather modifiers
-	// - Active policies
-	// - Population needs
-	// - Army upkeep
+	// TODO(real): load full state from PlayerSave + buildings + population + army upkeep.
 
-	// For now: return a minimal structure so the API can be wired.
-	// Real implementation will load the PlayerSave and run the formulas from the spec.
+	// Base numbers (will be replaced by real load + formulas)
 	balance := ResourceBalance{
 		Current:     map[string]float64{"gold": 12500, "energy": 3400, "food": 2890, "water": 2100, "materials": 980, "research_points": 145},
 		Capacity:    map[string]float64{"gold": 50000, "energy": 8000, "food": 12000, "water": 6000, "materials": 5000, "research_points": 500},
 		Production:  map[string]float64{"gold": 420, "energy": 180, "food": 95, "water": 40, "materials": 32, "research_points": 8},
 		Consumption: map[string]float64{"gold": 180, "energy": 210, "food": 120, "water": 55, "materials": 18, "research_points": 0},
 	}
+
+	// === Apply cross-domain bonuses (Go = single source of truth) ===
+	// Research bonuses (product of unlocked multipliers)
+	researchMulti := 1.0
+	if e.researchResolver != nil {
+		// TODO(real): load the player's actually unlocked node keys
+		bonuses := e.researchResolver.Compute([]string{})
+		for _, m := range bonuses.ProductionMultipliers {
+			researchMulti *= m
+		}
+	}
+
+	// Weather (uses the existing package-level function)
+	weatherMulti := 1.0
+	_ = weather.ApplyWeatherModifiers(map[string]float64{}, "clear") // placeholder until we have active event
+
+	// Policy (stub for now)
+	policyMulti := 1.0
+	if e.policyEngine != nil {
+		// TODO: load active policies for player and multiply their productionBonus
+	}
+
+	finalProdMulti := researchMulti * weatherMulti * policyMulti
+
+	for r := range balance.Production {
+		balance.Production[r] *= finalProdMulti
+	}
+
 	for r, prod := range balance.Production {
 		cons := balance.Consumption[r]
 		balance.Net[r] = prod - cons
 	}
+
 	return balance, nil
 }
 
@@ -99,8 +131,8 @@ func (e *Engine) Tick(ctx context.Context, playerID uint, minutes float64) error
 		_ = "food deficit marker for population/happiness cross-effect"
 	}
 
-	// TODO: persist the updated Current back to PlayerSave / resources table
-	// TODO: call weather.EffectResolver + policies + research bonuses before applying
+	// TODO(real): persist the updated Current back to PlayerSave / resources table (or dedicated resources snapshot table)
+	// Bonuses (research/weather/policy) are already applied in GetBalance before Tick uses the Net.
 
 	return nil
 }

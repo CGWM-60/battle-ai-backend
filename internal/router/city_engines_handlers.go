@@ -7,6 +7,7 @@ import (
 	"cgwm/battle/internal/economy"
 	"cgwm/battle/internal/leaderboard"
 	"cgwm/battle/internal/market"
+	"cgwm/battle/internal/policies"
 	"cgwm/battle/internal/pvp"
 	"cgwm/battle/internal/resources"
 	"cgwm/battle/internal/service"
@@ -23,6 +24,7 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	marketEng := market.NewEngine()
 	leaderboardEng := leaderboard.NewEngine()
 	pvpEngine := pvp.NewEngine()
+	policyEngine := policies.NewEngine() // for /city/policies/activate + expiry in scheduler
 
 	private.GET("/city/resources", func(c *gin.Context) {
 		balance, err := resEngine.GetBalance(c.Request.Context(), currentUserID(c))
@@ -64,8 +66,8 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"ok": true}, nil)
 	})
 	private.POST("/city/economy/loan/repay", func(c *gin.Context) {
-		// TODO: confirm exact method name on economy.Engine (RepayLoan / Repay etc.)
-		writeWorldResponse(c, gin.H{"ok": true}, nil)
+		err := econEngine.RepayLoan(c.Request.Context(), currentUserID(c))
+		writeWorldResponse(c, gin.H{"ok": err == nil}, err)
 	})
 
 	// Market buy/sell - real engine
@@ -127,11 +129,16 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"entries": entries}, nil)
 	})
 
-	// Policies activation with basic effect stub
+	// Policies - now calls real policy engine (effects should be applied cross-domain by other engines on next tick)
 	private.POST("/city/policies/activate", func(c *gin.Context) {
 		var body struct { PolicyKey string `json:"policy_key"` }
-		c.ShouldBindJSON(&body)
-		// TODO: apply effects via policies engine + weather resolver etc.
-		writeWorldResponse(c, gin.H{"activated": body.PolicyKey, "effects_applied": true}, nil)
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(400, gin.H{"error": "invalid body"})
+			return
+		}
+		// Note: full effect application + cost deduction happens inside policyEngine.Activate
+		// and is picked up by resources/population/army on next Get/Tick.
+		err := policyEngine.Activate(c.Request.Context(), currentUserID(c), body.PolicyKey)
+		writeWorldResponse(c, gin.H{"activated": body.PolicyKey}, err)
 	})
 }
