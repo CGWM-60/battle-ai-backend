@@ -10,6 +10,7 @@ import (
 type MarketOffer struct {
 	ID           string    `json:"id"`
 	CityID       string    `json:"cityId"`
+	Source       string    `json:"source"` // "ia_global" | "player"
 	Resource     string    `json:"resource"`
 	Quantity     float64   `json:"quantity"`
 	PricePerUnit float64   `json:"pricePerUnit"`
@@ -63,4 +64,33 @@ func (e *Engine) Buy(playerID uint, offerID string, quantity float64) error {
 		e.db.Exec("UPDATE market_offers SET quantity = quantity - ? WHERE id = ?", quantity, offerID)
 	}
 	return nil
+}
+
+// GetIAMarketOffers generates a list of offers from the Global Evil AI Market.
+// This is the "marché de l'IA méchant mondial" the user asked for.
+func (e *Engine) GetIAMarketOffers() []MarketOffer {
+	basePrices := e.GetPrices()
+	now := time.Now().UTC()
+
+	offers := []MarketOffer{}
+	resources := []string{"gold", "energy", "food", "water", "materials", "research_points"}
+
+	for _, res := range resources {
+		base := basePrices[res]
+		// IA sells at a premium (20-40% markup) but with decent quantity
+		price := base * (1.0 + 0.25 + (float64(len(res)%3) * 0.05)) // small variation
+		qty := 500.0 + float64((len(res)*37)%300) // between ~500 and 800
+
+		offers = append(offers, MarketOffer{
+			ID:           "ia_" + res,
+			CityID:       "ia_global",
+			Source:       "ia_global",
+			Resource:     res,
+			Quantity:     qty,
+			PricePerUnit: price,
+			ExpiresAt:    now.Add(48 * time.Hour),
+		})
+	}
+
+	return offers
 }

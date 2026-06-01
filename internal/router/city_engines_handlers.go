@@ -403,8 +403,16 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		}, nil)
 	})
 
-	// TODO: implement real market offers listing
+	// Market offers: IA Global Market + Player offers (from continents)
 	private.GET("/market/offers", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"offers": []any{}}, nil)
+		iaOffers := marketEng.GetIAMarketOffers()
+
+		// For now player offers are empty (Sell inserts into DB but we don't query them yet).
+		// Later we will load real player offers from the market table.
+		playerOffers := []market.MarketOffer{}
+
+		allOffers := append(iaOffers, playerOffers...)
+
+		writeWorldResponse(c, gin.H{"offers": allOffers}, nil)
 	})
 }
