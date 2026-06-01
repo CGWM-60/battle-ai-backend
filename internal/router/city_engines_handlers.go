@@ -105,9 +105,15 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"ok": true}, nil)
 	})
 
-	// Policies available (static for now, real list can come from policyEngine)
+	// Policies available - now returns proper objects so the dialog can show names
 	private.GET("/city/policies/available", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"policies": []string{"city_festival", "austerity", "war_economy", "harvest_boost"}}, nil)
+		policies := []gin.H{
+			{"key": "city_festival", "name": "Festival de la ville", "description": "+20 bonheur temporaire"},
+			{"key": "austerity", "name": "Austérité", "description": "-15 bonheur, +revenu fiscal"},
+			{"key": "war_economy", "name": "Économie de guerre", "description": "Bonus armée"},
+			{"key": "harvest_boost", "name": "Boost récolte", "description": "+production nourriture"},
+		}
+		writeWorldResponse(c, gin.H{"policies": policies}, nil)
 	})
 
 	// PvP routes - real engine + research (product of unlocked nodes) + army state when available
@@ -318,7 +324,7 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 
 	// TODO: implement real active policies list
 	private.GET("/city/policies/active", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"active": []any{}}, nil)
+		writeWorldResponse(c, gin.H{"policies": []any{}}, nil)
 	})
 
 	// TODO: implement real market offers listing
