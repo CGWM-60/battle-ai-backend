@@ -26,9 +26,8 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	leaderboardEng := leaderboard.NewEngine()
 	pvpEngine := pvp.NewEngine(nil) // real db wiring via service for scheduler/ticks; handlers use direct for now (improves with army service)
 	policyEngine := policies.NewEngine()
-	popEngine := population.NewEngine(nil) // db passed from service in full wiring
+	popEngine := population.NewEngine(nil)     // db passed from service in full wiring
 	researchResolver := research.NewResolver() // for /research/bonuses
-
 
 	private.GET("/city/resources", func(c *gin.Context) {
 		defer func() {
@@ -73,7 +72,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 
 	// Economy loan - real engine via service (has DB)
 	private.POST("/city/economy/loan/request", func(c *gin.Context) {
-		var body struct{ Amount float64 `json:"amount"` }
+		var body struct {
+			Amount float64 `json:"amount"`
+		}
 		c.ShouldBindJSON(&body)
 		err := world.RequestLoan(c.Request.Context(), currentUserID(c), body.Amount)
 		writeWorldResponse(c, gin.H{"ok": true}, err)
@@ -91,38 +92,8 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		}
 		c.ShouldBindJSON(&body)
 		uid := currentUserID(c)
-		save, _ := world.EnsurePlayerSave(c.Request.Context(), uid)
-		continentStr := ""
-		if save != nil {
-			continentStr = fmt.Sprintf("%d", save.ContinentID)
-		}
-		offerID, _ := marketEng.Sell(uid, body.Resource, body.Quantity, continentStr)
-
-		// Deduct from player's actual resources (in-memory on the loaded save for this response).
-		// Full persistence + InventoryJSON sync happens in a follow-up wave.
-		// This unblocks the sell dialog + flow (choose resource -> amount -> sell).
-		if save != nil && body.Quantity > 0 {
-			q := int64(body.Quantity)
-			switch body.Resource {
-			case "gold", "credits":
-				if save.Credits >= q {
-					save.Credits -= q
-				}
-			case "food":
-				if save.Food >= q {
-					save.Food -= q
-				}
-			case "energy":
-				if save.Energy >= q {
-					save.Energy -= q
-				}
-			}
-			// Persistence of deduction is best-effort here (the offer is created).
-			// Full inventory sync + tx will be in the resources engine wave.
-			_, _ = world.EnsurePlayerSave(c.Request.Context(), uid) // touch to keep consistent
-		}
-
-		writeWorldResponse(c, gin.H{"offer_id": offerID}, nil)
+		offerID, err := world.SellResourceOnContinentMarket(c.Request.Context(), uid, body.Resource, body.Quantity)
+		writeWorldResponse(c, gin.H{"offer_id": offerID}, err)
 	})
 	private.POST("/market/buy", func(c *gin.Context) {
 		var body struct {
@@ -168,7 +139,7 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	})
 	private.POST("/pvp/simulate", func(c *gin.Context) {
 		var body struct {
-			TargetCityID string `json:"target_city_id"`
+			TargetCityID string         `json:"target_city_id"`
 			Units        map[string]int `json:"units"`
 		}
 		_ = c.ShouldBindJSON(&body)
@@ -225,9 +196,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		// Minimal real side-effect persistence for this wave (loot + shield note)
 		// Full tx + army health update + battle_log row done in later fidelity pass
 		writeWorldResponse(c, gin.H{
-			"result":    result,
-			"battle_id": fmt.Sprintf("battle_%d", time.Now().Unix()),
-			"shield_until": result.ExecutedAt.Add(4 * time.Hour).Format(time.RFC3339),
+			"result":         result,
+			"battle_id":      fmt.Sprintf("battle_%d", time.Now().Unix()),
+			"shield_until":   result.ExecutedAt.Add(4 * time.Hour).Format(time.RFC3339),
 			"cooldown_until": result.ExecutedAt.Add(2 * time.Hour).Format(time.RFC3339),
 		}, nil)
 	})
@@ -246,9 +217,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	private.GET("/pvp/battles", func(c *gin.Context) {
 		battles := []gin.H{
 			{
-				"id":               "b1",
-				"attackerCityId":   "c1",
-				"defenderCityId":   "c2",
+				"id":             "b1",
+				"attackerCityId": "c1",
+				"defenderCityId": "c2",
 				"result": map[string]any{
 					"winner":         "attacker",
 					"attackerLosses": 120,
@@ -258,9 +229,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 				"executedAt": time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
 			},
 			{
-				"id":               "b2",
-				"attackerCityId":   "c3",
-				"defenderCityId":   "c1",
+				"id":             "b2",
+				"attackerCityId": "c3",
+				"defenderCityId": "c1",
 				"result": map[string]any{
 					"winner":         "defender",
 					"attackerLosses": 890,
@@ -277,9 +248,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	private.GET("/pvp/battles/:id", func(c *gin.Context) {
 		id := c.Param("id")
 		writeWorldResponse(c, gin.H{
-			"id":               id,
-			"attackerCityId":   "c1",
-			"defenderCityId":   "c2",
+			"id":             id,
+			"attackerCityId": "c1",
+			"defenderCityId": "c2",
 			"result": map[string]any{
 				"winner":         "attacker",
 				"attackerLosses": 120,
@@ -375,7 +346,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	})
 	private.POST("/buildings/:id/toggle", func(c *gin.Context) {
 		id := c.Param("id")
-		var body struct{ Active bool `json:"active"` }
+		var body struct {
+			Active bool `json:"active"`
+		}
 		c.ShouldBindJSON(&body)
 		writeWorldResponse(c, gin.H{"id": id, "active": body.Active}, nil)
 	})
@@ -387,7 +360,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 
 	// Policies - activation now goes through the service (which has the real DB-wired engine)
 	private.POST("/city/policies/activate", func(c *gin.Context) {
-		var body struct { PolicyKey string `json:"policy_key"` }
+		var body struct {
+			PolicyKey string `json:"policy_key"`
+		}
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(400, gin.H{"error": "invalid body"})
 			return
@@ -476,9 +451,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		}
 
 		writeWorldResponse(c, gin.H{
-			"policies":           activePolicies,
-			"currentActive":      len(activePolicies),
-			"maxActivePolicies":  2, // exposed so UI can show the limit
+			"policies":          activePolicies,
+			"currentActive":     len(activePolicies),
+			"maxActivePolicies": 2, // exposed so UI can show the limit
 		}, nil)
 	})
 

@@ -69,13 +69,13 @@ type WorldGameService struct {
 	db *gorm.DB
 
 	// City engines for real ticks (wired this wave toward 100%)
-	resourceEngine   *resources.Engine
-	economyEngine    *economy.Engine
-	populationEngine *population.Engine
-	pvpEngine        *pvp.Engine
-	marketEngine     *market.Engine
+	resourceEngine    *resources.Engine
+	economyEngine     *economy.Engine
+	populationEngine  *population.Engine
+	pvpEngine         *pvp.Engine
+	marketEngine      *market.Engine
 	leaderboardEngine *leaderboard.Engine
-	policyEngine     *policies.Engine
+	policyEngine      *policies.Engine
 }
 
 // ActivatePolicy is exposed so handlers can trigger real policy activation with DB persistence.
@@ -110,6 +110,146 @@ func (s *WorldGameService) GetEconomyEngine() *economy.Engine {
 // GetMarketEngine returns the properly DB-wired market engine (single source of truth for offers).
 func (s *WorldGameService) GetMarketEngine() *market.Engine {
 	return s.marketEngine
+}
+
+// SellResourceOnContinentMarket validates and deducts a player resource before
+// publishing the offer on the player's continent market.
+func (s *WorldGameService) SellResourceOnContinentMarket(ctx context.Context, playerID uint, resource string, quantity float64) (string, error) {
+	if s.marketEngine == nil {
+		return "", fmt.Errorf("market engine not available")
+	}
+	normalizedResource := normalizeMarketResource(resource)
+	if normalizedResource == "" {
+		return "", fmt.Errorf("resource is required")
+	}
+	if quantity <= 0 {
+		return "", fmt.Errorf("quantity must be greater than zero")
+	}
+
+	amount := int64(quantity)
+	if float64(amount) < quantity {
+		amount++
+	}
+	if amount <= 0 {
+		return "", fmt.Errorf("quantity must be greater than zero")
+	}
+
+	var offerID string
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var save models.PlayerSave
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("player_id = ?", playerID).
+			First(&save).Error; err != nil {
+			return err
+		}
+
+		inventory := map[string]float64{}
+		if len(save.InventoryJSON) > 0 {
+			_ = json.Unmarshal(save.InventoryJSON, &inventory)
+		}
+		if err := deductMarketResource(&save, inventory, normalizedResource, amount); err != nil {
+			return err
+		}
+
+		inventory["gold"] = float64(save.Credits)
+		inventory["credits"] = float64(save.Credits)
+		inventory["food"] = float64(save.Food)
+		inventory["energy"] = float64(save.Energy)
+		inventory["gems"] = float64(save.Gems)
+		inventoryJSON, _ := json.Marshal(inventory)
+
+		now := time.Now()
+		save.Version++
+		save.LastSyncedAt = &now
+		if err := tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(map[string]any{
+			"food":           save.Food,
+			"energy":         save.Energy,
+			"credits":        save.Credits,
+			"gems":           save.Gems,
+			"inventory_json": datatypes.JSON(inventoryJSON),
+			"version":        save.Version,
+			"last_synced_at": now,
+		}).Error; err != nil {
+			return err
+		}
+
+		price := s.marketEngine.GetPrices()[normalizedResource]
+		if price <= 0 {
+			price = 1.5
+		}
+		offerID = fmt.Sprintf("offer_%d_%d", playerID, now.UnixNano())
+		if err := tx.AutoMigrate(&models.MarketOffer{}); err != nil {
+			return err
+		}
+		return tx.Create(&models.MarketOffer{
+			ID:           offerID,
+			CityID:       fmt.Sprintf("%d", playerID),
+			Source:       "player",
+			ContinentID:  fmt.Sprintf("%d", save.ContinentID),
+			Direction:    "sell",
+			Resource:     normalizedResource,
+			Quantity:     float64(amount),
+			PricePerUnit: price,
+			ExpiresAt:    now.Add(24 * time.Hour),
+		}).Error
+	})
+	if err != nil {
+		return "", err
+	}
+	return offerID, nil
+}
+
+func normalizeMarketResource(resource string) string {
+	switch strings.TrimSpace(strings.ToLower(resource)) {
+	case "gold", "credit", "credits", "coin", "coins":
+		return "gold"
+	case "food", "nourriture":
+		return "food"
+	case "energy", "energie", "énergie":
+		return "energy"
+	case "gem", "gems", "gemme", "gemmes":
+		return "gems"
+	case "material", "materials", "materiaux", "matériaux":
+		return "materials"
+	case "water", "eau":
+		return "water"
+	case "research_points", "researchpoints":
+		return "research_points"
+	default:
+		return strings.TrimSpace(strings.ToLower(resource))
+	}
+}
+
+func deductMarketResource(save *models.PlayerSave, inventory map[string]float64, resource string, amount int64) error {
+	switch resource {
+	case "gold":
+		if save.Credits < amount {
+			return fmt.Errorf("stock insuffisant: credits")
+		}
+		save.Credits -= amount
+	case "food":
+		if save.Food < amount {
+			return fmt.Errorf("stock insuffisant: food")
+		}
+		save.Food -= amount
+	case "energy":
+		if save.Energy < amount {
+			return fmt.Errorf("stock insuffisant: energy")
+		}
+		save.Energy -= amount
+	case "gems":
+		if save.Gems < amount {
+			return fmt.Errorf("stock insuffisant: gems")
+		}
+		save.Gems -= amount
+	default:
+		current := inventory[resource]
+		if current < float64(amount) {
+			return fmt.Errorf("stock insuffisant: %s", resource)
+		}
+		inventory[resource] = current - float64(amount)
+	}
+	return nil
 }
 
 type PlayerSaveSyncInput struct {
@@ -1059,6 +1199,53 @@ func (s *WorldGameService) ListWorldEvents(ctx context.Context, worldID uint, co
 	}
 
 	return append(active, inactive...), nil
+}
+
+func (s *WorldGameService) EnsureFreshWorldEvents(ctx context.Context, worldID uint, continentID uint) error {
+	if _, err := s.UpdateWorldEvents(ctx); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	var activeCount int64
+	if err := s.db.WithContext(ctx).Model(&models.GameEvent{}).
+		Where("world_id = ? AND status = ? AND (continent_id IS NULL OR continent_id = ?) AND starts_at <= ? AND ends_at >= ?",
+			worldID, EventStatusActive, continentID, now, now).
+		Count(&activeCount).Error; err != nil {
+		return err
+	}
+	if activeCount > 0 {
+		return nil
+	}
+
+	continent := continentID
+	title := fmt.Sprintf("Signal NEXUS %s", now.Format("15:04"))
+	event := &models.GameEvent{
+		WorldID:          worldID,
+		ContinentID:      &continent,
+		Title:            title,
+		Description:      "Une nouvelle opportunite tactique vient d'apparaitre sur votre continent.",
+		Type:             "quest",
+		Difficulty:       "medium",
+		Status:           EventStatusActive,
+		StartsAt:         now,
+		EndsAt:           now.Add(90 * time.Minute),
+		DurationMinutes:  90,
+		RewardsJSON:      mustJSON(map[string]any{"credits": 500, "xp": 50}),
+		RequirementsJSON: emptyJSONObject,
+		ConsequencesJSON: emptyJSONObject,
+		CreatedByAI:      true,
+	}
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.validateGameEventTx(tx, event, nil); err != nil {
+			return err
+		}
+		return tx.Create(event).Error
+	})
+	if err != nil && (strings.Contains(err.Error(), "maximum 4 events") || strings.Contains(err.Error(), "overlaps")) {
+		return nil
+	}
+	return err
 }
 
 func (s *WorldGameService) ListWorldConflicts(ctx context.Context, worldID uint, continentID uint, limit int) ([]models.Conflict, error) {

@@ -223,6 +223,9 @@ func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 		writeWorldResponse(c, metrics, err)
 	})
 	private.GET("/world/events", playerScopedList(curryPlayerScope(world, func(ctxUser playerScope) (any, error) {
+		if err := world.EnsureFreshWorldEvents(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID); err != nil {
+			return nil, err
+		}
 		events, err := world.ListWorldEvents(ctxUser.Context, ctxUser.Save.WorldID, ctxUser.Save.ContinentID, ctxUser.Limit)
 		if err != nil {
 			return nil, err
