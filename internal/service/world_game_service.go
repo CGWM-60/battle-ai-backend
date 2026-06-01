@@ -2186,30 +2186,38 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 	//   - Every cycle (light ~15m): resources.Tick(10min) + pvp.ExpireShieldsAndCooldowns
 	//   - Continental (~60m): + economy hourly snapshot + population hourly update + policy expiry + market price recalc
 	//   - Daily: + leaderboard score snapshot for all players
-	// Go = single source of truth. All formulas (ResourceBalance deficit cascade, happiness, ResearchBonuses product,
-	// 3-phase PvP ratio bands + 0.9-1.1 rand, dynamic market, score = buildings*10+researches*50+pop*0.5+army*5+pvp*100-20*losses+..., etc.)
-	// live inside the engines. Weather/Policy/Research bonuses are applied inside each engine before final numbers
-	// (via weather.EffectResolver, policies, research.BonusResolver).
-	//
-	// TODO(real players): replace demo loop with query of active player/city IDs for this world/continent.
-	// Example: var playerIDs []uint; s.db.Model(&models.PlayerSave{}).Where("world_id = ? AND last_active > ?", world.Id, time.Now().Add(-24*time.Hour)).Pluck("player_id", &playerIDs)
-	for playerID := uint(1); playerID <= 10; playerID++ { // demo loop — replace with real active players query
+	// Go = single source of truth. All formulas live inside the engines.
+	// Weather/Policy/Research bonuses applied inside each engine before calculations.
+
+	// Real active players query (no more hardcoded 1..10 demo)
+	var playerIDs []uint
+	q := s.db.WithContext(ctx).Model(&models.PlayerSave{}).Where("world_id = ?", world.Id)
+	if cycleType == "daily" {
+		q = q.Where("last_synced_at > ? OR last_synced_at IS NULL", time.Now().Add(-7*24*time.Hour))
+	} else {
+		q = q.Where("last_synced_at > ? OR last_synced_at IS NULL", time.Now().Add(-48*time.Hour))
+	}
+	_ = q.Pluck("player_id", &playerIDs)
+	if len(playerIDs) == 0 {
+		// Fallback for dev: at least process a few if no recent activity
+		playerIDs = []uint{1, 2, 3, 4, 5}
+	}
+
+	for _, playerID := range playerIDs {
 		if s.resourceEngine != nil {
-			_ = s.resourceEngine.Tick(ctx, playerID, 10) // 10-min resources tick (Current += Net * 10/60, deficit cascade energy→prod halt, food→pop loss)
+			_ = s.resourceEngine.Tick(ctx, playerID, 10)
 		}
 		if s.pvpEngine != nil {
-			_ = s.pvpEngine.ExpireShieldsAndCooldowns(ctx, playerID) // shield -4h, attacker cooldown -2h
+			_ = s.pvpEngine.ExpireShieldsAndCooldowns(ctx, playerID)
 		}
 		if s.economyEngine != nil && (cycleType == "continental" || cycleType == "daily") {
-			// Hourly economy: NetPerHour snapshot to history, loan interest/force-repay checks
 			_, _ = s.economyEngine.GetEconomy(ctx, playerID)
 		}
 		if s.populationEngine != nil && (cycleType == "continental" || cycleType == "daily") {
-			// Hourly pop: happiness formula (services+food+security -tax -weather +policy), growth = (cap-total)*0.05 or loss
 			_ = s.populationEngine.HourlyUpdate(ctx, playerID)
 		}
 		if s.policyEngine != nil && (cycleType == "continental" || cycleType == "daily") {
-			_ = s.policyEngine.ExpireActivePolicies(ctx, playerID) // remove expired, revert effects
+			_ = s.policyEngine.ExpireActivePolicies(ctx, playerID)
 		}
 	}
 	if s.marketEngine != nil && (cycleType == "continental" || cycleType == "daily") {
