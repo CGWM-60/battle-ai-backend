@@ -196,6 +196,14 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 			"cooldown_until": result.ExecutedAt.Add(2 * time.Hour).Format(time.RFC3339),
 		}, nil)
 	})
+
+	// PvP matchmaking stub (was missing → 404)
+	private.GET("/pvp/matchmaking/candidates", func(c *gin.Context) {
+		writeWorldResponse(c, gin.H{
+			"candidates": []any{},
+			"message": "Matchmaking not fully wired yet - coming soon",
+		}, nil)
+	})
 	private.GET("/market/prices", func(c *gin.Context) {
 		prices := marketEng.GetPrices()
 		writeWorldResponse(c, gin.H{"prices": prices}, nil)
