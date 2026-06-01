@@ -331,7 +331,7 @@ func NewWorldGameService(db *gorm.DB) *WorldGameService {
 		resourceEngine:    resources.NewEngine(db),
 		economyEngine:     economy.NewEngine(db), // now supports tax/loan persistence
 		populationEngine:  population.NewEngine(db), // now supports persistence sketches
-		pvpEngine:         pvp.NewEngine(),
+		pvpEngine:         pvp.NewEngine(db),
 		marketEngine:      market.NewEngine(db), // now supports offer persistence
 		leaderboardEngine: leaderboard.NewEngine(),
 		policyEngine:      policies.NewEngine(),
@@ -2207,7 +2207,21 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 
 	for _, playerID := range playerIDs {
 		// Explicit cross-bonus propagation (Go = single source of truth)
-		researchBonuses := research.NewResolver().Compute([]string{}) // TODO(real): load unlocked keys for player
+		keys := []string{}
+		var save models.PlayerSave
+		if err := s.db.WithContext(ctx).Where("player_id = ?", playerID).First(&save).Error; err == nil && len(save.ResearchJSON) > 0 {
+			var r map[string]any
+			if json.Unmarshal(save.ResearchJSON, &r) == nil {
+				if u, ok := r["unlocked"].([]any); ok {
+					for _, v := range u {
+						if s, ok := v.(string); ok {
+							keys = append(keys, s)
+						}
+					}
+				}
+			}
+		}
+		researchBonuses := research.NewResolver().Compute(keys)
 		_ = researchBonuses // multipliers applied inside engines; logged here for scheduler visibility
 
 		// Weather/policy effects pre-fetched for awareness (actual application inside engines)
