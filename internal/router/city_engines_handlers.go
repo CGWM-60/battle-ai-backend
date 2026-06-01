@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"cgwm/battle/internal/leaderboard"
+	"cgwm/battle/internal/market"
 	"cgwm/battle/internal/pvp"
 	"cgwm/battle/internal/resources"
 	"cgwm/battle/internal/service"
@@ -86,13 +88,17 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"result": result, "battle_id": fmt.Sprintf("battle_%d", time.Now().Unix())}, nil)
 	})
 
-	// Market & Leaderboard stubs (real engines exist)
+	// Market & Leaderboard - real engine calls
+	marketEng := market.NewEngine()
+	leaderboardEng := leaderboard.NewEngine()
 	private.GET("/market/prices", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"prices": gin.H{"gold": 1.0, "energy": 2.5}}, nil)
+		prices := marketEng.GetPrices()
+		writeWorldResponse(c, gin.H{"prices": prices}, nil)
 	})
 
 	private.GET("/leaderboard/global", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"entries": []gin.H{{"cityName": "Valoria", "score": 24500}}}, nil)
+		entries := leaderboardEng.GetGlobal(50)
+		writeWorldResponse(c, gin.H{"entries": entries}, nil)
 	})
 
 	// Policies activation with basic effect stub

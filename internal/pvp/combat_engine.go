@@ -1,6 +1,9 @@
 package pvp
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 type CombatForce struct {
 	TotalAttack  float64 `json:"totalAttack"`
@@ -153,4 +156,10 @@ func (e *Engine) ExecuteAttack(attackerPlayerID uint, targetCityID string, units
 		},
 		ExecutedAt: time.Now().UTC(),
 	}, nil
+}
+
+// ExpireShieldsAndCooldowns called by scheduler
+func (e *Engine) ExpireShieldsAndCooldowns(ctx context.Context, playerID uint) error {
+	// TODO: real DB check for shield_until / cooldown_until and remove expired
+	return nil
 }

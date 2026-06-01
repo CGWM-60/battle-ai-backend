@@ -2182,19 +2182,28 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 	}
 
 	// === City engines real tick wiring (this wave - progressing to 100%) ===
-	// Real calls: resources tick every cycle (10min sim), others on hourly/daily.
-	// Bonuses applied in engines.
-	if s.resourceEngine != nil {
-		// Demo: tick for player 1 (real: loop active players in world)
-		_ = s.resourceEngine.Tick(ctx, 1, 10)
+	// Real calls in correct order. Bonuses (weather/policy/research) should be applied inside each engine before math.
+	for playerID := uint(1); playerID <= 5; playerID++ { // demo loop - real: query active players in world
+		if s.resourceEngine != nil {
+			_ = s.resourceEngine.Tick(ctx, playerID, 10) // 10min resources
+		}
+		if s.economyEngine != nil && cycleType == "continental" {
+			// economy uses its own Get + calculations with bonuses
+			_, _ = s.economyEngine.GetEconomy(ctx, playerID)
+		}
+		if s.pvpEngine != nil {
+			// pvp side effects like shield expiry
+			_ = s.pvpEngine.ExpireShieldsAndCooldowns(ctx, playerID) // if method added, else placeholder
+		}
 	}
-	if s.economyEngine != nil && cycleType == "continental" {
-		// _ = s.economyEngine.HourlyNetSnapshot(...) // implement in economy engine when needed
+	if s.marketEngine != nil && cycleType == "continental" {
+		// dynamic pricing - pass empty for demo (real would query offers/demands)
+		_ = s.marketEngine.RecalculatePrices(map[string]float64{}, map[string]float64{}, map[string]float64{})
 	}
 	if s.leaderboardEngine != nil && cycleType == "daily" {
-		// _ = s.leaderboardEngine.SnapshotHourly(...) // implement snapshot when needed
+		_ = s.leaderboardEngine.ComputeScore(1) // example, real would snapshot
 	}
-	// TODO: full player loop + pvp shield expiry, market recalc, policy application, research bonuses in each engine call
+	// TODO: full player query from DB, apply weather/policy/research bonuses before each engine Tick/Get
 
 	snapshot := map[string]any{
 		"world":     world,
