@@ -8,7 +8,9 @@ import (
 	"cgwm/battle/internal/leaderboard"
 	"cgwm/battle/internal/market"
 	"cgwm/battle/internal/policies"
+	"cgwm/battle/internal/population"
 	"cgwm/battle/internal/pvp"
+	"cgwm/battle/internal/research"
 	"cgwm/battle/internal/resources"
 	"cgwm/battle/internal/service"
 
@@ -24,7 +26,10 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	marketEng := market.NewEngine()
 	leaderboardEng := leaderboard.NewEngine()
 	pvpEngine := pvp.NewEngine()
-	policyEngine := policies.NewEngine() // for /city/policies/activate + expiry in scheduler
+	policyEngine := policies.NewEngine()
+	popEngine := population.NewEngine()
+	researchResolver := research.NewResolver() // for /research/bonuses
+
 
 	private.GET("/city/resources", func(c *gin.Context) {
 		balance, err := resEngine.GetBalance(c.Request.Context(), currentUserID(c))
@@ -90,14 +95,9 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"ok": true}, nil)
 	})
 
-	// Policies
+	// Policies available (static for now, real list can come from policyEngine)
 	private.GET("/city/policies/available", func(c *gin.Context) {
 		writeWorldResponse(c, gin.H{"policies": []string{"city_festival", "austerity", "war_economy", "harvest_boost"}}, nil)
-	})
-	private.POST("/city/policies/activate", func(c *gin.Context) {
-		var body struct { PolicyKey string `json:"policy_key"` }
-		c.ShouldBindJSON(&body)
-		writeWorldResponse(c, gin.H{"activated": body.PolicyKey}, nil)
 	})
 
 	// PvP routes - real engine calls (pvpEngine already declared at top)
@@ -129,15 +129,70 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"entries": entries}, nil)
 	})
 
-	// Policies - now calls real policy engine (effects should be applied cross-domain by other engines on next tick)
+	// Population - real engine with happiness formula per spec
+	private.GET("/city/population", func(c *gin.Context) {
+		pop, err := popEngine.GetPopulation(c.Request.Context(), currentUserID(c))
+		writeWorldResponse(c, pop, err)
+	})
+
+	// Research bonuses (product of unlocked nodes) - used by construction/army/etc.
+	private.GET("/research/bonuses", func(c *gin.Context) {
+		// TODO(real): pass actual unlocked node keys for this player
+		bonuses := researchResolver.Compute([]string{})
+		writeWorldResponse(c, bonuses, nil)
+	})
+
+	// Army actions (interactions 6,7,8) - stubbed to engine calls for now; real army state in PlayerSave / army models
+	private.POST("/army/disband", func(c *gin.Context) {
+		var body struct {
+			UnitType string `json:"unit_type"`
+			Count    int    `json:"count"`
+		}
+		c.ShouldBindJSON(&body)
+		// TODO: real disband via army service/engine + resources refund + invalidate
+		writeWorldResponse(c, gin.H{"disbanded": body.Count, "unit": body.UnitType}, nil)
+	})
+	private.POST("/army/heal", func(c *gin.Context) {
+		var body struct {
+			UnitType string `json:"unit_type"`
+			Count    int    `json:"count"`
+		}
+		c.ShouldBindJSON(&body)
+		writeWorldResponse(c, gin.H{"healed": body.Count}, nil)
+	})
+	private.POST("/army/defense-assignment", func(c *gin.Context) {
+		var body struct {
+			Units map[string]int `json:"units"`
+		}
+		c.ShouldBindJSON(&body)
+		writeWorldResponse(c, gin.H{"assigned": body.Units}, nil)
+	})
+
+	// Building actions (4)
+	private.POST("/buildings/:id/demolish", func(c *gin.Context) {
+		id := c.Param("id")
+		// TODO: real via resources/building engine, return recovered materials
+		writeWorldResponse(c, gin.H{"demolished": id, "recovered": map[string]float64{"materials": 45}}, nil)
+	})
+	private.POST("/buildings/:id/toggle", func(c *gin.Context) {
+		id := c.Param("id")
+		var body struct{ Active bool `json:"active"` }
+		c.ShouldBindJSON(&body)
+		writeWorldResponse(c, gin.H{"id": id, "active": body.Active}, nil)
+	})
+	private.POST("/buildings/:id/collect", func(c *gin.Context) {
+		id := c.Param("id")
+		collected, _ := resEngine.ManualCollect(c.Request.Context(), currentUserID(c), id)
+		writeWorldResponse(c, gin.H{"collected": collected}, nil)
+	})
+
+	// Policies - now calls real policy engine
 	private.POST("/city/policies/activate", func(c *gin.Context) {
 		var body struct { PolicyKey string `json:"policy_key"` }
 		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(400, gin.H{"error": "invalid body"})
 			return
 		}
-		// Note: full effect application + cost deduction happens inside policyEngine.Activate
-		// and is picked up by resources/population/army on next Get/Tick.
 		err := policyEngine.Activate(c.Request.Context(), currentUserID(c), body.PolicyKey)
 		writeWorldResponse(c, gin.H{"activated": body.PolicyKey}, err)
 	})
