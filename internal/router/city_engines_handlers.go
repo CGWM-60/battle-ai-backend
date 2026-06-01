@@ -324,9 +324,55 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"snapshots": []any{}}, nil)
 	})
 
-	// TODO: implement real active policies list
+	// Real active policies - reads from PlayerSave.ActiveEffectsJSON
 	private.GET("/city/policies/active", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"policies": []any{}}, nil)
+		uid := currentUserID(c)
+
+		// Best effort: expire old ones first
+		_ = policyEngine.ExpireActivePolicies(c.Request.Context(), uid)
+
+		save, err := world.EnsurePlayerSave(c.Request.Context(), uid)
+		if err != nil || save == nil {
+			writeWorldResponse(c, gin.H{"policies": []any{}}, nil)
+			return
+		}
+
+		var activePolicies []gin.H
+
+		if len(save.ActiveEffectsJSON) > 0 {
+			var fx map[string]any
+			if json.Unmarshal(save.ActiveEffectsJSON, &fx) == nil && fx != nil {
+				if ap, ok := fx["active_policy"].(map[string]any); ok {
+					key, _ := ap["key"].(string)
+					untilStr, _ := ap["until"].(string)
+
+					if key != "" {
+						var until time.Time
+						if untilStr != "" {
+							if t, err := time.Parse(time.RFC3339, untilStr); err == nil {
+								until = t
+							}
+						}
+
+						// Only return if not expired
+						if until.IsZero() || time.Now().UTC().Before(until) {
+							p, exists := policies.DefinedPolicies[key]
+							if exists {
+								activePolicies = append(activePolicies, gin.H{
+									"key":         p.Key,
+									"name":        p.Name,
+									"duration":    p.Duration,
+									"effects":     p.Effects,
+									"activeUntil": untilStr,
+								})
+							}
+						}
+					}
+				}
+			}
+		}
+
+		writeWorldResponse(c, gin.H{"policies": activePolicies}, nil)
 	})
 
 	// TODO: implement real market offers listing
