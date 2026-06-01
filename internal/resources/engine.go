@@ -2,7 +2,9 @@ package resources
 
 import (
 	"context"
+	"time"
 
+	"cgwm/battle/internal/models"
 	"cgwm/battle/internal/policies"
 	"cgwm/battle/internal/research"
 	"cgwm/battle/internal/weather"
@@ -132,16 +134,19 @@ func (e *Engine) Tick(ctx context.Context, playerID uint, minutes float64) error
 	}
 
 	// === Persistence + cross-engine side effects (Go source of truth) ===
-	// Real minimal persistence sketch (using engine's db when available):
+	// Activate real minimal persistence (using engine's db):
 	if e.db != nil {
-		// Example: update PlayerSave with current resources (in real: use proper InventoryJSON or dedicated table)
-		// s.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Updates(map[string]interface{}{
-		//   "food": int64(balance.Current["food"]), "energy": int64(balance.Current["energy"]), ...
-		// })
-		_ = e.db // placeholder for tx update
+		updates := map[string]interface{}{
+			"food":    int64(balance.Current["food"]),
+			"energy":  int64(balance.Current["energy"]),
+			"credits": int64(balance.Current["gold"]), // map gold to credits in save
+		}
+		e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Updates(updates)
+		// Also update LastSyncedAt
+		e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Update("last_synced_at", time.Now())
 	}
-	// TODO(full): proper JSON marshal to InventoryJSON + LastSyncedAt update + cascade to population if foodNet <0.
-	// Cross-notify population engine for happiness impact on deficit.
+	// TODO(full): marshal full balance to InventoryJSON if needed + proper tx + cascade deficit to population engine.
+	// Cross-notify population for happiness impact when foodNet < 0.
 
 	// Bonuses (research/weather/policy) already applied upstream in GetBalance.
 	_ = playerID

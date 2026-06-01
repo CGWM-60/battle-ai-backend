@@ -2204,6 +2204,10 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 	}
 
 	for _, playerID := range playerIDs {
+		// Explicit bonus awareness (actual multipliers applied inside each engine via their resolvers)
+		// TODO: when researchService/weatherResolver injected, pre-fetch here and pass to engines if their API supports it.
+		_ = playerID
+
 		if s.resourceEngine != nil {
 			_ = s.resourceEngine.Tick(ctx, playerID, 10)
 		}

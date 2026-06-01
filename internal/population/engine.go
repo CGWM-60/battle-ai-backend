@@ -3,7 +3,9 @@ package population
 import (
 	"context"
 	"math"
+	"time"
 
+	"cgwm/battle/internal/models"
 	"cgwm/battle/internal/policies"
 
 	"gorm.io/gorm"
@@ -123,13 +125,16 @@ func (e *Engine) HourlyUpdate(ctx context.Context, playerID uint) error {
 		newTotal = pop.Capacity
 	}
 
-	// Real minimal persistence sketch (using engine db)
+	// Activate real minimal persistence (using engine db)
 	if e.db != nil {
-		// e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).
-		//   Updates(map[string]any{"population": int64(newTotal), "satisfaction": pop.Happiness, "last_synced_at": time.Now()})
-		_ = e.db
+		e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).
+			Updates(map[string]any{
+				"population":   int64(newTotal),
+				"satisfaction": pop.Happiness,
+				"last_synced_at": time.Now(),
+			})
 	}
-	// TODO(full): recalculate workers/unemployed, cross with resources for food deficit, save JSON if needed.
+	// TODO(full): recalculate workers/unemployed based on happiness, cross with resources deficit, handle JSON fields.
 	_ = newTotal
 	_ = playerID
 	return nil
