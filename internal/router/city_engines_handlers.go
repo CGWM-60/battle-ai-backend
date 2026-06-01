@@ -117,6 +117,8 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 			return
 		}
 		result, _ := pvpEngine.ExecuteAttack(currentUserID(c), body.TargetCityID, body.Units)
+		// Real persistence sketch for battle log (using service db when available)
+		// In full: tx.Create(&models.BattleLog{... from result, shield, cooldown})
 		writeWorldResponse(c, gin.H{"result": result, "battle_id": fmt.Sprintf("battle_%d", time.Now().Unix())}, nil)
 	})
 	private.GET("/market/prices", func(c *gin.Context) {

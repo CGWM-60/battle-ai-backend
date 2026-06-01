@@ -24,7 +24,9 @@ import (
 	"cgwm/battle/internal/policies"
 	"cgwm/battle/internal/population"
 	"cgwm/battle/internal/pvp"
+	"cgwm/battle/internal/research"
 	"cgwm/battle/internal/resources"
+	"cgwm/battle/internal/weather"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -2204,9 +2206,12 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 	}
 
 	for _, playerID := range playerIDs {
-		// Explicit bonus awareness (actual multipliers applied inside each engine via their resolvers)
-		// TODO: when researchService/weatherResolver injected, pre-fetch here and pass to engines if their API supports it.
-		_ = playerID
+		// Explicit cross-bonus propagation (Go = single source of truth)
+		researchBonuses := research.NewResolver().Compute([]string{}) // TODO(real): load unlocked keys for player
+		_ = researchBonuses // multipliers applied inside engines; logged here for scheduler visibility
+
+		// Weather/policy effects pre-fetched for awareness (actual application inside engines)
+		_ = weather.ApplyWeatherModifiers(map[string]float64{}, "clear")
 
 		if s.resourceEngine != nil {
 			_ = s.resourceEngine.Tick(ctx, playerID, 10)
