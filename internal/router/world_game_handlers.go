@@ -1544,6 +1544,9 @@ func registerStrictAdminWorldGameRoutes(group *gin.RouterGroup, database *gorm.D
 }
 
 func registerAdminWorldGameRoutesAt(admin *gin.RouterGroup, database *gorm.DB) {
+	// Safety net for the market table (prevents 1146 errors when admin or simulation touches market engines)
+	_ = database.AutoMigrate(&models.MarketOffer{})
+
 	world := service.NewWorldGameService(database)
 	game := admin.Group("/game")
 	game.GET("/dashboard", adminGameDashboard(database, world))
@@ -2212,6 +2215,9 @@ func guildInviteStatus(world *service.WorldGameService, accept bool) gin.Handler
 
 func adminGameDashboard(database *gorm.DB, world *service.WorldGameService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// Extra safety: ensure market table on any admin dashboard access (helps unblock /admin/game/ if table was missing)
+		_ = database.AutoMigrate(&models.MarketOffer{})
+
 		counts := map[string]int64{}
 		countModel := func(key string, model any, query ...string) {
 			var total int64

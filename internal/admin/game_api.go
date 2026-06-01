@@ -19,6 +19,10 @@ import (
 )
 
 func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
+	// Safety net: ensure the market_offers table (used by IA Global market + continental player markets)
+	// exists even if the server was started before the model was added to central AutoMigrate.
+	_ = s.db.AutoMigrate(&models.MarketOffer{})
+
 	game := api.Group("/game")
 	world := service.NewWorldGameService(s.db)
 	game.GET("/dashboard", s.gameDashboardAPI)
@@ -149,6 +153,9 @@ func (s *Server) registerGameAdminAPI(api *gin.RouterGroup) {
 }
 
 func (s *Server) gameDashboardAPI(c *gin.Context) {
+	// Extra safety net in case registration-time migrate didn't run
+	_ = s.db.AutoMigrate(&models.MarketOffer{})
+
 	counts := gin.H{}
 	count := func(key string, model any, where string, args ...any) {
 		var total int64
