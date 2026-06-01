@@ -39,6 +39,9 @@ type actionSyncRequest struct {
 func registerWorldGameRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	world := service.NewWorldGameService(database)
 
+	// NEW: City engines (resources, economy, population, pvp, market, policies...)
+	registerCityEnginesRoutes(private, world)
+
 	private.GET("/player/state", func(c *gin.Context) {
 		state, err := world.PlayerState(c.Request.Context(), currentUserID(c))
 		writeWorldResponse(c, state, err)

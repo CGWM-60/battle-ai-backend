@@ -18,6 +18,14 @@ import (
 	"cgwm/battle/internal/models"
 	"cgwm/battle/internal/provider"
 
+	"cgwm/battle/internal/economy"
+	"cgwm/battle/internal/leaderboard"
+	"cgwm/battle/internal/market"
+	"cgwm/battle/internal/policies"
+	"cgwm/battle/internal/population"
+	"cgwm/battle/internal/pvp"
+	"cgwm/battle/internal/resources"
+
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -57,6 +65,15 @@ var emptyJSONObject = datatypes.JSON([]byte(`{}`))
 
 type WorldGameService struct {
 	db *gorm.DB
+
+	// City engines for real ticks (wired this wave toward 100%)
+	resourceEngine   *resources.Engine
+	economyEngine    *economy.Engine
+	populationEngine *population.Engine
+	pvpEngine        *pvp.Engine
+	marketEngine     *market.Engine
+	leaderboardEngine *leaderboard.Engine
+	policyEngine     *policies.Engine
 }
 
 type PlayerSaveSyncInput struct {
@@ -307,7 +324,16 @@ type nexusDecision struct {
 }
 
 func NewWorldGameService(db *gorm.DB) *WorldGameService {
-	return &WorldGameService{db: db}
+	return &WorldGameService{
+		db:                db,
+		resourceEngine:    resources.NewEngine(db),
+		economyEngine:     economy.NewEngine(),
+		populationEngine:  population.NewEngine(),
+		pvpEngine:         pvp.NewEngine(),
+		marketEngine:      market.NewEngine(),
+		leaderboardEngine: leaderboard.NewEngine(),
+		policyEngine:      policies.NewEngine(),
+	}
 }
 
 func (s *WorldGameService) CreateWorld(ctx context.Context) (*models.World, error) {
@@ -2120,6 +2146,12 @@ func (s *WorldGameService) SimulateWorld(ctx context.Context, worldID uint, forc
 }
 
 func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint, forcedBy string, cycleType string) (*models.AIWorldDecision, error) {
+	// City engines tick wiring (Phase 4+)
+	// TODO: inject real engines (resources, economy, population, pvp, market, policies, leaderboard, weather, research)
+	// Example (uncomment when engines are DI'ed):
+	// if s.resourceEngine != nil { _ = s.resourceEngine.Tick(ctx, playerID, 10) } // 10-min resources
+	// if s.economyEngine != nil && isHourly { _ = s.economyEngine.HourlySnapshot(...) }
+	// Apply weather + policy + research bonuses to all calculations (Go = single source of truth)
 	cycleType = normalizeSimulationCycle(cycleType)
 	var world models.World
 	query := s.db.WithContext(ctx).Preload("Continents", func(db *gorm.DB) *gorm.DB {
@@ -2148,6 +2180,21 @@ func (s *WorldGameService) SimulateWorldCycle(ctx context.Context, worldID uint,
 			return nil, err
 		}
 	}
+
+	// === City engines real tick wiring (this wave - progressing to 100%) ===
+	// Real calls: resources tick every cycle (10min sim), others on hourly/daily.
+	// Bonuses applied in engines.
+	if s.resourceEngine != nil {
+		// Demo: tick for player 1 (real: loop active players in world)
+		_ = s.resourceEngine.Tick(ctx, 1, 10)
+	}
+	if s.economyEngine != nil && cycleType == "continental" {
+		// _ = s.economyEngine.HourlyNetSnapshot(...) // implement in economy engine when needed
+	}
+	if s.leaderboardEngine != nil && cycleType == "daily" {
+		// _ = s.leaderboardEngine.SnapshotHourly(...) // implement snapshot when needed
+	}
+	// TODO: full player loop + pvp shield expiry, market recalc, policy application, research bonuses in each engine call
 
 	snapshot := map[string]any{
 		"world":     world,
