@@ -33,6 +33,15 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 
 
 	private.GET("/city/resources", func(c *gin.Context) {
+		defer func() {
+			if r := recover(); r != nil {
+				// Temporary safety net for prod while we harden real loading
+				writeWorldResponse(c, gin.H{
+					"current": map[string]float64{"gold": 0, "energy": 0, "food": 0, "materials": 0},
+					"error":   "temporary resources loading issue",
+				}, nil)
+			}
+		}()
 		balance, err := resEngine.GetBalance(c.Request.Context(), currentUserID(c))
 		writeWorldResponse(c, balance, err)
 	})
@@ -291,5 +300,21 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		}
 		err := policyEngine.Activate(c.Request.Context(), currentUserID(c), body.PolicyKey)
 		writeWorldResponse(c, gin.H{"activated": body.PolicyKey}, err)
+	})
+
+	// === Stubs for missing endpoints called by Flutter (to stop 404s) ===
+	// TODO: implement real history snapshot in economy engine
+	private.GET("/city/economy/history", func(c *gin.Context) {
+		writeWorldResponse(c, gin.H{"snapshots": []any{}}, nil)
+	})
+
+	// TODO: implement real active policies list
+	private.GET("/city/policies/active", func(c *gin.Context) {
+		writeWorldResponse(c, gin.H{"active": []any{}}, nil)
+	})
+
+	// TODO: implement real market offers listing
+	private.GET("/market/offers", func(c *gin.Context) {
+		writeWorldResponse(c, gin.H{"offers": []any{}}, nil)
 	})
 }
