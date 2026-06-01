@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"cgwm/battle/internal/economy"
 	"cgwm/battle/internal/leaderboard"
 	"cgwm/battle/internal/market"
 	"cgwm/battle/internal/policies"
@@ -23,7 +22,7 @@ import (
 func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGameService) {
 	// City engines (real wiring)
 	resEngine := resources.NewEngine(nil)
-	econEngine := economy.NewEngine(nil) // db passed via service in full wiring; persistence active when using service instance
+	econEngine := world.GetEconomyEngine() // use the properly DB-wired engine from the service for consistent data
 	marketEng := market.NewEngine(nil) // db via service; persistence active in service instance
 	leaderboardEng := leaderboard.NewEngine()
 	pvpEngine := pvp.NewEngine(nil) // real db wiring via service for scheduler/ticks; handlers use direct for now (improves with army service)

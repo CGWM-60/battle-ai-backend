@@ -102,6 +102,11 @@ func (s *WorldGameService) RepayLoan(ctx context.Context, playerID uint) error {
 	return fmt.Errorf("economy engine not available")
 }
 
+// GetEconomyEngine returns the wired economy engine for consistent reads in handlers.
+func (s *WorldGameService) GetEconomyEngine() *economy.Engine {
+	return s.economyEngine
+}
+
 type PlayerSaveSyncInput struct {
 	CityName              string         `json:"cityName"`
 	CityLevel             int            `json:"cityLevel"`
