@@ -328,7 +328,7 @@ func NewWorldGameService(db *gorm.DB) *WorldGameService {
 		db:                db,
 		resourceEngine:    resources.NewEngine(db),
 		economyEngine:     economy.NewEngine(),
-		populationEngine:  population.NewEngine(),
+		populationEngine:  population.NewEngine(db), // now supports persistence sketches
 		pvpEngine:         pvp.NewEngine(),
 		marketEngine:      market.NewEngine(),
 		leaderboardEngine: leaderboard.NewEngine(),

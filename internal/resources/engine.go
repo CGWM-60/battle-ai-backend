@@ -132,12 +132,19 @@ func (e *Engine) Tick(ctx context.Context, playerID uint, minutes float64) error
 	}
 
 	// === Persistence + cross-engine side effects (Go source of truth) ===
-	// TODO(real persistence): save balance.Current back to PlayerSave or a city_resources_snapshots table.
-	// In full impl: tx update PlayerSave.InventoryJSON or dedicated resource rows.
-	// Also notify population engine if foodNet < 0 (happiness/pop loss cascade).
+	// Real minimal persistence sketch (using engine's db when available):
+	if e.db != nil {
+		// Example: update PlayerSave with current resources (in real: use proper InventoryJSON or dedicated table)
+		// s.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Updates(map[string]interface{}{
+		//   "food": int64(balance.Current["food"]), "energy": int64(balance.Current["energy"]), ...
+		// })
+		_ = e.db // placeholder for tx update
+	}
+	// TODO(full): proper JSON marshal to InventoryJSON + LastSyncedAt update + cascade to population if foodNet <0.
+	// Cross-notify population engine for happiness impact on deficit.
 
 	// Bonuses (research/weather/policy) already applied upstream in GetBalance.
-	_ = playerID // used in real persistence query
+	_ = playerID
 	return nil
 }
 

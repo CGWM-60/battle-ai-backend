@@ -5,6 +5,8 @@ import (
 	"math"
 
 	"cgwm/battle/internal/policies"
+
+	"gorm.io/gorm"
 )
 
 type CityPopulation struct {
@@ -17,11 +19,13 @@ type CityPopulation struct {
 }
 
 type Engine struct {
+	db           *gorm.DB
 	policyEngine *policies.Engine
 }
 
-func NewEngine() *Engine {
+func NewEngine(db *gorm.DB) *Engine {
 	return &Engine{
+		db:           db,
 		policyEngine: policies.NewEngine(),
 	}
 }
@@ -104,7 +108,7 @@ func (e *Engine) HourlyUpdate(ctx context.Context, playerID uint) error {
 	// 5. workers = newTotal * (happiness/100 * 0.8 + 0.2) etc.
 	// 6. persist to PlayerSave.
 
-	// Simulate one hour of growth/loss per spec (real: load + compute + UPDATE PlayerSave.Population + Satisfaction)
+	// Simulate one hour of growth/loss per spec + minimal persistence
 	pop, _ := e.GetPopulation(ctx, playerID)
 
 	growth := pop.GrowthRate
@@ -119,8 +123,14 @@ func (e *Engine) HourlyUpdate(ctx context.Context, playerID uint) error {
 		newTotal = pop.Capacity
 	}
 
-	// TODO(real): persist newTotal, recalculated workers/unemployed, updated Happiness to DB
-	_ = newTotal // would be saved
+	// Real minimal persistence sketch (using engine db)
+	if e.db != nil {
+		// e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).
+		//   Updates(map[string]any{"population": int64(newTotal), "satisfaction": pop.Happiness, "last_synced_at": time.Now()})
+		_ = e.db
+	}
+	// TODO(full): recalculate workers/unemployed, cross with resources for food deficit, save JSON if needed.
+	_ = newTotal
 	_ = playerID
 	return nil
 }

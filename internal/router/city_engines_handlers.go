@@ -27,7 +27,7 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 	leaderboardEng := leaderboard.NewEngine()
 	pvpEngine := pvp.NewEngine()
 	policyEngine := policies.NewEngine()
-	popEngine := population.NewEngine()
+	popEngine := population.NewEngine(nil) // db passed from service in full wiring
 	researchResolver := research.NewResolver() // for /research/bonuses
 
 
