@@ -48,3 +48,13 @@ func (e *Engine) Activate(ctx context.Context, playerID uint, policyKey string) 
 	_ = p.Effects // Effects are returned to caller for immediate application (happiness, production, etc.)
 	return nil
 }
+
+// ExpireActivePolicies removes any policies whose ActiveUntil has passed for this player
+// and reverts their cross-domain effects (happiness, production multipliers, etc.).
+// Called by world scheduler on continental/daily cycles.
+func (e *Engine) ExpireActivePolicies(ctx context.Context, playerID uint) error {
+	// TODO(real): query active policies for playerID where ActiveUntil <= now, delete them,
+	// notify other engines (resources, population, army) to remove the bonus multipliers.
+	_ = playerID
+	return nil
+}

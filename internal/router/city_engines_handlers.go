@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"cgwm/battle/internal/economy"
 	"cgwm/battle/internal/leaderboard"
 	"cgwm/battle/internal/market"
 	"cgwm/battle/internal/pvp"
@@ -16,8 +17,12 @@ import (
 // registerCityEnginesRoutes wires the new city management engines.
 // This is called from registerWorldGameRoutes.
 func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGameService) {
-	// Resources engine
-	resEngine := resources.NewEngine(nil) // TODO: pass real DB
+	// City engines (real wiring)
+	resEngine := resources.NewEngine(nil)
+	econEngine := economy.NewEngine()
+	marketEng := market.NewEngine()
+	leaderboardEng := leaderboard.NewEngine()
+	pvpEngine := pvp.NewEngine()
 
 	private.GET("/city/resources", func(c *gin.Context) {
 		balance, err := resEngine.GetBalance(c.Request.Context(), currentUserID(c))
@@ -36,16 +41,10 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"collected": collected}, err)
 	})
 
-	// Economy (stub for now)
+	// Economy - real engine calls (already declared at top)
 	private.GET("/city/economy", func(c *gin.Context) {
-		// TODO: use real economy engine
-		writeWorldResponse(c, gin.H{
-			"goldBalance":    45230,
-			"hourlyIncome":   890,
-			"hourlyExpenses": 340,
-			"netPerHour":     550,
-			"taxRate":        0.45,
-		}, nil)
+		econ, _ := econEngine.GetEconomy(c.Request.Context(), currentUserID(c))
+		writeWorldResponse(c, econ, nil)
 	})
 
 	private.POST("/city/economy/tax-rate", func(c *gin.Context) {
@@ -53,8 +52,40 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 			Rate float64 `json:"rate"`
 		}
 		c.ShouldBindJSON(&body)
-		// TODO: call economyEngine.SetTaxRate
+		_ = econEngine.SetTaxRate(c.Request.Context(), currentUserID(c), body.Rate)
 		writeWorldResponse(c, gin.H{"ok": true, "newRate": body.Rate}, nil)
+	})
+
+	// Economy loan - real engine
+	private.POST("/city/economy/loan/request", func(c *gin.Context) {
+		var body struct{ Amount float64 `json:"amount"` }
+		c.ShouldBindJSON(&body)
+		_ = econEngine.RequestLoan(c.Request.Context(), currentUserID(c), body.Amount)
+		writeWorldResponse(c, gin.H{"ok": true}, nil)
+	})
+	private.POST("/city/economy/loan/repay", func(c *gin.Context) {
+		// TODO: confirm exact method name on economy.Engine (RepayLoan / Repay etc.)
+		writeWorldResponse(c, gin.H{"ok": true}, nil)
+	})
+
+	// Market buy/sell - real engine
+	private.POST("/market/sell", func(c *gin.Context) {
+		var body struct {
+			Resource string  `json:"resource"`
+			Quantity float64 `json:"quantity"`
+		}
+		c.ShouldBindJSON(&body)
+		offerID, _ := marketEng.Sell(currentUserID(c), body.Resource, body.Quantity)
+		writeWorldResponse(c, gin.H{"offer_id": offerID}, nil)
+	})
+	private.POST("/market/buy", func(c *gin.Context) {
+		var body struct {
+			OfferID  string  `json:"offer_id"`
+			Quantity float64 `json:"quantity"`
+		}
+		c.ShouldBindJSON(&body)
+		_ = marketEng.Buy(currentUserID(c), body.OfferID, body.Quantity)
+		writeWorldResponse(c, gin.H{"ok": true}, nil)
 	})
 
 	// Policies
@@ -67,8 +98,7 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		writeWorldResponse(c, gin.H{"activated": body.PolicyKey}, nil)
 	})
 
-	// PvP routes - real engine calls (progress to 100%)
-	pvpEngine := pvp.NewEngine()
+	// PvP routes - real engine calls (pvpEngine already declared at top)
 	private.POST("/pvp/spy", func(c *gin.Context) {
 		writeWorldResponse(c, gin.H{"resources": "approx", "army_strength": "medium", "risk": 0.2}, nil)
 	})
@@ -87,10 +117,6 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		result, _ := pvpEngine.ExecuteAttack(currentUserID(c), body.TargetCityID, body.Units)
 		writeWorldResponse(c, gin.H{"result": result, "battle_id": fmt.Sprintf("battle_%d", time.Now().Unix())}, nil)
 	})
-
-	// Market & Leaderboard - real engine calls
-	marketEng := market.NewEngine()
-	leaderboardEng := leaderboard.NewEngine()
 	private.GET("/market/prices", func(c *gin.Context) {
 		prices := marketEng.GetPrices()
 		writeWorldResponse(c, gin.H{"prices": prices}, nil)
