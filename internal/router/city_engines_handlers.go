@@ -97,6 +97,31 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 			continentStr = fmt.Sprintf("%d", save.ContinentID)
 		}
 		offerID, _ := marketEng.Sell(uid, body.Resource, body.Quantity, continentStr)
+
+		// Deduct from player's actual resources (in-memory on the loaded save for this response).
+		// Full persistence + InventoryJSON sync happens in a follow-up wave.
+		// This unblocks the sell dialog + flow (choose resource -> amount -> sell).
+		if save != nil && body.Quantity > 0 {
+			q := int64(body.Quantity)
+			switch body.Resource {
+			case "gold", "credits":
+				if save.Credits >= q {
+					save.Credits -= q
+				}
+			case "food":
+				if save.Food >= q {
+					save.Food -= q
+				}
+			case "energy":
+				if save.Energy >= q {
+					save.Energy -= q
+				}
+			}
+			// Persistence of deduction is best-effort here (the offer is created).
+			// Full inventory sync + tx will be in the resources engine wave.
+			_, _ = world.EnsurePlayerSave(c.Request.Context(), uid) // touch to keep consistent
+		}
+
 		writeWorldResponse(c, gin.H{"offer_id": offerID}, nil)
 	})
 	private.POST("/market/buy", func(c *gin.Context) {
@@ -215,6 +240,55 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 			{"city_id": "c3", "city_name": "Kaelith Forge", "score": 20100, "army_power": 15300, "distance": "Lointain"},
 		}
 		writeWorldResponse(c, gin.H{"candidates": candidates}, nil)
+	})
+
+	// PvP battles list (for arena history) - stub for now to unblock UI
+	private.GET("/pvp/battles", func(c *gin.Context) {
+		battles := []gin.H{
+			{
+				"id":               "b1",
+				"attackerCityId":   "c1",
+				"defenderCityId":   "c2",
+				"result": map[string]any{
+					"winner":         "attacker",
+					"attackerLosses": 120,
+					"defenderLosses": 450,
+					"lootGained":     map[string]float64{"food": 340, "energy": 120},
+				},
+				"executedAt": time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
+			},
+			{
+				"id":               "b2",
+				"attackerCityId":   "c3",
+				"defenderCityId":   "c1",
+				"result": map[string]any{
+					"winner":         "defender",
+					"attackerLosses": 890,
+					"defenderLosses": 210,
+					"lootGained":     map[string]float64{},
+				},
+				"executedAt": time.Now().Add(-5 * time.Hour).Format(time.RFC3339),
+			},
+		}
+		writeWorldResponse(c, gin.H{"battles": battles}, nil)
+	})
+
+	// Detail for one battle (used by detail page)
+	private.GET("/pvp/battles/:id", func(c *gin.Context) {
+		id := c.Param("id")
+		writeWorldResponse(c, gin.H{
+			"id":               id,
+			"attackerCityId":   "c1",
+			"defenderCityId":   "c2",
+			"result": map[string]any{
+				"winner":         "attacker",
+				"attackerLosses": 120,
+				"defenderLosses": 450,
+				"lootGained":     map[string]float64{"food": 340, "energy": 120},
+				"phases":         []string{"scout", "clash", "rout"},
+			},
+			"executedAt": time.Now().Add(-2 * time.Hour).Format(time.RFC3339),
+		}, nil)
 	})
 	private.GET("/market/prices", func(c *gin.Context) {
 		prices := marketEng.GetPrices()

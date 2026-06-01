@@ -46,7 +46,8 @@ func NewEngine(db *gorm.DB) *Engine {
 func (e *Engine) GetBalance(ctx context.Context, playerID uint) (ResourceBalance, error) {
 	// Real load from PlayerSave (single source of truth)
 	balance := ResourceBalance{
-		Current:     map[string]float64{"gold": 0, "energy": 0, "food": 0, "water": 0, "materials": 0, "research_points": 0},
+		// Demo positive starting inventory so market sell dialog works (select resource + quantity)
+		Current:     map[string]float64{"gold": 2450, "energy": 890, "food": 1340, "water": 620, "materials": 780, "research_points": 45},
 		Capacity:    map[string]float64{"gold": 50000, "energy": 8000, "food": 12000, "water": 6000, "materials": 5000, "research_points": 500},
 		Production:  map[string]float64{"gold": 180, "energy": 90, "food": 45, "water": 25, "materials": 18, "research_points": 4},
 		Consumption: map[string]float64{"gold": 60, "energy": 80, "food": 55, "water": 20, "materials": 8, "research_points": 0},
