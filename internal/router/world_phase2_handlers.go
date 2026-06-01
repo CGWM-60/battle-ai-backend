@@ -192,7 +192,7 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 			return
 		}
 		payload := bindOptionalMap(c)
-		targetID := strings.TrimSpace(toString(payload["targetId"]))
+		targetID := strings.TrimSpace(firstNonEmptyPhase2(toString(payload["targetId"]), toString(payload["target"])))
 		if targetID == "" {
 			writeWorldResponse(c, nil, badRequestError("TARGET_REQUIRED", "La cible de négociation est obligatoire.", nil))
 			return
