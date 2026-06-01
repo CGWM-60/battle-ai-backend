@@ -203,12 +203,14 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 		}, nil)
 	})
 
-	// PvP matchmaking stub (was missing → 404)
+	// PvP matchmaking - returns realistic dummy candidates for now (real logic later)
 	private.GET("/pvp/matchmaking/candidates", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{
-			"candidates": []any{},
-			"message": "Matchmaking not fully wired yet - coming soon",
-		}, nil)
+		candidates := []gin.H{
+			{"city_id": "c1", "city_name": "Valoria Prime", "score": 18400, "army_power": 12500, "distance": "Proche"},
+			{"city_id": "c2", "city_name": "Dravon Outpost", "score": 16200, "army_power": 9800, "distance": "Moyen"},
+			{"city_id": "c3", "city_name": "Kaelith Forge", "score": 20100, "army_power": 15300, "distance": "Lointain"},
+		}
+		writeWorldResponse(c, gin.H{"candidates": candidates}, nil)
 	})
 	private.GET("/market/prices", func(c *gin.Context) {
 		prices := marketEng.GetPrices()

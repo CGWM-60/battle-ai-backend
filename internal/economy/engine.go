@@ -15,6 +15,7 @@ import (
 // CityEconomy is the authoritative economy snapshot.
 type CityEconomy struct {
 	GoldBalance    float64   `json:"goldBalance"`
+	Credits        float64   `json:"credits"` // canonical main currency name for UI consistency
 	HourlyIncome   float64   `json:"hourlyIncome"`
 	HourlyExpenses float64   `json:"hourlyExpenses"`
 	NetPerHour     float64   `json:"netPerHour"`
@@ -36,6 +37,7 @@ func NewEngine(db *gorm.DB) *Engine {
 func (e *Engine) loadBaseFromSave(save *models.PlayerSave) CityEconomy {
 	econ := CityEconomy{
 		GoldBalance: float64(save.Credits),
+		Credits:     float64(save.Credits),
 		TaxRate:     0.25,
 		Debt:        0,
 	}
@@ -74,7 +76,7 @@ func (e *Engine) loadBaseFromSave(save *models.PlayerSave) CityEconomy {
 
 func (e *Engine) GetEconomy(ctx context.Context, playerID uint) (CityEconomy, error) {
 	if e.db == nil {
-		return CityEconomy{GoldBalance: 45230, HourlyIncome: 890.5, HourlyExpenses: 340.2, NetPerHour: 550.3, TaxRate: 0.25}, nil
+		return CityEconomy{GoldBalance: 45230, Credits: 45230, HourlyIncome: 890.5, HourlyExpenses: 340.2, NetPerHour: 550.3, TaxRate: 0.25}, nil
 	}
 	var save models.PlayerSave
 	if err := e.db.WithContext(ctx).Where("player_id = ?", playerID).First(&save).Error; err != nil {
