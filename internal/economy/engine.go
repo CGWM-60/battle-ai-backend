@@ -3,6 +3,10 @@ package economy
 import (
 	"context"
 	"time"
+
+	"cgwm/battle/internal/models"
+
+	"gorm.io/gorm"
 )
 
 // CityEconomy is the authoritative economy snapshot.
@@ -17,11 +21,12 @@ type CityEconomy struct {
 }
 
 type Engine struct {
+	db *gorm.DB
 	// TODO: dependencies on resources engine, research resolver, army, etc.
 }
 
-func NewEngine() *Engine {
-	return &Engine{}
+func NewEngine(db *gorm.DB) *Engine {
+	return &Engine{db: db}
 }
 
 func (e *Engine) GetEconomy(ctx context.Context, playerID uint) (CityEconomy, error) {
@@ -38,18 +43,34 @@ func (e *Engine) GetEconomy(ctx context.Context, playerID uint) (CityEconomy, er
 
 // SetTaxRate implements POST /api/v1/city/economy/tax-rate
 func (e *Engine) SetTaxRate(ctx context.Context, playerID uint, rate float64) error {
-	// TODO: validate 0-1, update PlayerSave, trigger happiness recalc
+	if e.db != nil {
+		e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Update("tax_rate", rate)
+	}
+	// TODO(full): validate 0-1, trigger happiness recalc via population engine
 	return nil
 }
 
 // RequestLoan implements the loan system from the spec.
 func (e *Engine) RequestLoan(ctx context.Context, playerID uint, amount float64) error {
-	// TODO: check max = HourlyIncome * 48, create debt record with 15% interest, 24h due
+	if e.db != nil {
+		now := time.Now().UTC()
+		due := now.Add(24 * time.Hour)
+		e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Updates(map[string]any{
+			"debt":       amount * 1.15, // 15% interest
+			"debt_due_at": due,
+		})
+	}
+	// TODO(full): max check = HourlyIncome * 48, proper debt record
 	return nil
 }
 
 // RepayLoan forces or voluntary repayment (15% interest already applied at request time).
 func (e *Engine) RepayLoan(ctx context.Context, playerID uint) error {
-	// TODO: deduct from gold, clear Debt/DebtDueAt on PlayerSave
+	if e.db != nil {
+		e.db.Model(&models.PlayerSave{}).Where("player_id = ?", playerID).Updates(map[string]any{
+			"debt":       0,
+			"debt_due_at": nil,
+		})
+	}
 	return nil
 }

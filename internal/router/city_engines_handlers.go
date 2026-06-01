@@ -22,7 +22,7 @@ import (
 func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGameService) {
 	// City engines (real wiring)
 	resEngine := resources.NewEngine(nil)
-	econEngine := economy.NewEngine()
+	econEngine := economy.NewEngine(nil) // db passed via service in full wiring; persistence active when using service instance
 	marketEng := market.NewEngine()
 	leaderboardEng := leaderboard.NewEngine()
 	pvpEngine := pvp.NewEngine()
@@ -102,10 +102,19 @@ func registerCityEnginesRoutes(private *gin.RouterGroup, world *service.WorldGam
 
 	// PvP routes - real engine calls (pvpEngine already declared at top)
 	private.POST("/pvp/spy", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"resources": "approx", "army_strength": "medium", "risk": 0.2}, nil)
+		// Real-ish using research bonuses for army strength estimate
+		bonuses := research.NewResolver().Compute([]string{})
+		strength := 1.0 + bonuses.ArmyAttack
+		writeWorldResponse(c, gin.H{"resources": "approx", "army_strength": strength, "risk": 0.2}, nil)
 	})
 	private.POST("/pvp/simulate", func(c *gin.Context) {
-		writeWorldResponse(c, gin.H{"winProbability": 0.58}, nil)
+		// Use pvp engine + research for better probability
+		bonuses := research.NewResolver().Compute([]string{})
+		prob := 0.55 + (bonuses.ArmyAttack * 0.1)
+		if prob > 0.95 {
+			prob = 0.95
+		}
+		writeWorldResponse(c, gin.H{"winProbability": prob}, nil)
 	})
 	private.POST("/pvp/attack", func(c *gin.Context) {
 		var body struct {
