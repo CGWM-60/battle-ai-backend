@@ -695,7 +695,11 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 				Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).
 				Where("target_id = ? OR id = ?", actionID, uint(numericID))
 		}
-		logErr := query.Order("created_at DESC").First(&logEntry).Error
+		result := query.Order("created_at DESC").Limit(1).Find(&logEntry)
+		logErr := result.Error
+		if logErr == nil && result.RowsAffected == 0 {
+			logErr = gorm.ErrRecordNotFound
+		}
 
 		if logErr == nil {
 			// Found a log entry → proceed with normal cancel logging + side effects
@@ -824,7 +828,11 @@ func registerWorldModuleRoutes(private *gin.RouterGroup, database *gorm.DB, worl
 				Where("player_id = ? AND world_id = ?", save.PlayerID, save.WorldID).
 				Where("target_id = ? OR id = ?", actionID, uint(numericID))
 		}
-		if err := query.Order("created_at DESC").First(&logEntry).Error; err != nil {
+		result := query.Order("created_at DESC").Limit(1).Find(&logEntry)
+		if err := result.Error; err != nil || result.RowsAffected == 0 {
+			if err == nil {
+				err = gorm.ErrRecordNotFound
+			}
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				if isKnownWorldActionID(actionID) {
 					writeWorldResponse(c, gin.H{
