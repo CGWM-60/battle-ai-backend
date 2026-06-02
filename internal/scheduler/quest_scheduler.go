@@ -406,6 +406,10 @@ Regles de structure obligatoires:
 - level "facile": 2 ou 3 arcs; chaque arc a 2 ou 3 chapitres; total 4 a 7 chapitres.
 - level "moyen": 3 ou 4 arcs; chaque arc a 2 a 4 chapitres; total 7 a 12 chapitres.
 - level "difficile": 4 a 6 arcs; chaque arc a 3 a 5 chapitres; total 12 a 24 chapitres.
+- Un chapitre n'est jamais un seul tour joueur. Prevois un vrai rythme jouable:
+  mini chapitre = 5 a 7 tours, chapitre standard = 8 a 12 tours, gros chapitre = 12 a 18 tours, boss/final = 15 a 25 tours.
+- Dans metadata de chaque chapitre, ajoute "chapterType": "mini|standard|large|boss" et "turnRange": {"min":nombre,"max":nombre}.
+- Utilise mini pour intro/tutoriel/rencontre rapide, standard pour exploration+choix+petit conflit, large pour enquete/donjon/mission importante, boss pour combat long/gros choix narratif/fin d'arc.
 Ne genere pas toujours la structure minimale. Dans un meme batch, alterne le nombre d'arcs et de chapitres.
 Ajoute exactement un chapitre boss pour les quetes difficiles, et zero ou un chapitre boss pour les autres.
 Les arcs et chapitres doivent etre clairement identifies et ordonnes par leur position dans le tableau JSON.
@@ -441,11 +445,11 @@ func generatedRolePlayQuestInput(item generatedRolePlayQuest, cfg aiProviderConf
 		Source:   source,
 		Status:   constants.QuestStatusPublished,
 		Metadata: ensureMetadata(item.Meta, cfg, runAt),
-		Arcs:     generatedRolePlayArcInputs(item.Arcs),
+		Arcs:     generatedRolePlayArcInputs(item.Arcs, item.Level),
 	}
 }
 
-func generatedRolePlayArcInputs(items []generatedRolePlayArc) []service.RolePlayQuestArcInput {
+func generatedRolePlayArcInputs(items []generatedRolePlayArc, level string) []service.RolePlayQuestArcInput {
 	arcs := make([]service.RolePlayQuestArcInput, 0, len(items))
 	for index, item := range items {
 		arcs = append(arcs, service.RolePlayQuestArcInput{
@@ -455,13 +459,13 @@ func generatedRolePlayArcInputs(items []generatedRolePlayArc) []service.RolePlay
 			Objective: item.Objective,
 			Prompt:    item.Prompt,
 			Metadata:  item.Meta,
-			Chapters:  generatedRolePlayChapterInputs(item.Chapters),
+			Chapters:  generatedRolePlayChapterInputs(item.Chapters, level),
 		})
 	}
 	return arcs
 }
 
-func generatedRolePlayChapterInputs(items []generatedRolePlayChapter) []service.RolePlayQuestChapterInput {
+func generatedRolePlayChapterInputs(items []generatedRolePlayChapter, level string) []service.RolePlayQuestChapterInput {
 	chapters := make([]service.RolePlayQuestChapterInput, 0, len(items))
 	for index, item := range items {
 		chapters = append(chapters, service.RolePlayQuestChapterInput{
@@ -475,10 +479,51 @@ func generatedRolePlayChapterInputs(items []generatedRolePlayChapter) []service.
 			IsBoss:        item.IsBoss,
 			Xp:            item.Xp,
 			Coin:          item.Coin,
-			Metadata:      item.Meta,
+			Metadata:      rolePlayChapterPacingMetadata(item.Meta, level, item.IsBoss),
 		})
 	}
 	return chapters
+}
+
+func rolePlayChapterPacingMetadata(meta map[string]any, level string, isBoss bool) map[string]any {
+	out := map[string]any{}
+	for key, value := range meta {
+		out[key] = value
+	}
+	chapterType := strings.ToLower(strings.TrimSpace(fmt.Sprint(out["chapterType"])))
+	if chapterType == "" {
+		if isBoss {
+			chapterType = "boss"
+		} else {
+			chapterType = "standard"
+		}
+		out["chapterType"] = chapterType
+	}
+	if _, ok := out["turnRange"]; !ok {
+		minTurns, maxTurns := rolePlayChapterTurnRange(chapterType, level)
+		out["turnRange"] = map[string]any{"min": minTurns, "max": maxTurns}
+	}
+	return out
+}
+
+func rolePlayChapterTurnRange(chapterType string, level string) (int, int) {
+	difficultyOffset := 0
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "difficile", "hard":
+		difficultyOffset = 2
+	case "moyen", "medium", "normal":
+		difficultyOffset = 1
+	}
+	switch strings.ToLower(strings.TrimSpace(chapterType)) {
+	case "mini":
+		return 5 + difficultyOffset, 7
+	case "large", "gros":
+		return 12 + difficultyOffset*2, 18
+	case "boss", "final":
+		return 15 + difficultyOffset*3, 25
+	default:
+		return 8 + difficultyOffset*2, 12
+	}
 }
 
 func hasGeneratedRolePlayStructure(item generatedRolePlayQuest) bool {
