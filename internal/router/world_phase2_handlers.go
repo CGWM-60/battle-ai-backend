@@ -163,23 +163,36 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 		}
 		items := make([]gin.H, 0, len(logs))
 		for _, log := range logs {
+			meta := parseJSONObject(log.MetadataJSON)
+			duration := 4 * time.Hour
+			if log.Action == "diplomacy_negotiation_action" {
+				duration = 45 * time.Minute
+			}
+			operation := worldOperationFromLog(log, "Négociation diplomatique", "diplomacy", duration)
+			objective := firstNonEmptyPhase2(toString(meta["subject"]), toString(meta["objective"]), "Améliorer la relation")
 			items = append(items, gin.H{
-				"id":              strconv.FormatUint(uint64(log.Id), 10),
-				"targetId":        log.TargetID,
-				"targetName":      "Négociation",
-				"targetType":      "continent",
-				"subject":         "Diplomatie",
-				"objective":       "Améliorer la relation",
-				"status":          "in_progress",
-				"progress":        50,
-				"durationSeconds": 3600,
-				"startsAt":        log.CreatedAt,
-				"finishesAt":      log.CreatedAt.Add(time.Hour),
-				"cost":            gin.H{},
-				"successChance":   0.6,
-				"risks":           []string{},
-				"choices":         []string{"send_emissary", "offer_resources", "propose_treaty"},
-				"finalResult":     nil,
+				"id":               operation["id"],
+				"actionId":         operation["actionId"],
+				"targetId":         log.TargetID,
+				"targetName":       "Négociation",
+				"targetType":       "continent",
+				"subject":          "Diplomatie",
+				"objective":        objective,
+				"status":           operation["status"],
+				"progress":         operation["progress"],
+				"durationSeconds":  operation["durationSeconds"],
+				"remainingSeconds": operation["remainingSeconds"],
+				"startsAt":         operation["startsAt"],
+				"finishesAt":       operation["finishesAt"],
+				"canCancel":        operation["canCancel"],
+				"canClaim":         operation["canClaim"],
+				"cancelEndpoint":   operation["cancelEndpoint"],
+				"claimEndpoint":    operation["claimEndpoint"],
+				"cost":             gin.H{},
+				"successChance":    0.6,
+				"risks":            []string{},
+				"choices":          []string{"send_emissary", "offer_resources", "propose_treaty"},
+				"finalResult":      nil,
 			})
 		}
 		writeWorldResponse(c, gin.H{"negotiations": items}, nil)
@@ -202,8 +215,15 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 			return
 		}
 		actionID := stableActionID(payload)
+		now := time.Now().UTC()
+		duration := 4 * time.Hour
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
 		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_negotiation_open", "diplomacy", actionID, "accepted", "", payload)
-		writeWorldResponse(c, gin.H{"started": true, "id": actionID, "status": "in_progress"}, err)
+		response := worldOperationResponse(actionID, "Négociation diplomatique", "diplomacy", "in_progress", now, duration)
+		response["started"] = true
+		writeWorldResponse(c, response, err)
 	})
 
 	private.POST("/diplomacy/negotiations/:id/action", func(c *gin.Context) {
@@ -218,8 +238,15 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 			writeWorldResponse(c, nil, badRequestError("INVALID_NEGOTIATION_ACTION", "Action de négociation invalide.", map[string]any{"allowed": allowedNegotiationActions()}))
 			return
 		}
+		now := time.Now().UTC()
+		duration := 45 * time.Minute
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
 		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_negotiation_action", "diplomacy", c.Param("id"), "accepted", "", payload)
-		writeWorldResponse(c, gin.H{"applied": true, "id": c.Param("id")}, err)
+		response := worldOperationResponse(c.Param("id"), "Action de négociation", "diplomacy", "in_progress", now, duration)
+		response["applied"] = true
+		writeWorldResponse(c, response, err)
 	})
 
 	private.GET("/diplomacy/emissaries", func(c *gin.Context) {
@@ -229,11 +256,21 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 			return
 		}
 		available, total := emissaryAvailability(database, c.Request.Context(), save)
+		var missionLogs []models.PlayerActionLog
+		_ = database.WithContext(c.Request.Context()).
+			Where("player_id = ? AND world_id = ? AND action = ? AND status = ? AND created_at >= ?", save.PlayerID, save.WorldID, "diplomacy_emissary_send", "accepted", time.Now().UTC().Add(-2*time.Hour)).
+			Order("created_at DESC").
+			Limit(total).
+			Find(&missionLogs).Error
 		items := make([]gin.H, 0, total)
 		for i := 0; i < total; i++ {
-			status := "on_mission"
-			if i < available {
-				status = "available"
+			status := "available"
+			var mission any
+			if i < len(missionLogs) {
+				status = "on_mission"
+				mission = worldOperationFromLog(missionLogs[i], "Émissaire en mission", "diplomacy", 2*time.Hour)
+			} else if i >= available {
+				status = "on_mission"
 			}
 			items = append(items, gin.H{
 				"id":               i + 1,
@@ -242,7 +279,7 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 				"experience":       0,
 				"specialty":        "paix",
 				"status":           status,
-				"currentMission":   nil,
+				"currentMission":   mission,
 				"target":           nil,
 				"remainingSeconds": 0,
 				"bonuses":          []string{},
@@ -279,11 +316,23 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 			return
 		}
 		actionID := stableActionID(payload)
+		now := time.Now().UTC()
+		duration := 2 * time.Hour
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
 		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_emissary_send", "emissary", actionID, "accepted", "", payload)
-		writeWorldResponse(c, gin.H{"sent": true, "actionId": actionID, "status": "on_mission"}, err)
+		response := worldOperationResponse(actionID, "Émissaire en mission", "diplomacy", "on_mission", now, duration)
+		response["sent"] = true
+		writeWorldResponse(c, response, err)
 	})
 
 	private.GET("/diplomacy/reports", func(c *gin.Context) {
+		save, saveErr := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if saveErr != nil {
+			writeWorldResponse(c, nil, saveErr)
+			return
+		}
 		messages, err := world.ListDailyMessages(c.Request.Context(), currentUserID(c), limitFromQuery(c))
 		if err != nil {
 			writeWorldResponse(c, nil, err)
@@ -303,7 +352,15 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 				"metrics":            gin.H{},
 			})
 		}
-		writeWorldResponse(c, gin.H{"reports": reports}, nil)
+		operations := recentWorldOperations(database, c, save, map[string]worldOperationSpec{
+			"diplomacy_negotiation_open":   {Title: "Négociation diplomatique", Domain: "diplomacy", Duration: 4 * time.Hour},
+			"diplomacy_negotiation_action": {Title: "Action de négociation", Domain: "diplomacy", Duration: 45 * time.Minute},
+			"diplomacy_emissary_send":      {Title: "Émissaire en mission", Domain: "diplomacy", Duration: 2 * time.Hour},
+			"diplomacy_treaty_accept":      {Title: "Traité accepté", Domain: "diplomacy", Duration: 15 * time.Minute},
+			"diplomacy_treaty_reject":      {Title: "Traité refusé", Domain: "diplomacy", Duration: 15 * time.Minute},
+			"diplomacy_treaty_break":       {Title: "Traité rompu", Domain: "diplomacy", Duration: 15 * time.Minute},
+		}, 12)
+		writeWorldResponse(c, gin.H{"reports": reports, "operations": operations}, nil)
 	})
 
 	// Aggregated targets for "Nouvel accord", émissaires, négociations (regions + guildes + IA)
@@ -384,13 +441,27 @@ func diplomacyTreatyAction(database *gorm.DB, world *service.WorldGameService, a
 			writeWorldResponse(c, nil, conflictError("TREATY_EXPIRED", "Ce traité a expiré.", nil))
 			return
 		}
-		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_treaty_"+action, "treaty", c.Param("id"), "accepted", "", nil)
-		writeWorldResponse(c, gin.H{"status": action, "treatyId": c.Param("id")}, err)
+		now := time.Now().UTC()
+		duration := 15 * time.Minute
+		err = world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "diplomacy_treaty_"+action, "treaty", c.Param("id"), "accepted", "", gin.H{
+			"startedAt":       now.Format(time.RFC3339),
+			"finishesAt":      now.Add(duration).Format(time.RFC3339),
+			"durationSeconds": int(duration.Seconds()),
+		})
+		response := worldOperationResponse(c.Param("id"), "Décision de traité", "diplomacy", "in_progress", now, duration)
+		response["status"] = action
+		response["treatyId"] = c.Param("id")
+		writeWorldResponse(c, response, err)
 	}
 }
 
 func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *service.WorldGameService) {
 	private.GET("/trade/overview", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
 		routes, err := fetchCommerceRoutes(database, world, c)
 		if err != nil {
 			writeWorldResponse(c, nil, err)
@@ -420,6 +491,12 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 			"balanceStatus":   status,
 			"explanation":     "Solde commercial sur 24h.",
 			"impacts":         []string{},
+			"operations": recentWorldOperations(database, c, save, map[string]worldOperationSpec{
+				"commerce_create_route":    {Title: "Création route commerciale", Domain: "commerce", Duration: 45 * time.Minute},
+				"commerce_create_export":   {Title: "Création export commercial", Domain: "commerce", Duration: 45 * time.Minute},
+				"commerce_create_import":   {Title: "Création import commercial", Domain: "commerce", Duration: 45 * time.Minute},
+				"commerce_routes_optimize": {Title: "Optimisation des routes", Domain: "commerce", Duration: 45 * time.Minute},
+			}, 12),
 		}, nil)
 	})
 
@@ -460,6 +537,15 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 		}
 
 		save, _ := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		actionID := stableActionID(payload)
+		if actionID == "" || actionID == "manual" {
+			actionID = "route_" + strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
+		}
+		now := time.Now().UTC()
+		duration := 45 * time.Minute
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
 		if save != nil {
 			_ = world.LogPlayerWorldAction(
 				c.Request.Context(),
@@ -468,21 +554,54 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 				save.ContinentID,
 				actionType,
 				"trade_route",
-				"manual",
+				actionID,
 				"accepted",
 				"",
 				payload,
 			)
 		}
 
-		writeWorldResponse(c, gin.H{"created": true, "status": "negotiating", "type": payload["type"]}, nil)
+		response := worldOperationResponse(actionID, "Création de route commerciale", "commerce", "negotiating", now, duration)
+		response["created"] = true
+		response["type"] = payload["type"]
+		writeWorldResponse(c, response, nil)
+	})
+	private.POST("/trade/routes/optimize", func(c *gin.Context) {
+		payload := bindOptionalMap(c)
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
+		actionID := "optimize_" + strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
+		now := time.Now().UTC()
+		duration := 45 * time.Minute
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
+		err = world.LogPlayerWorldAction(c.Request.Context(), save.PlayerID, save.WorldID, save.ContinentID, "commerce_routes_optimize", "trade_route", actionID, "accepted", "", payload)
+		response := worldOperationResponse(actionID, "Optimisation des routes", "commerce", "in_progress", now, duration)
+		response["optimized"] = err == nil
+		writeWorldResponse(c, response, err)
 	})
 	private.POST("/trade/routes/:id/optimize", func(c *gin.Context) {
 		if err := validateRouteOwnership(database, world, c, c.Param("id")); err != nil {
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		writeWorldResponse(c, gin.H{"optimized": true, "id": c.Param("id")}, nil)
+		payload := bindOptionalMap(c)
+		save, _ := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		now := time.Now().UTC()
+		duration := 45 * time.Minute
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
+		if save != nil {
+			_ = world.LogPlayerWorldAction(c.Request.Context(), save.PlayerID, save.WorldID, save.ContinentID, "commerce_routes_optimize", "trade_route", c.Param("id"), "accepted", "", payload)
+		}
+		response := worldOperationResponse(c.Param("id"), "Optimisation de route", "commerce", "in_progress", now, duration)
+		response["optimized"] = true
+		writeWorldResponse(c, response, nil)
 	})
 	private.POST("/trade/routes/:id/pause", func(c *gin.Context) {
 		if err := validateRouteOwnership(database, world, c, c.Param("id")); err != nil {
@@ -534,9 +653,20 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 	})
 
 	private.GET("/trade/agreements", func(c *gin.Context) {
+		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
+		if err != nil {
+			writeWorldResponse(c, nil, err)
+			return
+		}
 		// Synthesize visible agreements from recent player commerce actions (newAgreement etc.)
 		agreements := synthesizePlayerAgreementsFromLogs(database, c)
-		writeWorldResponse(c, gin.H{"agreements": agreements}, nil)
+		operations := recentWorldOperations(database, c, save, map[string]worldOperationSpec{
+			"commerce_agreement_create":      {Title: "Nouvel accord commercial", Domain: "commerce", Duration: 45 * time.Minute},
+			"commerce_agreement_negotiating": {Title: "Renégociation commerciale", Domain: "commerce", Duration: 45 * time.Minute},
+			"commerce_agreement_accepted":    {Title: "Accord commercial accepté", Domain: "commerce", Duration: 15 * time.Minute},
+			"commerce_agreement_rejected":    {Title: "Accord commercial refusé", Domain: "commerce", Duration: 15 * time.Minute},
+		}, 12)
+		writeWorldResponse(c, gin.H{"agreements": agreements, "operations": operations}, nil)
 	})
 	private.POST("/trade/agreements/create", tradeAgreementCreateHandler(database, world))
 	private.POST("/trade/agreements/new", tradeAgreementCreateHandler(database, world))
@@ -721,6 +851,14 @@ func weatherPlanStartHandler(database *gorm.DB, world *service.WorldGameService)
 			return
 		}
 		now := time.Now().UTC()
+		durationMinutes, _ := plan["durationMinutes"].(int)
+		duration := time.Duration(durationMinutes) * time.Minute
+		if duration <= 0 {
+			duration = 90 * time.Minute
+		}
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
 		err = database.WithContext(c.Request.Context()).Transaction(func(tx *gorm.DB) error {
 			if err := tx.Model(&models.PlayerSave{}).Where("id = ?", save.Id).Updates(map[string]any{
 				"credits":        save.Credits - creditsCost,
@@ -731,14 +869,16 @@ func weatherPlanStartHandler(database *gorm.DB, world *service.WorldGameService)
 			}).Error; err != nil {
 				return err
 			}
-			return world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "weather_plan_start", "weather_plan", actionKey, "accepted", "", gin.H{"cost": costMap})
+			return world.LogPlayerWorldAction(c.Request.Context(), currentUserID(c), save.WorldID, save.ContinentID, "weather_plan_start", "weather_plan", actionKey, "accepted", "", payload)
 		})
 		if err != nil {
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		durationMinutes, _ := plan["durationMinutes"].(int)
-		writeWorldResponse(c, gin.H{"id": actionKey, "status": "in_progress", "startsAt": now, "finishesAt": now.Add(time.Duration(durationMinutes) * time.Minute), "plan": plan}, nil)
+		response := worldOperationResponse(actionKey, toString(plan["title"]), "weather", "in_progress", now, duration)
+		response["plan"] = plan
+		response["accepted"] = true
+		writeWorldResponse(c, response, nil)
 	}
 }
 
@@ -759,15 +899,20 @@ func weatherPlansHandler(database *gorm.DB, world *service.WorldGameService) gin
 			actionKey := toString(plan["id"])
 			durationMinutes, _ := plan["durationMinutes"].(int)
 			var logEntry models.PlayerActionLog
-			err := database.WithContext(c.Request.Context()).
+			result := database.WithContext(c.Request.Context()).
 				Where("player_id = ? AND action = ? AND target_id = ? AND status = ?", save.PlayerID, "weather_plan_start", actionKey, "accepted").
 				Order("created_at DESC").
-				First(&logEntry).Error
-			if err != nil || durationMinutes <= 0 {
+				Limit(1).
+				Find(&logEntry)
+			if result.Error != nil || result.RowsAffected == 0 || durationMinutes <= 0 {
 				plan["status"] = "available"
 				continue
 			}
 			finishesAt := logEntry.CreatedAt.UTC().Add(time.Duration(durationMinutes) * time.Minute)
+			operation := worldOperationFromLog(logEntry, toString(plan["title"]), "weather", time.Duration(durationMinutes)*time.Minute)
+			for key, value := range operation {
+				plan[key] = value
+			}
 			if finishesAt.After(now) {
 				plan["status"] = "in_progress"
 				plan["startsAt"] = logEntry.CreatedAt.UTC()
@@ -777,6 +922,8 @@ func weatherPlansHandler(database *gorm.DB, world *service.WorldGameService) gin
 				plan["status"] = "completed"
 				plan["startsAt"] = logEntry.CreatedAt.UTC()
 				plan["finishesAt"] = finishesAt
+				plan["canCancel"] = false
+				plan["canClaim"] = true
 			}
 		}
 		writeWorldResponse(c, gin.H{"plans": plans}, nil)
@@ -866,6 +1013,108 @@ func maxInt64Phase2(a int64, b int64) int64 {
 	return b
 }
 
+type worldOperationSpec struct {
+	Title    string
+	Domain   string
+	Duration time.Duration
+}
+
+func worldOperationResponse(actionID string, title string, domain string, status string, startedAt time.Time, duration time.Duration) gin.H {
+	now := time.Now().UTC()
+	if startedAt.IsZero() {
+		startedAt = now
+	}
+	if duration <= 0 {
+		duration = 30 * time.Minute
+	}
+	endsAt := startedAt.UTC().Add(duration)
+	remaining := int(endsAt.Sub(now).Seconds())
+	if remaining < 0 {
+		remaining = 0
+	}
+	progress := 1.0
+	if duration > 0 && now.Before(endsAt) {
+		elapsed := now.Sub(startedAt.UTC()).Seconds()
+		if elapsed < 0 {
+			elapsed = 0
+		}
+		progress = elapsed / duration.Seconds()
+		if progress < 0 {
+			progress = 0
+		}
+		if progress > 1 {
+			progress = 1
+		}
+	}
+	effectiveStatus := status
+	if effectiveStatus == "" {
+		effectiveStatus = "in_progress"
+	}
+	if remaining == 0 && (effectiveStatus == "in_progress" || effectiveStatus == "on_mission" || effectiveStatus == "negotiating" || effectiveStatus == "negocie") {
+		effectiveStatus = "completed"
+	}
+	actionID = strings.TrimSpace(actionID)
+	if actionID == "" {
+		actionID = "manual"
+	}
+	return gin.H{
+		"id":               actionID,
+		"actionId":         actionID,
+		"title":            title,
+		"domain":           domain,
+		"status":           effectiveStatus,
+		"startedAt":        startedAt.UTC().Format(time.RFC3339),
+		"startsAt":         startedAt.UTC().Format(time.RFC3339),
+		"endsAt":           endsAt.Format(time.RFC3339),
+		"finishesAt":       endsAt.Format(time.RFC3339),
+		"durationSeconds":  int(duration.Seconds()),
+		"remainingSeconds": remaining,
+		"progress":         progress,
+		"canCancel":        remaining > 0,
+		"canClaim":         remaining == 0,
+		"cancelEndpoint":   "/api/v1/world/actions/" + actionID + "/cancel",
+		"claimEndpoint":    "/api/v1/world/actions/" + actionID + "/claim",
+		"serverNow":        now.Format(time.RFC3339),
+	}
+}
+
+func worldOperationFromLog(log models.PlayerActionLog, title string, domain string, duration time.Duration) gin.H {
+	actionID := strings.TrimSpace(log.TargetID)
+	if actionID == "" {
+		actionID = strconv.FormatUint(uint64(log.Id), 10)
+	}
+	return worldOperationResponse(actionID, title, domain, "in_progress", log.CreatedAt.UTC(), duration)
+}
+
+func recentWorldOperations(database *gorm.DB, c *gin.Context, save *models.PlayerSave, specs map[string]worldOperationSpec, limit int) []gin.H {
+	if database == nil || save == nil || len(specs) == 0 {
+		return []gin.H{}
+	}
+	actions := make([]string, 0, len(specs))
+	for action := range specs {
+		actions = append(actions, action)
+	}
+	var logs []models.PlayerActionLog
+	since := time.Now().UTC().Add(-7 * 24 * time.Hour)
+	if limit <= 0 {
+		limit = 20
+	}
+	_ = database.WithContext(c.Request.Context()).
+		Where("player_id = ? AND world_id = ? AND action IN ? AND status = ? AND created_at >= ?", save.PlayerID, save.WorldID, actions, "accepted", since).
+		Order("created_at DESC").
+		Limit(limit).
+		Find(&logs).Error
+	out := make([]gin.H, 0, len(logs))
+	for _, log := range logs {
+		spec, ok := specs[log.Action]
+		if !ok {
+			continue
+		}
+		out = append(out, worldOperationFromLog(log, spec.Title, spec.Domain, spec.Duration))
+	}
+	return out
+}
+
 func registerWorldRegionAndReportsRoutes(private *gin.RouterGroup, database *gorm.DB, world *service.WorldGameService) {
 	private.GET("/world/regions", func(c *gin.Context) {
 		save, err := world.EnsurePlayerSave(c.Request.Context(), currentUserID(c))
@@ -933,7 +1182,12 @@ func registerWorldRegionAndReportsRoutes(private *gin.RouterGroup, database *gor
 			writeWorldResponse(c, nil, err)
 			return
 		}
-		writeWorldResponse(c, gin.H{"reports": formatConflictItems(database, c.Request.Context(), conflicts)}, nil)
+		writeWorldResponse(c, gin.H{
+			"reports": formatConflictItems(database, c.Request.Context(), conflicts),
+			"operations": recentWorldOperations(database, c, save, map[string]worldOperationSpec{
+				"conflict_action": {Title: "Intervention tactique", Domain: "conflicts", Duration: 4 * time.Hour},
+			}, 12),
+		}, nil)
 	})
 
 	private.GET("/world/events/:id", getOwnedWorldEntity[models.GameEvent](database, world, "game event", "world_id = ? AND (continent_id IS NULL OR continent_id = ?)"))
@@ -964,9 +1218,11 @@ func tradeAgreementDecisionHandler(database *gorm.DB, world *service.WorldGameSe
 		}
 		if sourceLogID != 0 {
 			var logEntry models.PlayerActionLog
-			if err := database.WithContext(c.Request.Context()).
+			result := database.WithContext(c.Request.Context()).
 				Where("id = ? AND player_id = ? AND action = ?", sourceLogID, save.PlayerID, "commerce_agreement_create").
-				First(&logEntry).Error; err == nil {
+				Limit(1).
+				Find(&logEntry)
+			if result.Error == nil && result.RowsAffected > 0 {
 				meta := parseJSONObject(logEntry.MetadataJSON)
 				meta["agreementStatus"] = status
 				meta["decisionAt"] = time.Now().UTC().Format(time.RFC3339)
@@ -981,6 +1237,14 @@ func tradeAgreementDecisionHandler(database *gorm.DB, world *service.WorldGameSe
 				}
 			}
 		}
+		now := time.Now().UTC()
+		duration := 15 * time.Minute
+		if status == "negotiating" {
+			duration = 45 * time.Minute
+		}
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
 		logErr := world.LogPlayerWorldAction(
 			c.Request.Context(),
 			save.PlayerID,
@@ -993,7 +1257,10 @@ func tradeAgreementDecisionHandler(database *gorm.DB, world *service.WorldGameSe
 			"",
 			gin.H{"agreementId": agreementID, "agreementStatus": status, "payload": payload},
 		)
-		writeWorldResponse(c, gin.H{"status": status, "id": agreementID, "updated": logErr == nil}, logErr)
+		response := worldOperationResponse(agreementID, "Décision accord commercial", "commerce", "in_progress", now, duration)
+		response["status"] = status
+		response["updated"] = logErr == nil
+		writeWorldResponse(c, response, logErr)
 	}
 }
 
@@ -1007,27 +1274,34 @@ func tradeAgreementCreateHandler(database *gorm.DB, world *service.WorldGameServ
 		}
 		payload["agreementStatus"] = "negocie"
 		actionID := stableActionID(payload)
+		if actionID == "" || actionID == "manual" {
+			actionID = "agreement_" + strconv.FormatInt(time.Now().UTC().UnixNano(), 10)
+		}
+		now := time.Now().UTC()
+		duration := 45 * time.Minute
+		payload["startedAt"] = now.Format(time.RFC3339)
+		payload["finishesAt"] = now.Add(duration).Format(time.RFC3339)
+		payload["durationSeconds"] = int(duration.Seconds())
 		err = world.LogPlayerWorldAction(c.Request.Context(), save.PlayerID, save.WorldID, save.ContinentID, "commerce_agreement_create", "commerce_agreement", actionID, "accepted", "", payload)
 		if err != nil {
 			writeWorldResponse(c, nil, err)
 			return
 		}
 		var logEntry models.PlayerActionLog
-		_ = database.WithContext(c.Request.Context()).
+		result := database.WithContext(c.Request.Context()).
 			Where("player_id = ? AND action = ? AND target_id = ?", save.PlayerID, "commerce_agreement_create", actionID).
 			Order("created_at DESC").
-			First(&logEntry).Error
+			Limit(1).
+			Find(&logEntry)
 		agreementID := actionID
-		if logEntry.Id != 0 {
+		if result.Error == nil && result.RowsAffected > 0 && logEntry.Id != 0 {
 			agreementID = "agr_" + strconv.FormatUint(uint64(logEntry.Id), 10)
 		}
-		writeWorldResponse(c, gin.H{
-			"created":   true,
-			"id":        agreementID,
-			"actionId":  actionID,
-			"status":    "negocie",
-			"agreement": gin.H{"id": agreementID, "status": "negocie", "source": "player"},
-		}, nil)
+		response := worldOperationResponse(agreementID, "Nouvel accord commercial", "commerce", "negocie", now, duration)
+		response["created"] = true
+		response["sourceActionId"] = actionID
+		response["agreement"] = gin.H{"id": agreementID, "status": "negocie", "source": "player"}
+		writeWorldResponse(c, response, nil)
 	}
 }
 
