@@ -741,22 +741,26 @@ func registerWeatherRoutes(private *gin.RouterGroup, database *gorm.DB, world *s
 			}
 			avg = sum / len(weather)
 		}
-		forecast := []gin.H{}
-		if len(weather) > 0 {
-			for i := 0; i < 24; i += 4 {
-				sev := clamp(avg+(i-8)*2, 0, 100)
-				eventDesc := "projection stable"
+		forecast := make([]gin.H, 0, 24)
+		for i := 0; i < 24; i++ {
+			sev := 0
+			eventDesc := "temps stable"
+			source := "baseline_no_active_weather"
+			if len(weather) > 0 {
+				sev = clamp(avg+(i-8)*2, 0, 100)
+				eventDesc = "projection stable"
+				source = "projection_from_active_weather"
 				if sev > 60 {
 					eventDesc = "projection de risque élevé"
 				}
-				forecast = append(forecast, gin.H{
-					"hour":     i,
-					"severity": sev,
-					"risk":     riskLabel(sev),
-					"event":    eventDesc,
-					"source":   "projection_from_active_weather",
-				})
 			}
+			forecast = append(forecast, gin.H{
+				"hour":     i,
+				"severity": sev,
+				"risk":     riskLabel(sev),
+				"event":    eventDesc,
+				"source":   source,
+			})
 		}
 
 		writeWorldResponse(c, gin.H{
