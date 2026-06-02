@@ -103,7 +103,16 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 				"stance":  diplomacyStance(score),
 			})
 		}
-		writeWorldResponse(c, gin.H{"relations": relations}, nil)
+		writeWorldResponse(c, gin.H{
+			"relations": relations,
+			"summary":   "Lecture des relations IA par continent.",
+			"impact":    "Les relations influencent les traités, les émissaires et les risques de conflit.",
+			"rewards":   worldOperationRewards("diplomacy"),
+			"recommendations": []string{
+				"Envoyer un émissaire vers une relation tendue.",
+				"Ouvrir une négociation si le score descend sous 50.",
+			},
+		}, nil)
 	})
 
 	private.GET("/diplomacy/treaties", func(c *gin.Context) {
@@ -138,7 +147,12 @@ func registerDiplomacyRoutes(private *gin.RouterGroup, database *gorm.DB, world 
 				})
 			}
 		}
-		writeWorldResponse(c, gin.H{"treaties": treaties}, nil)
+		writeWorldResponse(c, gin.H{
+			"treaties": treaties,
+			"summary":  "Traités actifs et opportunités de stabilisation diplomatique.",
+			"impact":   "Un traité accepté baisse la tension et améliore le score diplomatique.",
+			"rewards":  worldOperationRewards("diplomacy"),
+		}, nil)
 	})
 
 	private.POST("/diplomacy/treaties/:id/accept", diplomacyTreatyAction(database, world, "accept"))
@@ -524,7 +538,12 @@ func registerTradeRoutes(private *gin.RouterGroup, database *gorm.DB, world *ser
 				"targetType": "continent",
 			})
 		}
-		writeWorldResponse(c, gin.H{"routes": items}, nil)
+		writeWorldResponse(c, gin.H{
+			"routes":  items,
+			"summary": "Routes commerciales connues par le moteur IA.",
+			"impact":  "Les routes modifient les crédits 24h, les importations et la dépendance extérieure.",
+			"rewards": worldOperationRewards("commerce"),
+		}, nil)
 	})
 
 	private.POST("/trade/routes/create", func(c *gin.Context) {
@@ -777,7 +796,16 @@ func registerWeatherRoutes(private *gin.RouterGroup, database *gorm.DB, world *s
 		for _, item := range weather {
 			risks = append(risks, gin.H{"id": item.Id, "type": item.Type, "risk": riskLabel(item.Severity), "severity": item.Severity})
 		}
-		writeWorldResponse(c, gin.H{"risks": risks}, nil)
+		writeWorldResponse(c, gin.H{
+			"risks":   risks,
+			"summary": "Risques météo évalués sur les événements actifs.",
+			"impact":  "Un risque élevé peut réduire population, nourriture, énergie et bâtiments.",
+			"rewards": worldOperationRewards("weather"),
+			"recommendations": []string{
+				"Démarrer un plan météo si la sévérité dépasse 60.",
+				"Prépositionner des ressources avant les risques longs.",
+			},
+		}, nil)
 	})
 
 	private.GET("/weather/plans", weatherPlansHandler(database, world))
@@ -1075,6 +1103,38 @@ func worldOperationResponse(actionID string, title string, domain string, status
 		"cancelEndpoint":   "/api/v1/world/actions/" + actionID + "/cancel",
 		"claimEndpoint":    "/api/v1/world/actions/" + actionID + "/claim",
 		"serverNow":        now.Format(time.RFC3339),
+		"rewards":          worldOperationRewards(domain),
+		"impact":           worldOperationImpact(domain),
+	}
+}
+
+func worldOperationRewards(domain string) gin.H {
+	switch strings.TrimSpace(strings.ToLower(domain)) {
+	case "conflicts":
+		return gin.H{"xp": 90, "credits": 350, "stability": 4, "description": "Gain tactique si l'action est menée à terme."}
+	case "diplomacy":
+		return gin.H{"xp": 60, "reputation": 5, "diplomacyScore": 3, "description": "Améliore l'influence diplomatique et débloque de meilleurs accords."}
+	case "commerce":
+		return gin.H{"xp": 45, "credits": 500, "tradeEfficiency": 3, "description": "Améliore les flux commerciaux et les gains sur 24h."}
+	case "weather":
+		return gin.H{"xp": 55, "riskReduction": 8, "populationProtection": 4, "description": "Réduit les dégâts météo et protège population/production."}
+	default:
+		return gin.H{"xp": 25, "description": "Récompense monde calculée à la finalisation."}
+	}
+}
+
+func worldOperationImpact(domain string) string {
+	switch strings.TrimSpace(strings.ToLower(domain)) {
+	case "conflicts":
+		return "Réduction de tension et meilleure stabilité militaire si l'opération réussit."
+	case "diplomacy":
+		return "Influence les relations IA, les traités et les futures négociations."
+	case "commerce":
+		return "Influence routes, volume d'échange, balance commerciale et revenus."
+	case "weather":
+		return "Influence risques météo, pertes civiles, dégâts bâtiments et continuité production."
+	default:
+		return "Influence le score mondial et le journal de progression."
 	}
 }
 
