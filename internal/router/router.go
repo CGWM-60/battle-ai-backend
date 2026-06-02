@@ -79,11 +79,13 @@ func RouterApp(database *gorm.DB) {
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())
 	adminAPI.PATCH("/users/:id/progression", updateUserProgression(database))
-	registerAdminWorldGameRoutes(adminAPI, database)
+	// Monde IA desactive: routes admin API legacy non enregistrees.
+	// registerAdminWorldGameRoutes(adminAPI, database)
 
 	strictAdminAPI := router.Group("/api/admin")
 	strictAdminAPI.Use(jwtAuth(), adminAPIAuth(), queue.Middleware())
-	registerStrictAdminWorldGameRoutes(strictAdminAPI, database)
+	// Monde IA desactive: routes strictes /api/admin/game non enregistrees.
+	// registerStrictAdminWorldGameRoutes(strictAdminAPI, database)
 
 	private.POST("/battle", startBattle(database))
 	private.POST("/battles", startBattle(database))
@@ -146,7 +148,8 @@ func RouterApp(database *gorm.DB) {
 	private.GET("/live/sessions/:id/events", getLiveSessionEvents(database))
 	private.GET("/live/:channel/history", getLiveHistory(database))
 	private.POST("/live/sessions/:id/end", endLiveSession(database))
-	registerWorldGameRoutes(private, database)
+	// Monde IA desactive: routes joueur /api/v1/world, city, guild, research, etc. non enregistrees.
+	// registerWorldGameRoutes(private, database)
 
 	host := getEnv("APP_HOST", "0.0.0.0")
 	port := getEnv("APP_PORT", "8080")

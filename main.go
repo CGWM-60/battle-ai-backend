@@ -9,6 +9,7 @@ import (
 func main() {
 	database := db.DbConnect()
 	scheduler.StartQuestGenerationCron(database)
-	scheduler.StartWorldSimulationCron(database)
+	// Monde IA desactive: ne pas demarrer les boucles cron world simulation/routine.
+	// scheduler.StartWorldSimulationCron(database)
 	router.RouterApp(database)
 }

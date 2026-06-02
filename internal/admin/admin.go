@@ -376,7 +376,8 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.PUT("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
 	api.PATCH("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
 	api.DELETE("/nexus-coin/plans/:id", server.deleteNexusCoinPlanAPI)
-	server.registerGameAdminAPI(api)
+	// Monde IA desactive: ne pas exposer /admin/api/game.
+	// server.registerGameAdminAPI(api)
 
 	router.GET("/api/v1/nexus-coin/plans", server.publicNexusCoinPlansAPI)
 

@@ -41,17 +41,15 @@ func StartWorldSimulationCron(db *gorm.DB) {
 	hourly := worldSimulationInterval("WORLD_SIMULATION_CONTINENT_INTERVAL_MINUTES", 60, time.Minute)
 	daily := worldSimulationInterval("WORLD_SIMULATION_DAILY_INTERVAL_HOURS", 24, time.Hour)
 	routine := worldSimulationInterval("WORLD_ROUTINE_4_PAGES_INTERVAL_SECONDS", 60, time.Second)
-	enabled := !strings.EqualFold(os.Getenv("WORLD_SIMULATION_CRON_ENABLED"), "false")
+	enabled := false
 	setWorldCronRuntime(enabled, "boot", light, hourly, daily, routine)
-	if !enabled {
-		log.Printf("[world-sim] step=boot status=disabled reason=WORLD_SIMULATION_CRON_ENABLED=false loops=paused")
-	} else {
-		log.Printf("[world-sim] step=boot status=enabled light=%s continental=%s daily=%s routine4pages=%s", light, hourly, daily, routine)
-	}
-	go runWorldSimulationLoop(db, service.SimulationCycleLight, light)
-	go runWorldSimulationLoop(db, service.SimulationCycleHourly, hourly)
-	go runWorldSimulationLoop(db, service.SimulationCycleDaily, daily)
-	go runWorldRoutineLoop(db, routine)
+	log.Printf("[world-sim] step=boot status=disabled reason=monde_ia_disabled loops=paused")
+
+	// Monde IA desactive: toutes les taches cron de simulation/routine restent commentees.
+	// go runWorldSimulationLoop(db, service.SimulationCycleLight, light)
+	// go runWorldSimulationLoop(db, service.SimulationCycleHourly, hourly)
+	// go runWorldSimulationLoop(db, service.SimulationCycleDaily, daily)
+	// go runWorldRoutineLoop(db, routine)
 }
 
 func runWorldSimulationLoop(db *gorm.DB, cycleType string, interval time.Duration) {
