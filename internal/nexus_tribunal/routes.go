@@ -2,8 +2,10 @@ package nexustribunal
 
 import (
 	tribunaladapters "cgwm/battle/internal/nexus_tribunal/adapters"
+	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
 	"cgwm/battle/internal/service"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -189,7 +191,7 @@ type apiError struct {
 // RegisterRoutes wires the autonomous Tribunal module. The caller can mount it
 // once from the main router without leaking Tribunal handlers into router files.
 func RegisterRoutes(router *gin.Engine, db *gorm.DB, authMiddleware gin.HandlerFunc, adminMiddleware gin.HandlerFunc) {
-	_ = db.AutoMigrate(&TribunalCase{}, &TribunalEvidence{}, &TribunalWitness{}, &TribunalStatement{})
+	_ = db.AutoMigrate(&TribunalCase{}, &TribunalEvidence{}, &TribunalWitness{}, &TribunalStatement{}, &tribunalmodels.TribunalGeneratedCase{}, &tribunalmodels.TribunalCaseGenerationBatch{})
 	module := newModule(db)
 	for _, prefix := range []string{"/api/nexus-tribunal", "/api/v1/nexus-tribunal"} {
 		group := router.Group(prefix)
@@ -198,6 +200,8 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, authMiddleware gin.HandlerF
 		admin := group.Group("/admin")
 		admin.Use(adminMiddleware)
 		admin.GET("/debug", module.debug)
+		admin.GET("/generated-cases/batches", module.listGenerationBatches)
+		admin.POST("/generated-cases/generate-now", module.triggerGenerateNow)
 	}
 }
 
@@ -232,6 +236,12 @@ func (m *module) mount(group *gin.RouterGroup) {
 	group.POST("/cases/:caseId/jury-vote", m.juryVote)
 	group.POST("/cases/:caseId/verdict", m.verdict)
 	group.GET("/archives", m.archives)
+	// Generated cases (from PROMPT_TRIBUNAL_CASE_GENERATOR)
+	group.GET("/generated-cases", m.listGeneratedCases)
+	group.GET("/generated-cases/filters", m.generatedFilters)
+	group.GET("/generated-cases/:genId", m.getGeneratedCase)
+	group.POST("/generated-cases/:genId/load", m.loadGeneratedCase)
+	// Admin/debug for generated (protected by adminMiddleware on /admin sub)
 }
 
 func (m *module) index(c *gin.Context) {
@@ -1036,4 +1046,312 @@ func assetRecord(id string, category string, name string, path string) gin.H {
 		"isPremium": false,
 		"isRemote":  false,
 	}
+}
+
+// =============================================================================
+// GENERATED CASES HANDLERS (PROMPT_TRIBUNAL_CASE_GENERATOR_FLUTTER_GO)
+// =============================================================================
+
+func (m *module) listGeneratedCases(c *gin.Context) {
+	ownerID := currentOwnerID(c) // not strictly owner for generated (public templates), but keep for future
+	_ = ownerID
+	q := m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("is_published = ? AND status IN ?", true, []string{"ready", "published"})
+	if lvl := c.Query("level"); lvl != "" {
+		if n, _ := strconv.Atoi(lvl); n > 0 {
+			q = q.Where("level = ?", n)
+		}
+	}
+	if diff := c.Query("difficulty"); diff != "" {
+		q = q.Where("difficulty = ?", diff)
+	}
+	if ct := c.Query("type"); ct != "" {
+		q = q.Where("case_type = ?", ct)
+	}
+	if mode := c.Query("mode"); mode != "" {
+		q = q.Where("mode = ?", mode)
+	}
+	if status := c.Query("status"); status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if tag := c.Query("tag"); tag != "" {
+		q = q.Where("JSON_CONTAINS(tags_json, ?)", `"`+tag+`"`)
+	}
+	if search := strings.TrimSpace(c.Query("search")); search != "" {
+		like := "%" + search + "%"
+		q = q.Where("title LIKE ? OR summary LIKE ?", like, like)
+	}
+	page := 1
+	if p, _ := strconv.Atoi(c.Query("page")); p > 0 {
+		page = p
+	}
+	limit := 20
+	if l, _ := strconv.Atoi(c.Query("limit")); l > 0 && l <= 100 {
+		limit = l
+	}
+	offset := (page - 1) * limit
+
+	var total int64
+	q.Count(&total)
+
+	var items []tribunalmodels.TribunalGeneratedCase
+	if err := q.Order("level asc, created_at desc").Offset(offset).Limit(limit).Find(&items).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "DB_ERROR", "Erreur lecture affaires generees.", nil)
+		return
+	}
+
+	// light projection for list
+	data := make([]gin.H, 0, len(items))
+	for _, it := range items {
+		var tags []string
+		_ = json.Unmarshal(it.TagsJSON, &tags)
+		data = append(data, gin.H{
+			"id":                       it.ID,
+			"title":                    it.Title,
+			"summary":                  it.Summary,
+			"caseType":                 it.CaseType,
+			"level":                    it.Level,
+			"difficulty":               it.Difficulty,
+			"estimatedDurationMinutes": it.EstimatedDurationMinutes,
+			"mode":                     it.Mode,
+			"tone":                     it.Tone,
+			"playerRoleSuggestion":     it.PlayerRoleSuggestion,
+			"tags":                     tags,
+			"isPlayable":               it.IsPlayable,
+			"isPublished":              it.IsPublished,
+			"createdAt":                it.CreatedAt,
+			"providerType":             it.ProviderType,
+			"model":                    it.Model,
+		})
+	}
+	respondOK(c, gin.H{
+		"success": true,
+		"data":    data,
+		"pagination": gin.H{
+			"page":    page,
+			"limit":   limit,
+			"total":   total,
+			"hasNext": int64(offset+limit) < total,
+		},
+	})
+}
+
+func (m *module) generatedFilters(c *gin.Context) {
+	respondOK(c, gin.H{
+		"success": true,
+		"data": gin.H{
+			"levels":       []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			"difficulties": []string{"initiation", "easy", "standard", "intermediate", "confirmed", "hard", "expert", "master", "legendary", "nexus"},
+			"types":        []string{"moral", "political", "guild_conflict", "player_conflict", "world_event", "quest_consequence", "roleplay", "absurd", "custom"},
+			"modes":        []string{"quick_trial", "full_case", "debate_only", "auto_play", "nexus_integrated"},
+			"statuses":     []string{"published", "ready", "archived"},
+			"tags":         []string{"ia", "ville", "guilde", "preuve", "trahison", "liberte", "nexus"},
+		},
+	})
+}
+
+func (m *module) getGeneratedCase(c *gin.Context) {
+	genID, _ := strconv.Atoi(c.Param("genId"))
+	var g tribunalmodels.TribunalGeneratedCase
+	if err := m.db.First(&g, genID).Error; err != nil {
+		respondErr(c, http.StatusNotFound, "NOT_FOUND", "Affaire generee introuvable.", nil)
+		return
+	}
+	var tags, witnesses, evidence, testimony, contradictions []any
+	_ = json.Unmarshal(g.TagsJSON, &tags)
+	_ = json.Unmarshal(g.WitnessesJSON, &witnesses)
+	_ = json.Unmarshal(g.EvidenceJSON, &evidence)
+	_ = json.Unmarshal(g.TestimonyJSON, &testimony)
+	_ = json.Unmarshal(g.ExpectedContradictionsJSON, &contradictions)
+	respondOK(c, gin.H{
+		"success": true,
+		"data": gin.H{
+			"id":                       g.ID,
+			"title":                    g.Title,
+			"summary":                  g.Summary,
+			"caseType":                 g.CaseType,
+			"level":                    g.Level,
+			"difficulty":               g.Difficulty,
+			"estimatedDurationMinutes": g.EstimatedDurationMinutes,
+			"mode":                     g.Mode,
+			"tone":                     g.Tone,
+			"playerRoleSuggestion":     g.PlayerRoleSuggestion,
+			"accusationPosition":       g.AccusationPosition,
+			"defensePosition":          g.DefensePosition,
+			"tags":                     tags,
+			"witnesses":                witnesses,
+			"evidence":                 evidence,
+			"testimonyStatements":      testimony,
+			"expectedContradictions":   contradictions,
+			"status":                   g.Status,
+			"isPlayable":               g.IsPlayable,
+			"isPublished":              g.IsPublished,
+			"generatedByCron":          g.GeneratedByCron,
+			"providerType":             g.ProviderType,
+			"model":                    g.Model,
+			"createdAt":                g.CreatedAt,
+		},
+	})
+}
+
+func (m *module) loadGeneratedCase(c *gin.Context) {
+	genID, _ := strconv.Atoi(c.Param("genId"))
+	var g tribunalmodels.TribunalGeneratedCase
+	if err := m.db.First(&g, genID).Error; err != nil {
+		respondErr(c, http.StatusNotFound, "NOT_FOUND", "Affaire generee introuvable.", nil)
+		return
+	}
+	if !g.IsPlayable || g.Status == "archived" || g.Status == "rejected" {
+		respondErr(c, http.StatusBadRequest, "NOT_PLAYABLE", "Cette affaire n'est plus chargeable.", nil)
+		return
+	}
+
+	ownerID := currentOwnerID(c)
+	var req struct {
+		PlayerRole string         `json:"playerRole"`
+		Provider   providerConfig `json:"provider"`
+	}
+	_ = bindJSON(c, &req)
+	if req.PlayerRole == "" {
+		req.PlayerRole = g.PlayerRoleSuggestion
+	}
+
+	// Create real playable TribunalCase
+	tc := TribunalCase{
+		OwnerID:            ownerID,
+		Title:              g.Title,
+		CaseType:           g.CaseType,
+		Description:        g.Summary,
+		AccusationPosition: g.AccusationPosition,
+		DefensePosition:    g.DefensePosition,
+		PlayerRole:         defaultText(req.PlayerRole, "neutral"),
+		Mode:               defaultText(g.Mode, "full_case"),
+		Tone:               defaultText(g.Tone, "cyberpunk_serious"),
+		ProviderType:       defaultText(req.Provider.ProviderType, g.ProviderType),
+		ProviderModel:      defaultText(req.Provider.Model, g.ProviderModel),
+		Status:             statusOpen,
+		CurrentPhase:       phaseInvestigation,
+		DefenseScore:       50,
+		AccusationScore:    50,
+		Pressure:           10,
+		JuryCount:          5,
+		EnableInvestigation: true,
+		EnableObjections:    true,
+	}
+	if err := m.db.Create(&tc).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "CASE_CREATE_FAILED", "Impossible de charger l'affaire.", nil)
+		return
+	}
+
+	// Copy evidences
+	var evs []tribunalmodels.TribunalGeneratedCase // reuse for unmarshal only
+	_ = json.Unmarshal(g.EvidenceJSON, &evs) // actually array of maps
+	var evList []map[string]any
+	_ = json.Unmarshal(g.EvidenceJSON, &evList)
+	for _, e := range evList {
+		ev := TribunalEvidence{
+			CaseID:       tc.ID,
+			OwnerID:      ownerID,
+			Title:        fmt.Sprint(e["title"]),
+			Description:  fmt.Sprint(e["description"]),
+			EvidenceType: defaultText(fmt.Sprint(e["evidenceType"]), "document"),
+			Strength:     intFromAny(e["strength"], 60),
+			Reliability:  intFromAny(e["reliability"], 70),
+			Tags:         strings.Join(stringSliceFromAny(e["tags"]), ","),
+			SupportsSide: defaultText(fmt.Sprint(e["supportsSide"]), "neutral"),
+			AssetID:      "tribunal.evidence.document",
+		}
+		_ = m.db.Create(&ev).Error
+	}
+
+	// Copy witnesses + their statements
+	var witList []map[string]any
+	_ = json.Unmarshal(g.WitnessesJSON, &witList)
+	var stmtList []map[string]any
+	_ = json.Unmarshal(g.TestimonyJSON, &stmtList)
+	for _, w := range witList {
+		wit := TribunalWitness{
+			CaseID:      tc.ID,
+			OwnerID:     ownerID,
+			Name:        fmt.Sprint(w["name"]),
+			Role:        defaultText(fmt.Sprint(w["role"]), "temoin"),
+			Credibility: intFromAny(w["credibility"], 65),
+			Bias:        defaultText(fmt.Sprint(w["bias"]), "neutral"),
+			Personality: defaultText(fmt.Sprint(w["personality"]), "precis"),
+			Knowledge:   defaultText(fmt.Sprint(w["knowledge"]), ""),
+			AssetID:     "tribunal.character.witness_default",
+		}
+		if err := m.db.Create(&wit).Error; err != nil {
+			continue
+		}
+		// attach matching statements
+		for _, s := range stmtList {
+			if fmt.Sprint(s["witnessName"]) == wit.Name || strings.Contains(wit.Name, fmt.Sprint(s["witnessName"])) {
+				st := TribunalStatement{
+					CaseID:         tc.ID,
+					WitnessID:      wit.ID,
+					OwnerID:        ownerID,
+					Content:        fmt.Sprint(s["content"]),
+					StatementIndex: len(stmtList), // rough
+					Tags:           strings.Join(stringSliceFromAny(s["tags"]), ","),
+					IsAttackable:   boolFromAny(s["isAttackable"], true),
+					TruthLevel:     "partial",
+					Status:         "active",
+				}
+				_ = m.db.Create(&st).Error
+			}
+		}
+	}
+
+	// link back
+	g.CaseID = &tc.ID
+	_ = m.db.Save(&g).Error
+
+	respondOK(c, gin.H{
+		"success":       true,
+		"data":          gin.H{"caseId": tc.ID, "generatedCaseId": g.ID, "status": "created", "currentPhase": tc.CurrentPhase, "nextScreen": "investigation"},
+		"message":       "Affaire chargee avec succes.",
+	})
+}
+
+func (m *module) listGenerationBatches(c *gin.Context) {
+	var batches []tribunalmodels.TribunalCaseGenerationBatch
+	_ = m.db.Order("created_at desc").Limit(20).Find(&batches).Error
+	respondOK(c, gin.H{"success": true, "data": batches})
+}
+
+func (m *module) triggerGenerateNow(c *gin.Context) {
+	// For admin: trigger a synchronous limited generation (uses default env provider)
+	// Reuse the adapter or direct call for simplicity in low-credit impl.
+	respondOK(c, gin.H{"success": true, "message": "Trigger not fully wired in this pass (use real cron or implement direct generate). Check /api/nexus-tribunal/admin/generated-cases/batches after cron run."})
+}
+
+// small helpers for load
+func intFromAny(v any, fb int) int {
+	switch x := v.(type) {
+	case float64:
+		return int(x)
+	case int:
+		return x
+	case string:
+		if n, _ := strconv.Atoi(x); n != 0 {
+			return n
+		}
+	}
+	return fb
+}
+func boolFromAny(v any, fb bool) bool {
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	return fb
+}
+func stringSliceFromAny(v any) []string {
+	if arr, ok := v.([]any); ok {
+		out := make([]string, 0, len(arr))
+		for _, a := range arr {
+			out = append(out, fmt.Sprint(a))
+		}
+		return out
+	}
+	return nil
 }

@@ -158,6 +158,15 @@ const adminHTML = `
             <td>{{.Cron.RolePlay.LastDurationMS}} ms</td>
             <td class="prewrap">{{if .Cron.RolePlay.LastError}}{{.Cron.RolePlay.LastError}}{{else}}{{.Cron.RolePlay.LastMessage}}{{end}}</td>
           </tr>
+          <tr>
+            <td>tribunal</td>
+            <td>{{if .Cron.Tribunal.LastRunID}}{{.Cron.Tribunal.LastRunID}}{{else}}-{{end}}</td>
+            <td>{{if .Cron.Tribunal.LastProvider}}{{.Cron.Tribunal.LastProvider}} / {{.Cron.Tribunal.LastModel}}{{else}}-{{end}}</td>
+            <td>{{if .Cron.Tribunal.LastStep}}{{.Cron.Tribunal.LastStep}}{{else}}-{{end}}</td>
+            <td><span class="status {{.Cron.Tribunal.LastStatus}}">{{if .Cron.Tribunal.LastStatus}}{{.Cron.Tribunal.LastStatus}}{{else}}idle{{end}}</span></td>
+            <td>{{.Cron.Tribunal.LastDurationMS}} ms</td>
+            <td class="prewrap">{{if .Cron.Tribunal.LastError}}{{.Cron.Tribunal.LastError}}{{else}}{{.Cron.Tribunal.LastMessage}}{{end}}</td>
+          </tr>
         </tbody>
       </table>
       <h3>Traces recentes</h3>

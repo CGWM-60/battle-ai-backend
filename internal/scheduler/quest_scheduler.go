@@ -15,6 +15,7 @@ import (
 
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
+	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
 	"cgwm/battle/internal/provider"
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/service"
@@ -63,6 +64,7 @@ type CronSnapshot struct {
 	NextRun  string
 	Battle   CronJobState
 	RolePlay CronJobState
+	Tribunal CronJobState
 	Logs     []CronLogEntry
 }
 
@@ -77,6 +79,7 @@ var cronMemory = struct {
 	states: map[string]CronJobState{
 		"battle":   {Job: "battle"},
 		"roleplay": {Job: "roleplay"},
+		"tribunal": {Job: "tribunal"},
 	},
 }
 
@@ -150,14 +153,15 @@ func StartQuestGenerationCron(db *gorm.DB) {
 	location := loadLocation()
 	setCronRuntime(true, location.String())
 	log.Printf(
-		"[quest-cron] step=boot status=enabled timezone=%s hours=08,12,20 limit=%d battle_job=true roleplay_job=true",
+		"[quest-cron] step=boot status=enabled timezone=%s hours=08,12,20 limit=%d battle_job=true roleplay_job=true tribunal_job=true",
 		location.String(),
 		cronQuestLimit,
 	)
-	recordCronLog(CronLogEntry{Step: "boot", Status: "enabled", Message: fmt.Sprintf("timezone=%s hours=08,12,20 limit=%d battle_job=true roleplay_job=true", location.String(), cronQuestLimit)})
+	recordCronLog(CronLogEntry{Step: "boot", Status: "enabled", Message: fmt.Sprintf("timezone=%s hours=08,12,20 limit=%d battle_job=true roleplay_job=true tribunal_job=true", location.String(), cronQuestLimit)})
 
 	go runHourlyJob(db, location, "battle", runBattleQuestJob)
 	go runHourlyJob(db, location, "roleplay", runRolePlayQuestJob)
+	go runHourlyJob(db, location, "tribunal", runTribunalCaseJob)
 }
 
 func runHourlyJob(
@@ -877,6 +881,7 @@ func Snapshot() CronSnapshot {
 		NextRun:  nextRunLocked(),
 		Battle:   cronMemory.states["battle"],
 		RolePlay: cronMemory.states["roleplay"],
+		Tribunal: cronMemory.states["tribunal"],
 		Logs:     logs,
 	}
 }
@@ -889,7 +894,7 @@ func setCronRuntime(enabled bool, timezone string) {
 	if cronMemory.states == nil {
 		cronMemory.states = map[string]CronJobState{}
 	}
-	for _, job := range []string{"battle", "roleplay"} {
+	for _, job := range []string{"battle", "roleplay", "tribunal"} {
 		state := cronMemory.states[job]
 		state.Job = job
 		cronMemory.states[job] = state
@@ -998,4 +1003,201 @@ func preview(value string, maxLength int) string {
 		return clean
 	}
 	return clean[:maxLength] + "...(truncated)"
+}
+
+// =============================================================================
+// TRIBUNAL GENERATED CASES CRON JOB (reuses existing hourly + provider machinery)
+// =============================================================================
+
+const tribunalCasesPerCron = 10
+
+type generatedTribunalCase struct {
+	Title                    string                   `json:"title"`
+	Summary                  string                   `json:"summary"`
+	CaseType                 string                   `json:"caseType"`
+	Level                    int                      `json:"level"`
+	Difficulty               string                   `json:"difficulty"`
+	EstimatedDurationMinutes int                      `json:"estimatedDurationMinutes"`
+	Mode                     string                   `json:"mode"`
+	Tone                     string                   `json:"tone"`
+	PlayerRoleSuggestion     string                   `json:"playerRoleSuggestion"`
+	AccusationPosition       string                   `json:"accusationPosition"`
+	DefensePosition          string                   `json:"defensePosition"`
+	Tags                     []string                 `json:"tags"`
+	Witnesses                []map[string]any         `json:"witnesses"`
+	Evidence                 []map[string]any         `json:"evidence"`
+	TestimonyStatements      []map[string]any         `json:"testimonyStatements"`
+	ExpectedContradictions   []map[string]any         `json:"expectedContradictions"`
+}
+
+func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg aiProviderConfig, trace cronTrace) error {
+	trace.log("generate", "started", "limit=%d", tribunalCasesPerCron)
+
+	batch := tribunalmodels.TribunalCaseGenerationBatch{
+		StartedAt:      runAt,
+		Source:         "cron_ai",
+		TriggerType:    "scheduled",
+		Status:         "running",
+		RequestedCount: tribunalCasesPerCron,
+		ProviderType:   cfg.Name,
+		ProviderModel:  cfg.Model,
+		CronSchedule:   "08:00,12:00,20:00",
+	}
+	if err := db.WithContext(ctx).Create(&batch).Error; err != nil {
+		trace.log("batch_create", "failed", "err=%v", err)
+		return fmt.Errorf("create batch: %w", err)
+	}
+	trace.log("batch_create", "completed", "batch_id=%d", batch.ID)
+
+	cases, err := generateTribunalCases(ctx, cfg, trace)
+	if err != nil {
+		batch.Status = "failed"
+		batch.ErrorMessage = err.Error()
+		_ = db.WithContext(ctx).Save(&batch).Error
+		return fmt.Errorf("generate tribunal cases: %w", err)
+	}
+	trace.log("generate", "completed", "items=%d", len(cases))
+
+	generated := 0
+	published := 0
+	failed := 0
+	for i, c := range cases {
+		if c.Title == "" || len(c.Witnesses) == 0 {
+			failed++
+			trace.log("insert", "skipped", "index=%d reason=missing_title_or_witnesses level=%d", i, c.Level)
+			continue
+		}
+		tagsJSON, _ := json.Marshal(c.Tags)
+		witJSON, _ := json.Marshal(c.Witnesses)
+		evJSON, _ := json.Marshal(c.Evidence)
+		testJSON, _ := json.Marshal(c.TestimonyStatements)
+		contrJSON, _ := json.Marshal(c.ExpectedContradictions)
+		meta := map[string]any{"generatedBy": "tribunal-cron", "provider": cfg.Name, "model": cfg.Model, "runAt": runAt.Format(time.RFC3339)}
+		metaJSON, _ := json.Marshal(meta)
+
+		rec := tribunalmodels.TribunalGeneratedCase{
+			GenerationBatchID:          batch.ID,
+			Title:                      c.Title,
+			Summary:                    c.Summary,
+			CaseType:                   defaultText(c.CaseType, "custom"),
+			Level:                      clampInt(c.Level, 1, 10),
+			Difficulty:                 defaultText(c.Difficulty, "standard"),
+			EstimatedDurationMinutes:   c.EstimatedDurationMinutes,
+			Mode:                       defaultText(c.Mode, "full_case"),
+			Tone:                       defaultText(c.Tone, "cyberpunk_serious"),
+			PlayerRoleSuggestion:       defaultText(c.PlayerRoleSuggestion, "neutral"),
+			AccusationPosition:         c.AccusationPosition,
+			DefensePosition:            c.DefensePosition,
+			TagsJSON:                   datatypes.JSON(tagsJSON),
+			WitnessesJSON:              datatypes.JSON(witJSON),
+			EvidenceJSON:               datatypes.JSON(evJSON),
+			TestimonyJSON:              datatypes.JSON(testJSON),
+			ExpectedContradictionsJSON: datatypes.JSON(contrJSON),
+			Status:                     "ready",
+			IsPlayable:                 true,
+			IsPublished:                true,
+			GeneratedByCron:            true,
+			ProviderType:               cfg.Name,
+			ProviderModel:              cfg.Model,
+			MetadataJSON:               datatypes.JSON(metaJSON),
+		}
+		if err := db.WithContext(ctx).Create(&rec).Error; err != nil {
+			failed++
+			trace.log("insert", "failed", "index=%d level=%d err=%v", i, c.Level, err)
+			continue
+		}
+		generated++
+		published++
+		trace.log("insert", "created", "id=%d level=%d title=%q", rec.ID, rec.Level, rec.Title)
+	}
+
+	batch.GeneratedCount = generated
+	batch.PublishedCount = published
+	batch.FailedCount = failed
+	if generated == 0 {
+		batch.Status = "failed"
+		batch.ErrorMessage = "no cases created"
+	} else if failed > 0 {
+		batch.Status = "partial_success"
+	} else {
+		batch.Status = "success"
+	}
+	now := time.Now()
+	batch.FinishedAt = &now
+	batch.DurationMs = time.Since(runAt).Milliseconds()
+	if err := db.WithContext(ctx).Save(&batch).Error; err != nil {
+		trace.log("batch_finalize", "failed", "err=%v", err)
+	}
+	trace.log("insert", "summary", "received=%d created=%d published=%d failed=%d batch=%d", len(cases), generated, published, failed, batch.ID)
+
+	if generated == 0 {
+		return fmt.Errorf("no tribunal case created")
+	}
+	return nil
+}
+
+func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cronTrace) ([]generatedTribunalCase, error) {
+	_, user := promptsForTribunalCases()
+	trace.log("prompt_build", "completed", "chars=%d", len(user))
+
+	response, err := callProvider(ctx, cfg, user, trace)
+	if err != nil {
+		return nil, fmt.Errorf("call provider: %w", err)
+	}
+	cleaned := cleanJSON(response)
+	trace.log("json_clean", "completed", "raw=%d cleaned=%d", len(response), len(cleaned))
+
+	var wrapper struct {
+		Cases []generatedTribunalCase `json:"cases"`
+	}
+	if err := json.Unmarshal([]byte(cleaned), &wrapper); err != nil {
+		trace.log("json_parse", "failed", "err=%v preview=%s", err, preview(cleaned, 400))
+		var direct []generatedTribunalCase
+		if err2 := json.Unmarshal([]byte(cleaned), &direct); err2 == nil {
+			wrapper.Cases = direct
+		} else {
+			return nil, fmt.Errorf("parse tribunal cases JSON: %w", err)
+		}
+	}
+	if len(wrapper.Cases) == 0 {
+		return nil, fmt.Errorf("provider returned 0 cases")
+	}
+	seen := map[int]bool{}
+	out := make([]generatedTribunalCase, 0, tribunalCasesPerCron)
+	for _, c := range wrapper.Cases {
+		lvl := clampInt(c.Level, 1, 10)
+		if seen[lvl] {
+			continue
+		}
+		seen[lvl] = true
+		if c.EstimatedDurationMinutes <= 0 {
+			c.EstimatedDurationMinutes = 5 + lvl*5
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+func promptsForTribunalCases() (string, string) {
+	sys := "Tu es un generateur d'affaires de Tribunal IA cyberpunk. Reponds uniquement JSON strict."
+	user := `Genere exactement 10 affaires Tribunal IA niveaux 1 a 10. Format: {"cases":[{ "title": "...", "summary":"...", "caseType":"moral", "level":1, "difficulty":"initiation", "estimatedDurationMinutes":7, "mode":"full_case", "tone":"cyberpunk_serious", "playerRoleSuggestion":"defense", "accusationPosition":"...", "defensePosition":"...", "tags":["ia"], "witnesses":[{"name":"...","role":"...","credibility":70,"bias":"neutral","personality":"...","knowledge":"..."}], "evidence":[{"title":"...","description":"...","evidenceType":"document","strength":60,"reliability":75,"tags":[],"supportsSide":"defense"}], "testimonyStatements":[{"witnessName":"...","content":"...","tags":[],"isAttackable":true}], "expectedContradictions":[{"statementContent":"...","evidenceTitle":"...","contradictionType":"fact"}]} ] } . Respecte complexite par niveau (1: simple 1temoin/2preuves ; 10: 5temoins/10preuves + lien nexus). Tout en francais, titres courts, contradictions exploitables.`
+	_ = sys
+	return sys, user
+}
+
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+func defaultText(v, fb string) string {
+	if strings.TrimSpace(v) == "" {
+		return fb
+	}
+	return strings.TrimSpace(v)
 }
