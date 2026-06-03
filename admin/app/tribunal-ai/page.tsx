@@ -113,7 +113,8 @@ export default function TribunalAIPage() {
       const payload = await res.json().catch(() => ({}));
       if (!res.ok || payload.success === false) {
         const msg = payload.error || payload.message || `HTTP ${res.status}`;
-        throw new Error(msg);
+        const fullMsg = payload.batchId ? `${msg} (batch #${payload.batchId})` : msg;
+        throw new Error(fullMsg);
       }
       // success
       setGenKey(""); // clear key
@@ -123,6 +124,7 @@ export default function TribunalAIPage() {
       setError(e.message || "Génération manuelle échouée");
     } finally {
       setBusy(false);
+      reload(); // always refresh batches so user can see detailed ErrorMessage in the list
     }
   }
 
@@ -185,6 +187,20 @@ export default function TribunalAIPage() {
               </button>
             </div>
             <p className="hint" style={{ marginTop: 8 }}>Utilise exactement le même mécanisme que le cron (provider/model + appel IA). Les affaires apparaissent prêtes à charger dans le module Tribunal IA du jeu.</p>
+            {/* Precise errors: show recent batches with their ErrorMessage (very useful for 0 cases / AI response issues) */}
+            {data.batches && data.batches.length > 0 && (
+              <div className="panel" style={{ marginTop: 12, fontSize: '0.85em' }}>
+                <strong>Derniers batches (clique Rafraîchir après generate pour voir ErrorMessage détaillé)</strong>
+                <ul style={{ margin: '8px 0', paddingLeft: 16 }}>
+                  {data.batches.slice(0, 5).map((b: any) => (
+                    <li key={b.id}>
+                      #{b.id} — {b.status} — {b.providerType}/{b.providerModel} — générés: {b.generatedCount || 0}
+                      {b.errorMessage && <div style={{ color: '#f66', whiteSpace: 'pre-wrap' }}>Erreur: {b.errorMessage}</div>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
 
           <section className="rp-toolbar">
