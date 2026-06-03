@@ -67,6 +67,50 @@ function DashboardContent({ data }: { data: DashboardData }) {
             <dt>Prochain run</dt>
             <dd>{data.Cron.NextRun || "-"}</dd>
           </dl>
+
+          {/* Tribunal job now visible - reuses exact same CronJobData as battle/roleplay */}
+          <div style={{ marginTop: 12 }}>
+            <h3 style={{ fontSize: '0.95em', margin: '8px 0 4px' }}>Jobs</h3>
+            <table className="cron-table" style={{ width: '100%', fontSize: '0.85em' }}>
+              <thead>
+                <tr>
+                  <th>Job</th>
+                  <th>Dernier run</th>
+                  <th>Provider / Model</th>
+                  <th>Step</th>
+                  <th>Status</th>
+                  <th>Durée</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>battle</td>
+                  <td>{data.Cron.Battle.LastRunID || '-'}</td>
+                  <td>{data.Cron.Battle.LastProvider ? `${data.Cron.Battle.LastProvider} / ${data.Cron.Battle.LastModel}` : '-'}</td>
+                  <td>{data.Cron.Battle.LastStep || '-'}</td>
+                  <td><span className={`status ${data.Cron.Battle.LastStatus || ''}`}>{data.Cron.Battle.LastStatus || 'idle'}</span></td>
+                  <td>{data.Cron.Battle.LastDurationMS} ms</td>
+                </tr>
+                <tr>
+                  <td>roleplay</td>
+                  <td>{data.Cron.RolePlay.LastRunID || '-'}</td>
+                  <td>{data.Cron.RolePlay.LastProvider ? `${data.Cron.RolePlay.LastProvider} / ${data.Cron.RolePlay.LastModel}` : '-'}</td>
+                  <td>{data.Cron.RolePlay.LastStep || '-'}</td>
+                  <td><span className={`status ${data.Cron.RolePlay.LastStatus || ''}`}>{data.Cron.RolePlay.LastStatus || 'idle'}</span></td>
+                  <td>{data.Cron.RolePlay.LastDurationMS} ms</td>
+                </tr>
+                <tr>
+                  <td><strong>tribunal</strong></td>
+                  <td>{(data.Cron.Tribunal?.LastRunID) || '-'}</td>
+                  <td>{data.Cron.Tribunal?.LastProvider ? `${data.Cron.Tribunal.LastProvider} / ${data.Cron.Tribunal.LastModel || ''}` : '-'}</td>
+                  <td>{(data.Cron.Tribunal?.LastStep) || '-'}</td>
+                  <td><span className={`status ${data.Cron.Tribunal?.LastStatus || ''}`}>{data.Cron.Tribunal?.LastStatus || 'idle'}</span></td>
+                  <td>{(data.Cron.Tribunal?.LastDurationMS ?? 0)} ms</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="hint" style={{ marginTop: 4, fontSize: '0.8em' }}>Tribunal IA cases generator (10 niveaux par cycle) – même mécanisme que les quêtes.</p>
+          </div>
         </article>
       </section>
 

@@ -99,6 +99,7 @@ export type CronData = {
   NextRun: string;
   Battle: CronJobData;
   RolePlay: CronJobData;
+  Tribunal?: CronJobData;
   Logs: CronLogData[];
 };
 
