@@ -1834,6 +1834,8 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 // ManualGenerateTribunalCases is the shared implementation for manual generation
 // (used by the Tribunal admin page via /admin/generate/tribunal and by the internal trigger).
 func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string, count int) (batchID uint, generated int, err error) {
+	log.Printf("[tribunal-generate] START manual: provider=%s model=%s count=%d apiKeyLen=%d", providerType, model, count, len(apiKey))
+
 	// Ensure new narrative columns exist (in case server wasn't fully restarted after model updates)
 	_ = db.AutoMigrate(&tribunalmodels.TribunalGeneratedCase{}, &tribunalmodels.TribunalCaseGenerationBatch{})
 
@@ -1851,8 +1853,10 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		ProviderModel:  model,
 	}
 	if err := db.Create(&batch).Error; err != nil {
+		log.Printf("[tribunal-generate] batch create FAILED: %v", err)
 		return 0, 0, fmt.Errorf("batch create: %w", err)
 	}
+	log.Printf("[tribunal-generate] batch created id=%d", batch.ID)
 
 	sys, userPrompt := tribunalprompts.BuildNarrativeCasesPrompt(count)
 	adapter := tribunaladapters.NewAIProviderAdapter(func(pt string) string { return "" }) // we pass explicit key
@@ -1886,7 +1890,9 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		}
 	}
 	if len(wrapper.Cases) == 0 {
-		log.Printf("[tribunal-generate] after unmarshal, 0 cases in wrapper. cleaned=%s", preview(cleaned, 500))
+		log.Printf("[tribunal-generate] after unmarshal, 0 cases in wrapper. cleaned_preview=%s", preview(cleaned, 500))
+	} else {
+		log.Printf("[tribunal-generate] parsed %d raw cases from AI", len(wrapper.Cases))
 	}
 
 	generated = 0
@@ -1896,8 +1902,10 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		}
 		title := strings.TrimSpace(fmt.Sprint(raw["title"]))
 		if title == "" {
+			log.Printf("[tribunal-generate] skipping case %d: no title", i)
 			continue
 		}
+		log.Printf("[tribunal-generate] processing case %d: title=%q level=%v", i, title, raw["level"])
 		tagsB, _ := json.Marshal(raw["tags"])
 		witB, _ := json.Marshal(raw["witnesses"])
 		evB, _ := json.Marshal(raw["evidence"])
@@ -1975,6 +1983,9 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		}
 		if cerr := db.Create(&rec).Error; cerr == nil {
 			generated++
+			log.Printf("[tribunal-generate] created rec id=%d title=%q", rec.ID, title)
+		} else {
+			log.Printf("[tribunal-generate] DB create failed for %q: %v", title, cerr)
 		}
 	}
 
@@ -1983,6 +1994,8 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 	batch.GeneratedCount = generated
 	batch.PublishedCount = generated
 	batch.DurationMs = time.Since(batch.StartedAt).Milliseconds()
+	log.Printf("[tribunal-generate] FINISHED: batch=%d provider=%s model=%s generated=%d duration=%dms", batch.ID, providerType, model, generated, batch.DurationMs)
+
 	if generated == 0 {
 		log.Printf("[tribunal-generate] 0 cases after parsing. provider=%s model=%s batch=%d cleaned_preview=%s", providerType, model, batch.ID, preview(cleaned, 300))
 		batch.Status = "failed"

@@ -111,8 +111,9 @@ export default function TribunalAIPage() {
         }).toString(),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(payload.message || payload.error || `HTTP ${res.status}`);
+      if (!res.ok || payload.success === false) {
+        const msg = payload.error || payload.message || `HTTP ${res.status}`;
+        throw new Error(msg);
       }
       // success
       setGenKey(""); // clear key
