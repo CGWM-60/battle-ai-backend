@@ -1090,36 +1090,36 @@ func normalizeTribunalCronCastAssets(cast []map[string]any) []map[string]any {
 const tribunalCasesPerCron = 10
 
 type generatedTribunalCase struct {
-	Title                    string                   `json:"title"`
-	Summary                  string                   `json:"summary"`
-	CaseType                 string                   `json:"caseType"`
-	Level                    int                      `json:"level"`
-	Difficulty               string                   `json:"difficulty"`
-	EstimatedDurationMinutes int                      `json:"estimatedDurationMinutes"`
-	Mode                     string                   `json:"mode"`
-	Tone                     string                   `json:"tone"`
-	PlayerRoleSuggestion     string                   `json:"playerRoleSuggestion"`
-	AccusationPosition       string                   `json:"accusationPosition"`
-	DefensePosition          string                   `json:"defensePosition"`
-	Tags                     []string                 `json:"tags"`
-	Witnesses                []map[string]any         `json:"witnesses"`
-	Evidence                 []map[string]any         `json:"evidence"`
-	TestimonyStatements      []map[string]any         `json:"testimonyStatements"`
-	ExpectedContradictions   []map[string]any         `json:"expectedContradictions"`
+	Title                    string           `json:"title"`
+	Summary                  string           `json:"summary"`
+	CaseType                 string           `json:"caseType"`
+	Level                    int              `json:"level"`
+	Difficulty               string           `json:"difficulty"`
+	EstimatedDurationMinutes int              `json:"estimatedDurationMinutes"`
+	Mode                     string           `json:"mode"`
+	Tone                     string           `json:"tone"`
+	PlayerRoleSuggestion     string           `json:"playerRoleSuggestion"`
+	AccusationPosition       string           `json:"accusationPosition"`
+	DefensePosition          string           `json:"defensePosition"`
+	Tags                     []string         `json:"tags"`
+	Witnesses                []map[string]any `json:"witnesses"`
+	Evidence                 []map[string]any `json:"evidence"`
+	TestimonyStatements      []map[string]any `json:"testimonyStatements"`
+	ExpectedContradictions   []map[string]any `json:"expectedContradictions"`
 
 	// Narrative Phoenix-like (correctif)
-	RealTruth          string             `json:"realTruth"`
-	PublicTruth        string             `json:"publicTruth"`
-	FinalReveal        string             `json:"finalReveal"`
-	Cast               []map[string]any   `json:"cast"`
-	Acts               []map[string]any   `json:"acts"`
-	Scenes             []map[string]any   `json:"scenes"`
-	ProgressionRules   []map[string]any   `json:"progressionRules"`
-	FailureRules       []map[string]any   `json:"failureRules"`
-	CrisisMoment       map[string]any     `json:"crisisMoment"`
-	PossibleVerdicts   []string           `json:"possibleVerdicts"`
-	Epilogue           string             `json:"epilogue"`
-	NexusBridgeHints   []map[string]any   `json:"nexusBridgeHints"`
+	RealTruth        string           `json:"realTruth"`
+	PublicTruth      string           `json:"publicTruth"`
+	FinalReveal      string           `json:"finalReveal"`
+	Cast             []map[string]any `json:"cast"`
+	Acts             []map[string]any `json:"acts"`
+	Scenes           []map[string]any `json:"scenes"`
+	ProgressionRules []map[string]any `json:"progressionRules"`
+	FailureRules     []map[string]any `json:"failureRules"`
+	CrisisMoment     map[string]any   `json:"crisisMoment"`
+	PossibleVerdicts []string         `json:"possibleVerdicts"`
+	Epilogue         string           `json:"epilogue"`
+	NexusBridgeHints []map[string]any `json:"nexusBridgeHints"`
 }
 
 func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg aiProviderConfig, trace cronTrace) error {
@@ -1195,28 +1195,52 @@ func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg a
 			ProviderModel:              cfg.Model,
 			MetadataJSON:               datatypes.JSON(metaJSON),
 			// Narrative Phoenix-like fields (from corrective prompt)
-			RealTruth:           c.RealTruth,
-			PublicTruth:         c.PublicTruth,
-			FinalReveal:         c.FinalReveal,
-			IsNarrativePlayable: len(c.Scenes) > 0 || len(c.ProgressionRules) > 0,
-			HasCrisisMoment:     c.CrisisMoment != nil && len(c.CrisisMoment) > 0,
-			HasFinalReveal:      c.FinalReveal != "",
-			HasIntro:            true, // prompt always requires intro scene
-			HasBriefing:         true, // prompt requires briefing
-			ActsCount:           len(c.Acts),
-			ScenesCount:         len(c.Scenes),
-			WitnessesCount:      len(c.Witnesses) + len(c.Cast), // approximate from cast + old witnesses
-			EvidenceCount:       len(c.Evidence),
+			RealTruth:             c.RealTruth,
+			PublicTruth:           c.PublicTruth,
+			FinalReveal:           c.FinalReveal,
+			IsNarrativePlayable:   len(c.Scenes) > 0 || len(c.ProgressionRules) > 0,
+			HasCrisisMoment:       c.CrisisMoment != nil && len(c.CrisisMoment) > 0,
+			HasFinalReveal:        c.FinalReveal != "",
+			HasIntro:              true, // prompt always requires intro scene
+			HasBriefing:           true, // prompt requires briefing
+			ActsCount:             len(c.Acts),
+			ScenesCount:           len(c.Scenes),
+			WitnessesCount:        len(c.Witnesses) + len(c.Cast), // approximate from cast + old witnesses
+			EvidenceCount:         len(c.Evidence),
 			ProgressionRulesCount: len(c.ProgressionRules),
-			HasPossibleVerdicts: len(c.PossibleVerdicts) > 0,
-			HasNexusBridge:      len(c.NexusBridgeHints) > 0,
+			HasPossibleVerdicts:   len(c.PossibleVerdicts) > 0,
+			HasNexusBridge:        len(c.NexusBridgeHints) > 0,
 		}
-		if len(c.Cast) > 0 { if b, e := json.Marshal(c.Cast); e == nil { rec.CharacterCastJSON = datatypes.JSON(b) } }
-		if len(c.Acts) > 0 { if b, e := json.Marshal(c.Acts); e == nil { rec.ActsJSON = datatypes.JSON(b) } }
-		if len(c.Scenes) > 0 { if b, e := json.Marshal(c.Scenes); e == nil { rec.ScenesJSON = datatypes.JSON(b) } }
-		if len(c.ProgressionRules) > 0 { if b, e := json.Marshal(c.ProgressionRules); e == nil { rec.ProgressionRulesJSON = datatypes.JSON(b) } }
-		if len(c.FailureRules) > 0 { if b, e := json.Marshal(c.FailureRules); e == nil { rec.FailureRulesJSON = datatypes.JSON(b) } }
-		if len(c.NexusBridgeHints) > 0 { if b, e := json.Marshal(c.NexusBridgeHints); e == nil { rec.NexusBridgeHintsJSON = datatypes.JSON(b) } }
+		if len(c.Cast) > 0 {
+			if b, e := json.Marshal(c.Cast); e == nil {
+				rec.CharacterCastJSON = datatypes.JSON(b)
+			}
+		}
+		if len(c.Acts) > 0 {
+			if b, e := json.Marshal(c.Acts); e == nil {
+				rec.ActsJSON = datatypes.JSON(b)
+			}
+		}
+		if len(c.Scenes) > 0 {
+			if b, e := json.Marshal(c.Scenes); e == nil {
+				rec.ScenesJSON = datatypes.JSON(b)
+			}
+		}
+		if len(c.ProgressionRules) > 0 {
+			if b, e := json.Marshal(c.ProgressionRules); e == nil {
+				rec.ProgressionRulesJSON = datatypes.JSON(b)
+			}
+		}
+		if len(c.FailureRules) > 0 {
+			if b, e := json.Marshal(c.FailureRules); e == nil {
+				rec.FailureRulesJSON = datatypes.JSON(b)
+			}
+		}
+		if len(c.NexusBridgeHints) > 0 {
+			if b, e := json.Marshal(c.NexusBridgeHints); e == nil {
+				rec.NexusBridgeHintsJSON = datatypes.JSON(b)
+			}
+		}
 		if err := db.WithContext(ctx).Create(&rec).Error; err != nil {
 			failed++
 			trace.log("insert", "failed", "index=%d level=%d err=%v", i, c.Level, err)

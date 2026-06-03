@@ -2264,24 +2264,24 @@ func lenFromAny(v any) int {
 }
 
 var tribunalAvatarAssetIDs = map[string]bool{
-	"tribunal.character.judge_ai":             true,
-	"tribunal.character.prosecutor_ai":        true,
-	"tribunal.character.defense_ai":           true,
-	"tribunal.character.witness_default":      true,
-	"tribunal.character.clerk_ai":             true,
-	"tribunal.character.fact_checker_ai":      true,
-	"tribunal.character.jury_logic":           true,
-	"tribunal.character.jury_emotional":       true,
-	"tribunal.character.jury_expert":          true,
-	"tribunal.character.assistant_ai":         true,
-	"tribunal.character.expert_witness":       true,
-	"tribunal.character.witness_civilian":     true,
-	"tribunal.character.witness_agent":        true,
-	"tribunal.character.witness_hacker":       true,
-	"tribunal.character.witness_guild_master": true,
+	"tribunal.character.judge_ai":              true,
+	"tribunal.character.prosecutor_ai":         true,
+	"tribunal.character.defense_ai":            true,
+	"tribunal.character.witness_default":       true,
+	"tribunal.character.clerk_ai":              true,
+	"tribunal.character.fact_checker_ai":       true,
+	"tribunal.character.jury_logic":            true,
+	"tribunal.character.jury_emotional":        true,
+	"tribunal.character.jury_expert":           true,
+	"tribunal.character.assistant_ai":          true,
+	"tribunal.character.expert_witness":        true,
+	"tribunal.character.witness_civilian":      true,
+	"tribunal.character.witness_agent":         true,
+	"tribunal.character.witness_hacker":        true,
+	"tribunal.character.witness_guild_master":  true,
 	"tribunal.character.witness_faction_envoy": true,
-	"tribunal.character.witness_android":      true,
-	"tribunal.character.witness_corrupted_ai": true,
+	"tribunal.character.witness_android":       true,
+	"tribunal.character.witness_corrupted_ai":  true,
 }
 
 func normalizeTribunalAvatarAsset(assetID string, actorType string) string {
@@ -2503,13 +2503,13 @@ func (m *module) storyAction(c *gin.Context) {
 		return
 	}
 	var payload struct {
-		SceneId     string `json:"sceneId"`
-		ActionType  string `json:"actionType"`
-		Action      string `json:"action"`
+		SceneId       string `json:"sceneId"`
+		ActionType    string `json:"actionType"`
+		Action        string `json:"action"`
 		TriggerAction string `json:"triggerAction"`
-		StatementId string `json:"statementId"`
-		EvidenceId  string `json:"evidenceId"`
-		Argument    string `json:"argument"`
+		StatementId   string `json:"statementId"`
+		EvidenceId    string `json:"evidenceId"`
+		Argument      string `json:"argument"`
 	}
 	if bindErr := bindJSON(c, &payload); bindErr != nil {
 		// allow partial
