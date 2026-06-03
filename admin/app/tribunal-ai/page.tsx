@@ -10,6 +10,14 @@ import type { TribunalGeneratedCaseAdmin, TribunalGeneratedAdminResponse } from 
 
 const providers = ["mistral", "openai", "openrouter", "xia", "claude", "gemini"];
 
+// New narrative quality tracking (from corrective prompt)
+type NarrativeStats = {
+  totalGenerated: number;
+  narrativePlayable: number;
+  withCrisis: number;
+  withFinalReveal: number;
+};
+
 export default function TribunalAIPage() {
   const [data, setData] = useState<TribunalGeneratedAdminResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -22,13 +30,16 @@ export default function TribunalAIPage() {
   const [genModel, setGenModel] = useState("");
   const [genCount, setGenCount] = useState(10);
   const [genKey, setGenKey] = useState("");
+  const [narrativeStats, setNarrativeStats] = useState<NarrativeStats | null>(null);
 
   const reload = () => {
     // Use the tribunal public list (auth protected) + batches via admin api if available, fallback to direct
     Promise.all([
       fetch("/api/nexus-tribunal/generated-cases?limit=100", { credentials: "same-origin" }).then(r => r.json()),
       fetch("/admin/api/tribunal-generated", { credentials: "same-origin" }).then(r => r.json().catch(() => null)),
-    ]).then(([listPayload, adminPayload]) => {
+      fetch("/api/nexus-tribunal/admin/generated-cases/narrative-stats", { credentials: "same-origin" }).then(r => r.json().catch(() => null)),
+    ]).then(([listPayload, adminPayload, narrStats]) => {
+      if (narrStats) setNarrativeStats(narrStats);
       const cases: TribunalGeneratedCaseAdmin[] = (adminPayload?.cases || listPayload?.data || []).map((c: any) => ({
         id: c.id,
         createdAt: c.createdAt || c.CreatedAt,
@@ -128,6 +139,19 @@ export default function TribunalAIPage() {
               { label: "Batches", value: formatNumber(data.batches?.length || 0) },
             ]}
           />
+
+          {narrativeStats && (
+            <div className="rounded border border-cyan-500/30 bg-[#0b0f1a] p-3 mb-3 text-xs">
+              <div className="text-cyan-400 mb-1 font-semibold">Qualité Narrative (Phoenix-like / Correctif)</div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1">
+                <div>Narratifs jouables: <span className="font-mono text-white">{narrativeStats.narrativePlayable}</span></div>
+                <div>Avec crisis: <span className="font-mono text-white">{narrativeStats.withCrisis}</span></div>
+                <div>Avec final reveal: <span className="font-mono text-white">{narrativeStats.withFinalReveal}</span></div>
+                <div>Total: <span className="font-mono text-white">{narrativeStats.totalGenerated}</span></div>
+              </div>
+              <div className="text-[10px] text-white/40 mt-1">Voir specs: hasIntro, actsCount, scenesCount, progressionRulesCount, hasCrisis, hasNexusBridge etc.</div>
+            </div>
+          )}
 
           {/* Manual generation - like the quest generate buttons, but prominent for Tribunal */}
           <section className="panel" style={{ marginBottom: 16 }}>

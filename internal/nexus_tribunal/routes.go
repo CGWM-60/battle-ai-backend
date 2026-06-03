@@ -197,7 +197,8 @@ type apiError struct {
 // RegisterRoutes wires the autonomous Tribunal module. The caller can mount it
 // once from the main router without leaking Tribunal handlers into router files.
 func RegisterRoutes(router *gin.Engine, db *gorm.DB, authMiddleware gin.HandlerFunc, adminMiddleware gin.HandlerFunc) {
-	_ = db.AutoMigrate(&TribunalCase{}, &TribunalEvidence{}, &TribunalWitness{}, &TribunalStatement{}, &tribunalmodels.TribunalGeneratedCase{}, &tribunalmodels.TribunalCaseGenerationBatch{})
+	_ = db.AutoMigrate(&TribunalCase{}, &TribunalEvidence{}, &TribunalWitness{}, &TribunalStatement{}, &tribunalmodels.TribunalGeneratedCase{}, &tribunalmodels.TribunalCaseGenerationBatch{},
+		&tribunalmodels.TribunalNarrativeCase{}, &tribunalmodels.TribunalAct{}, &tribunalmodels.TribunalScene{}, &tribunalmodels.TribunalProgressionRule{}, &tribunalmodels.TribunalFailureRule{}, &tribunalmodels.TribunalStoryEvent{}, &tribunalmodels.TribunalGeneratedActor{})
 	module := newModule(db)
 	for _, prefix := range []string{"/api/nexus-tribunal", "/api/v1/nexus-tribunal"} {
 		group := router.Group(prefix)
@@ -213,6 +214,7 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, authMiddleware gin.HandlerF
 		admin.POST("/generated-cases/:genId/archive", module.archiveGeneratedCase)
 		admin.POST("/generated-cases/:genId/reject", module.rejectGeneratedCase)
 		admin.GET("/generated-cases/stats", module.generatedCasesStats)
+		admin.GET("/generated-cases/narrative-stats", module.generatedNarrativeStats)
 	}
 }
 
@@ -263,6 +265,15 @@ func (m *module) mount(group *gin.RouterGroup) {
 	group.POST("/generated-cases/:genId/load", m.loadGeneratedCase)
 	group.POST("/generated-cases/:genId/start", m.loadGeneratedCase)
 	group.GET("/debug/generated-cases", m.debugGeneratedCases)
+	// Story / narrative Phoenix-like endpoints (correctif)
+	group.GET("/cases/:caseId/story/current", m.storyCurrent)
+	group.POST("/cases/:caseId/story/action", m.storyAction)
+	group.POST("/cases/:caseId/story/next", m.storyNext)
+	group.GET("/cases/:caseId/story/events", m.storyEvents)
+	group.GET("/cases/:caseId/story/timeline", m.storyTimeline)
+	// Generated narrative cases
+	group.GET("/generated-cases/narrative", m.listNarrativeGenerated)
+	group.POST("/generated-cases/:genId/load-narrative", m.loadNarrativeCase)
 	// Admin/debug for generated (protected by adminMiddleware on /admin sub)
 }
 
@@ -2002,4 +2013,147 @@ func stringSliceFromAny(v any) []string {
 		return out
 	}
 	return nil
+}
+
+// ==================== STORY / NARRATIVE HANDLERS (correctif Phoenix-like) ====================
+
+func (m *module) storyCurrent(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	// For now return a narrative-aware view; in full impl load from TribunalNarrativeCase + current scene
+	respondOK(c, gin.H{
+		"caseId":     item.ID,
+		"title":      item.Title,
+		"currentPhase": item.CurrentPhase,
+		"sceneId":    "current_scene_stub",
+		"actTitle":   "Acte en cours (narrative)",
+		"sceneTitle": "Scene active",
+		"objective":  "Avancer l'histoire en respectant les regles de progression backend.",
+		"sceneType":  "witness_testimony",
+		"activeWitness": gin.H{"id": 0, "name": "Temoin", "assetId": "tribunal.character.witness_default"},
+		"actors":     []gin.H{},
+		"visibleStatements": []gin.H{},
+		"availableEvidence": []gin.H{},
+		"allowedActions": []string{"press", "present_evidence", "objection", "ai_analysis", "ask_hint"},
+		"scores": gin.H{"defense": item.DefenseScore, "accusation": item.AccusationScore, "pressure": item.Pressure, "witnessCredibility": 70},
+		"hints": []string{},
+		"history": []gin.H{},
+		"narrativeMode": true,
+	})
+}
+
+func (m *module) storyAction(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	var payload struct {
+		SceneId    string `json:"sceneId"`
+		ActionType string `json:"actionType"`
+		StatementId string `json:"statementId"`
+		EvidenceId  string `json:"evidenceId"`
+		Argument    string `json:"argument"`
+	}
+	_ = bindJSON(c, &payload)
+	// Stub: always success minor, advance suggestion. Real impl uses live_trial_story_engine + rules.
+	defenseDelta := 8
+	pressureDelta := 12
+	item.DefenseScore = clamp(item.DefenseScore+defenseDelta, 0, 100)
+	item.Pressure = clamp(item.Pressure+pressureDelta, 0, 100)
+	_ = m.db.Save(&item).Error
+	respondOK(c, gin.H{
+		"success": true,
+		"data": gin.H{
+			"caseId":         item.ID,
+			"sceneAdvanced":  false,
+			"previousSceneId": payload.SceneId,
+			"currentSceneId":  payload.SceneId,
+			"resultType":      "minor_contradiction",
+			"isCritical":      false,
+			"narrativeResult": "Action enregistree. (stub narrative - backend rules a implementer)",
+			"effects": gin.H{"defenseScoreDelta": defenseDelta, "tribunalPressureDelta": pressureDelta},
+			"unlocked": gin.H{"evidenceIds": []string{}, "witnessIds": []string{}, "sceneIds": []string{}},
+			"nextScene": nil,
+		},
+	})
+}
+
+func (m *module) storyNext(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	// stub advance
+	item.CurrentPhase = phaseLive
+	_ = m.db.Save(&item).Error
+	respondOK(c, gin.H{"caseId": item.ID, "currentPhase": item.CurrentPhase, "message": "Scene avancee (stub)"})
+}
+
+func (m *module) storyEvents(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	respondOK(c, gin.H{"caseId": item.ID, "events": []gin.H{}})
+}
+
+func (m *module) storyTimeline(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	respondOK(c, gin.H{"caseId": item.ID, "acts": []gin.H{}, "scenes": []gin.H{}})
+}
+
+func (m *module) listNarrativeGenerated(c *gin.Context) {
+	var items []tribunalmodels.TribunalGeneratedCase
+	q := m.db.Where("is_narrative_playable = ?", true).Order("level asc, id desc").Limit(50)
+	if lvl := c.Query("level"); lvl != "" {
+		q = q.Where("level = ?", lvl)
+	}
+	_ = q.Find(&items).Error
+	respondOK(c, gin.H{"cases": items})
+}
+
+func (m *module) loadNarrativeCase(c *gin.Context) {
+	// Similar to loadGeneratedCase but marks narrative mode
+	genId, _ := strconv.Atoi(c.Param("genId"))
+	var g tribunalmodels.TribunalGeneratedCase
+	if err := m.db.First(&g, genId).Error; err != nil {
+		respondErr(c, http.StatusNotFound, "NOT_FOUND", "Generated case introuvable.", nil)
+		return
+	}
+	// Create or update live case in narrative mode
+	owner := currentOwnerID(c)
+	live := TribunalCase{
+		OwnerID: owner,
+		Title: g.Title,
+		CaseType: g.CaseType,
+		Description: g.Summary,
+		AccusationPosition: g.AccusationPosition,
+		DefensePosition: g.DefensePosition,
+		Mode: "full_narrative",
+		Status: statusOpen,
+		CurrentPhase: phaseInvestigation,
+		DefenseScore: 50, AccusationScore: 50, Pressure: 25,
+	}
+	_ = m.db.Create(&live).Error
+	respondOK(c, gin.H{"caseId": live.ID, "narrative": true, "generatedId": g.ID, "nextScreen": "story_intro"})
+}
+
+// Admin extended stats (for new sections in corrective)
+func (m *module) generatedNarrativeStats(c *gin.Context) {
+	var total, narrative, withCrisis, withReveal int64
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Count(&total)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("is_narrative_playable = ?", true).Count(&narrative)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("has_crisis_moment = ?", true).Count(&withCrisis)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("has_final_reveal = ?", true).Count(&withReveal)
+	respondOK(c, gin.H{
+		"totalGenerated": total,
+		"narrativePlayable": narrative,
+		"withCrisis": withCrisis,
+		"withFinalReveal": withReveal,
+	})
 }

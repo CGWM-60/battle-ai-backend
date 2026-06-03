@@ -1029,6 +1029,20 @@ type generatedTribunalCase struct {
 	Evidence                 []map[string]any         `json:"evidence"`
 	TestimonyStatements      []map[string]any         `json:"testimonyStatements"`
 	ExpectedContradictions   []map[string]any         `json:"expectedContradictions"`
+
+	// Narrative Phoenix-like (correctif)
+	RealTruth          string             `json:"realTruth"`
+	PublicTruth        string             `json:"publicTruth"`
+	FinalReveal        string             `json:"finalReveal"`
+	Cast               []map[string]any   `json:"cast"`
+	Acts               []map[string]any   `json:"acts"`
+	Scenes             []map[string]any   `json:"scenes"`
+	ProgressionRules   []map[string]any   `json:"progressionRules"`
+	FailureRules       []map[string]any   `json:"failureRules"`
+	CrisisMoment       map[string]any     `json:"crisisMoment"`
+	PossibleVerdicts   []string           `json:"possibleVerdicts"`
+	Epilogue           string             `json:"epilogue"`
+	NexusBridgeHints   []map[string]any   `json:"nexusBridgeHints"`
 }
 
 func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg aiProviderConfig, trace cronTrace) error {
@@ -1063,9 +1077,10 @@ func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg a
 	published := 0
 	failed := 0
 	for i, c := range cases {
-		if c.Title == "" || len(c.Witnesses) == 0 {
+		hasCast := len(c.Cast) > 0 || len(c.Witnesses) > 0
+		if c.Title == "" || !hasCast {
 			failed++
-			trace.log("insert", "skipped", "index=%d reason=missing_title_or_witnesses level=%d", i, c.Level)
+			trace.log("insert", "skipped", "index=%d reason=missing_title_or_cast level=%d", i, c.Level)
 			continue
 		}
 		tagsJSON, _ := json.Marshal(c.Tags)
@@ -1101,7 +1116,20 @@ func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg a
 			ProviderType:               cfg.Name,
 			ProviderModel:              cfg.Model,
 			MetadataJSON:               datatypes.JSON(metaJSON),
+			// Narrative Phoenix-like fields (from corrective prompt)
+			RealTruth:           c.RealTruth,
+			PublicTruth:         c.PublicTruth,
+			FinalReveal:         c.FinalReveal,
+			IsNarrativePlayable: len(c.Scenes) > 0 || len(c.ProgressionRules) > 0,
+			HasCrisisMoment:     c.CrisisMoment != nil && len(c.CrisisMoment) > 0,
+			HasFinalReveal:      c.FinalReveal != "",
 		}
+		if len(c.Cast) > 0 { if b, e := json.Marshal(c.Cast); e == nil { rec.CharacterCastJSON = datatypes.JSON(b) } }
+		if len(c.Acts) > 0 { if b, e := json.Marshal(c.Acts); e == nil { rec.ActsJSON = datatypes.JSON(b) } }
+		if len(c.Scenes) > 0 { if b, e := json.Marshal(c.Scenes); e == nil { rec.ScenesJSON = datatypes.JSON(b) } }
+		if len(c.ProgressionRules) > 0 { if b, e := json.Marshal(c.ProgressionRules); e == nil { rec.ProgressionRulesJSON = datatypes.JSON(b) } }
+		if len(c.FailureRules) > 0 { if b, e := json.Marshal(c.FailureRules); e == nil { rec.FailureRulesJSON = datatypes.JSON(b) } }
+		if len(c.NexusBridgeHints) > 0 { if b, e := json.Marshal(c.NexusBridgeHints); e == nil { rec.NexusBridgeHintsJSON = datatypes.JSON(b) } }
 		if err := db.WithContext(ctx).Create(&rec).Error; err != nil {
 			failed++
 			trace.log("insert", "failed", "index=%d level=%d err=%v", i, c.Level, err)
@@ -1180,7 +1208,8 @@ func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cron
 }
 
 func promptsForTribunalCases() (string, string) {
-	return tribunalprompts.BuildGeneratedCasesPrompt(10)
+	// Correctif: use full narrative scenarized prompt (Phoenix-like)
+	return tribunalprompts.BuildNarrativeCasesPrompt(10)
 }
 
 func clampInt(v, min, max int) int {

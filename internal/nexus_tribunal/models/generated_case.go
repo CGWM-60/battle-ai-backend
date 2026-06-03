@@ -36,6 +36,25 @@ type TribunalGeneratedCase struct {
 	ProviderModel              string         `gorm:"size:160" json:"model"`
 	ErrorMessage               string         `gorm:"type:text" json:"errorMessage"`
 	MetadataJSON               datatypes.JSON `gorm:"type:json" json:"metadata"`
+
+	// Narrative / Phoenix-like extensions (correctif)
+	StoryScriptJSON      datatypes.JSON `gorm:"type:json" json:"storyScript"`
+	ActsJSON             datatypes.JSON `gorm:"type:json" json:"acts"`
+	ScenesJSON           datatypes.JSON `gorm:"type:json" json:"scenes"`
+	ProgressionRulesJSON datatypes.JSON `gorm:"type:json" json:"progressionRules"`
+	FailureRulesJSON     datatypes.JSON `gorm:"type:json" json:"failureRules"`
+	CharacterCastJSON    datatypes.JSON `gorm:"type:json" json:"characterCast"`
+	RequiredAssetIDsJSON datatypes.JSON `gorm:"type:json" json:"requiredAssetIds"`
+	NexusBridgeHintsJSON datatypes.JSON `gorm:"type:json" json:"nexusBridgeHints"`
+	ReplayabilitySeed    int64          `json:"replayabilitySeed"`
+	IsNarrativePlayable  bool           `gorm:"index" json:"isNarrativePlayable"`
+	HasCrisisMoment      bool           `json:"hasCrisisMoment"`
+	HasFinalReveal       bool           `json:"hasFinalReveal"`
+
+	// Direct fields for narrative truth (populated from AI JSON)
+	RealTruth   string `gorm:"type:text" json:"realTruth"`
+	PublicTruth string `gorm:"type:text" json:"publicTruth"`
+	FinalReveal string `gorm:"type:text" json:"finalReveal"`
 }
 
 // TribunalCaseGenerationBatch tracks a cron (or manual) run that produces N generated cases.
