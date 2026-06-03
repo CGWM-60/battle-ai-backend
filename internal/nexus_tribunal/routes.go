@@ -254,9 +254,13 @@ func (m *module) mount(group *gin.RouterGroup) {
 	group.POST("/cases/:caseId/objection", m.objectStatement)
 	group.POST("/cases/:caseId/present-evidence", m.presentEvidence)
 	group.POST("/cases/:caseId/ai-analysis", m.aiAnalysis)
+	group.POST("/cases/:caseId/final-plea", m.finalPlea)
 	group.POST("/cases/:caseId/statement", m.addStatement)
 	group.POST("/cases/:caseId/jury-vote", m.juryVote)
 	group.POST("/cases/:caseId/verdict", m.verdict)
+	group.GET("/cases/:caseId/jury", m.jury)
+	group.GET("/cases/:caseId/verdict", m.getVerdict)
+	group.GET("/cases/:caseId/archive", m.caseArchive)
 	group.POST("/cases/:caseId/propose-nexus-consequences", m.proposeNexusConsequences)
 	group.GET("/archives", m.archives)
 	// Generated cases (from PROMPT_TRIBUNAL_CASE_GENERATOR)
@@ -877,6 +881,35 @@ func (m *module) aiAnalysis(c *gin.Context) {
 	})
 }
 
+func (m *module) finalPlea(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	var req struct {
+		Choice   string `json:"choice"`
+		Argument string `json:"argument"`
+	}
+	_ = bindJSON(c, &req)
+	defenseDelta := 4
+	if strings.TrimSpace(req.Argument) == "" {
+		defenseDelta = 1
+	}
+	item.DefenseScore = clamp(item.DefenseScore+defenseDelta, 0, 100)
+	item.CurrentPhase = phaseVerdict
+	_ = m.db.Save(&item).Error
+	respondOK(c, gin.H{
+		"caseId":          item.ID,
+		"accepted":        true,
+		"choice":          defaultText(req.Choice, "balanced"),
+		"officialResult":  "Plaidoirie finale enregistree par le Tribunal.",
+		"effects":         gin.H{"defenseScoreDelta": defenseDelta},
+		"nextScreen":      "jury",
+		"currentPhase":    item.CurrentPhase,
+		"backendDecision": true,
+	})
+}
+
 func (m *module) addStatement(c *gin.Context) {
 	item, err := m.caseByParam(c)
 	if err != nil {
@@ -919,11 +952,23 @@ func (m *module) addStatement(c *gin.Context) {
 	respondOK(c, statement)
 }
 
+func (m *module) jury(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	respondOK(c, m.juryPayload(item))
+}
+
 func (m *module) juryVote(c *gin.Context) {
 	item, err := m.caseByParam(c)
 	if err != nil {
 		return
 	}
+	respondOK(c, m.juryPayload(item))
+}
+
+func (m *module) juryPayload(item TribunalCase) gin.H {
 	count := clamp(item.JuryCount, 3, 9)
 	votes := make([]gin.H, 0, count)
 	for i := 1; i <= count; i++ {
@@ -935,7 +980,7 @@ func (m *module) juryVote(c *gin.Context) {
 		}
 		votes = append(votes, gin.H{"jurorId": i, "stance": lean, "confidence": clamp(45+i*6+abs(item.DefenseScore-item.AccusationScore)/2, 1, 100), "reason": "Vote calcule depuis les scores officiels et les contradictions validees."})
 	}
-	respondOK(c, gin.H{"caseId": item.ID, "votes": votes})
+	return gin.H{"caseId": item.ID, "votes": votes, "scoreDefense": item.DefenseScore, "scoreAccusation": item.AccusationScore}
 }
 
 func (m *module) verdict(c *gin.Context) {
@@ -957,6 +1002,18 @@ func (m *module) verdict(c *gin.Context) {
 		respondErr(c, http.StatusInternalServerError, "VERDICT_FAILED", "Impossible d'enregistrer le verdict.", nil)
 		return
 	}
+	respondOK(c, m.verdictPayload(item))
+}
+
+func (m *module) getVerdict(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	respondOK(c, m.verdictPayload(item))
+}
+
+func (m *module) verdictPayload(item TribunalCase) gin.H {
 	keyContradictions := m.keyContradictions(item.ID, item.OwnerID)
 	proposedConsequences := tribunaladapters.ProposeWorldConsequences(tribunaladapters.VerdictProposal{
 		CaseID:            item.ID,
@@ -965,7 +1022,7 @@ func (m *module) verdict(c *gin.Context) {
 		Summary:           item.VerdictSummary,
 		KeyContradictions: keyContradictions,
 	})
-	respondOK(c, gin.H{
+	return gin.H{
 		"caseId":               item.ID,
 		"status":               item.Status,
 		"verdict":              item.Verdict,
@@ -979,7 +1036,7 @@ func (m *module) verdict(c *gin.Context) {
 		"proposedConsequences": proposedConsequences,
 		"archiveId":            item.ID,
 		"case":                 item,
-	})
+	}
 }
 
 func (m *module) proposeNexusConsequences(c *gin.Context) {
@@ -1001,6 +1058,26 @@ func (m *module) proposeNexusConsequences(c *gin.Context) {
 		"applied":              false,
 		"policy":               "Tribunal proposes only; Nexus Games must apply or reject.",
 	})
+}
+
+func (m *module) caseArchive(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	payload := m.casePayload(item)
+	payload["archive"] = gin.H{
+		"caseId":               item.ID,
+		"title":                item.Title,
+		"status":               item.Status,
+		"verdict":              item.Verdict,
+		"officialSummary":      item.VerdictSummary,
+		"scoreDefense":         item.DefenseScore,
+		"scoreAccusation":      item.AccusationScore,
+		"keyContradictions":    m.keyContradictions(item.ID, item.OwnerID),
+		"nexusDirectlyApplied": false,
+	}
+	respondOK(c, payload)
 }
 
 func (m *module) archives(c *gin.Context) {
@@ -1201,11 +1278,21 @@ func bindJSON(c *gin.Context, target any) error {
 }
 
 func respondOK(c *gin.Context, data any) {
-	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "meta": gin.H{"requestId": requestID(c), "serverTime": time.Now().UTC().Format(time.RFC3339)}})
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    data,
+		"meta":    gin.H{"requestId": requestID(c), "serverTime": time.Now().UTC().Format(time.RFC3339)},
+		"error":   nil,
+	})
 }
 
 func respondErr(c *gin.Context, status int, code string, message string, details any) {
-	c.JSON(status, gin.H{"success": false, "error": gin.H{"code": code, "message": message, "details": details, "requestId": requestID(c)}})
+	c.JSON(status, gin.H{
+		"success": false,
+		"data":    nil,
+		"meta":    gin.H{"requestId": requestID(c), "serverTime": time.Now().UTC().Format(time.RFC3339)},
+		"error":   gin.H{"code": code, "message": message, "details": details, "requestId": requestID(c)},
+	})
 }
 
 func requestID(c *gin.Context) string {
@@ -1977,14 +2064,14 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		hasNexus := lenFromAny(raw["nexusBridgeHints"]) > 0
 
 		rec := tribunalmodels.TribunalGeneratedCase{
-			GenerationBatchID:          batch.ID,
-			Title:                      title,
-			Summary:                    func() string {
-			if s := fmt.Sprint(raw["synopsis"]); s != "" && s != "<nil>" && s != "map[]" {
-				return s
-			}
-			return fmt.Sprint(raw["summary"])
-		}(),
+			GenerationBatchID: batch.ID,
+			Title:             title,
+			Summary: func() string {
+				if s := fmt.Sprint(raw["synopsis"]); s != "" && s != "<nil>" && s != "map[]" {
+					return s
+				}
+				return fmt.Sprint(raw["summary"])
+			}(),
 			CaseType:                   defaultText(fmt.Sprint(raw["caseType"]), "custom"),
 			Level:                      clampInt(intFromAny(raw["level"], 1), 1, 10),
 			Difficulty:                 defaultText(fmt.Sprint(raw["difficulty"]), "standard"),
@@ -2006,27 +2093,27 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 			ProviderType:               providerType,
 			ProviderModel:              model,
 			// New narrative fields
-			RealTruth:              realTruth,
-			PublicTruth:            publicTruth,
-			FinalReveal:            finalReveal,
-			CharacterCastJSON:      datatypes.JSON(castB),
-			ActsJSON:               datatypes.JSON(actsB),
-			ScenesJSON:             datatypes.JSON(scenesB),
-			ProgressionRulesJSON:   datatypes.JSON(prB),
-			FailureRulesJSON:       datatypes.JSON(frB),
-			NexusBridgeHintsJSON:   datatypes.JSON(nexusB),
-			IsNarrativePlayable:    scenesCount > 0 || prCount > 0,
-			HasCrisisMoment:        hasCrisis,
-			HasFinalReveal:         hasFinal,
-			HasIntro:               true,
-			HasBriefing:            true,
-			ActsCount:              actsCount,
-			ScenesCount:            scenesCount,
-			WitnessesCount:         witCount,
-			EvidenceCount:          evCount,
-			ProgressionRulesCount:  prCount,
-			HasPossibleVerdicts:    hasVerdicts,
-			HasNexusBridge:         hasNexus,
+			RealTruth:             realTruth,
+			PublicTruth:           publicTruth,
+			FinalReveal:           finalReveal,
+			CharacterCastJSON:     datatypes.JSON(castB),
+			ActsJSON:              datatypes.JSON(actsB),
+			ScenesJSON:            datatypes.JSON(scenesB),
+			ProgressionRulesJSON:  datatypes.JSON(prB),
+			FailureRulesJSON:      datatypes.JSON(frB),
+			NexusBridgeHintsJSON:  datatypes.JSON(nexusB),
+			IsNarrativePlayable:   scenesCount > 0 || prCount > 0,
+			HasCrisisMoment:       hasCrisis,
+			HasFinalReveal:        hasFinal,
+			HasIntro:              true,
+			HasBriefing:           true,
+			ActsCount:             actsCount,
+			ScenesCount:           scenesCount,
+			WitnessesCount:        witCount,
+			EvidenceCount:         evCount,
+			ProgressionRulesCount: prCount,
+			HasPossibleVerdicts:   hasVerdicts,
+			HasNexusBridge:        hasNexus,
 		}
 		// Persist the COMPLETE original AI JSON so nothing is lost (synopsis, full evidence if any, extra hints, etc.)
 		if full, merr := json.Marshal(raw); merr == nil && len(full) > 2 {
@@ -2181,10 +2268,10 @@ func (m *module) storyCurrent(c *gin.Context) {
 	caseIdStr := c.Param("caseId")
 	if caseIdStr == "0" || caseIdStr == "" {
 		respondOK(c, gin.H{
-			"caseId": 0,
+			"caseId":        0,
 			"narrativeMode": false,
-			"error": "no_case_loaded",
-			"message": "Aucune affaire chargée. Veuillez charger un scénario depuis la liste 'Affaires Scénarisées'.",
+			"error":         "no_case_loaded",
+			"message":       "Aucune affaire chargée. Veuillez charger un scénario depuis la liste 'Affaires Scénarisées'.",
 		})
 		return
 	}
@@ -2271,21 +2358,21 @@ func (m *module) storyCurrent(c *gin.Context) {
 	}
 
 	respondOK(c, gin.H{
-		"caseId":          item.ID,
-		"narrativeCaseId": nc.ID,
-		"title":           item.Title,
-		"currentPhase":    item.CurrentPhase,
-		"sceneId":         sc.SceneID,
-		"actTitle":        fmt.Sprintf("Acte %d", sc.ActIndex),
-		"sceneTitle":      sc.Title,
-		"objective":       sc.Objective,
-		"sceneType":       sc.SceneType,
-		"narrativeText":   sc.NarrativeText,
-		"activeWitness":   gin.H{"name": "Témoin en cours", "assetId": "tribunal.character.witness_default"},
-		"actors":          fullCast, // full objects now
+		"caseId":            item.ID,
+		"narrativeCaseId":   nc.ID,
+		"title":             item.Title,
+		"currentPhase":      item.CurrentPhase,
+		"sceneId":           sc.SceneID,
+		"actTitle":          fmt.Sprintf("Acte %d", sc.ActIndex),
+		"sceneTitle":        sc.Title,
+		"objective":         sc.Objective,
+		"sceneType":         sc.SceneType,
+		"narrativeText":     sc.NarrativeText,
+		"activeWitness":     gin.H{"name": "Témoin en cours", "assetId": "tribunal.character.witness_default"},
+		"actors":            fullCast, // full objects now
 		"visibleStatements": visibleStmts,
 		"availableEvidence": evidences,
-		"allowedActions":  allowed,
+		"allowedActions":    allowed,
 		"scores": gin.H{
 			"defense": item.DefenseScore, "accusation": item.AccusationScore,
 			"pressure": item.Pressure, "witnessCredibility": 72,
@@ -2295,10 +2382,10 @@ func (m *module) storyCurrent(c *gin.Context) {
 		"narrativeMode": true,
 		"nextSceneId":   sc.NextSceneID,
 		"fullScene": gin.H{ // extra for rich UI
-			"cast":             fullCast,
-			"objective":        sc.Objective,
-			"narrativeText":    sc.NarrativeText,
-			"allowedActions":   allowed,
+			"cast":           fullCast,
+			"objective":      sc.Objective,
+			"narrativeText":  sc.NarrativeText,
+			"allowedActions": allowed,
 		},
 	})
 }
@@ -2308,7 +2395,7 @@ func (m *module) storyAction(c *gin.Context) {
 	if caseIdStr == "0" || caseIdStr == "" {
 		respondOK(c, gin.H{
 			"success": false,
-			"error": "no_case_loaded",
+			"error":   "no_case_loaded",
 			"message": "Aucune affaire chargée pour l'action.",
 		})
 		return
@@ -2421,19 +2508,17 @@ func (m *module) storyAction(c *gin.Context) {
 	_ = m.db.Create(&ev).Error
 
 	respondOK(c, gin.H{
-		"success": success,
-		"data": gin.H{
-			"caseId":          item.ID,
-			"sceneAdvanced":   sceneAdvanced,
-			"previousSceneId": payload.SceneId,
-			"currentSceneId":  nc.CurrentSceneID,
-			"resultType":      resultType,
-			"isCritical":      rule.IsCritical,
-			"narrativeResult": narrativeResult,
-			"effects": gin.H{"defenseScoreDelta": defenseDelta, "tribunalPressureDelta": pressureDelta},
-			"unlocked":        unlocked,
-			"nextScene":       nil, // populate if advanced
-		},
+		"actionSuccess":   success,
+		"caseId":          item.ID,
+		"sceneAdvanced":   sceneAdvanced,
+		"previousSceneId": payload.SceneId,
+		"currentSceneId":  nc.CurrentSceneID,
+		"resultType":      resultType,
+		"isCritical":      rule.IsCritical,
+		"narrativeResult": narrativeResult,
+		"effects":         gin.H{"defenseScoreDelta": defenseDelta, "tribunalPressureDelta": pressureDelta},
+		"unlocked":        unlocked,
+		"nextScene":       nil,
 	})
 }
 
@@ -2453,7 +2538,14 @@ func (m *module) storyEvents(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	respondOK(c, gin.H{"caseId": item.ID, "events": []gin.H{}})
+	var nc tribunalmodels.TribunalNarrativeCase
+	if err := m.db.Where("case_id = ?", item.ID).First(&nc).Error; err != nil {
+		respondOK(c, gin.H{"caseId": item.ID, "events": []gin.H{}})
+		return
+	}
+	var events []tribunalmodels.TribunalStoryEvent
+	_ = m.db.Where("narrative_case_id = ?", nc.ID).Order("created_at asc").Find(&events).Error
+	respondOK(c, gin.H{"caseId": item.ID, "narrativeCaseId": nc.ID, "events": events})
 }
 
 func (m *module) storyTimeline(c *gin.Context) {
@@ -2461,7 +2553,16 @@ func (m *module) storyTimeline(c *gin.Context) {
 	if err != nil {
 		return
 	}
-	respondOK(c, gin.H{"caseId": item.ID, "acts": []gin.H{}, "scenes": []gin.H{}})
+	var nc tribunalmodels.TribunalNarrativeCase
+	if err := m.db.Where("case_id = ?", item.ID).First(&nc).Error; err != nil {
+		respondOK(c, gin.H{"caseId": item.ID, "acts": []gin.H{}, "scenes": []gin.H{}})
+		return
+	}
+	var acts []tribunalmodels.TribunalAct
+	var scenes []tribunalmodels.TribunalScene
+	_ = m.db.Where("narrative_case_id = ?", nc.ID).Order("act_index asc").Find(&acts).Error
+	_ = m.db.Where("narrative_case_id = ?", nc.ID).Order("act_index asc, scene_index asc").Find(&scenes).Error
+	respondOK(c, gin.H{"caseId": item.ID, "narrativeCaseId": nc.ID, "acts": acts, "scenes": scenes})
 }
 
 func (m *module) listNarrativeGenerated(c *gin.Context) {
@@ -2634,13 +2735,13 @@ func (m *module) loadNarrativeCase(c *gin.Context) {
 	_ = json.Unmarshal(g.FailureRulesJSON, &frs)
 	for _, f := range frs {
 		fr := tribunalmodels.TribunalFailureRule{
-			NarrativeCaseID: nc.ID,
-			SceneID:         fmt.Sprint(f["sceneId"]),
-			TriggerAction:   fmt.Sprint(f["triggerAction"]),
-			PenaltyType:     defaultText(fmt.Sprint(f["penaltyType"]), "score_down"),
+			NarrativeCaseID:  nc.ID,
+			SceneID:          fmt.Sprint(f["sceneId"]),
+			TriggerAction:    fmt.Sprint(f["triggerAction"]),
+			PenaltyType:      defaultText(fmt.Sprint(f["penaltyType"]), "score_down"),
 			JudgeWarningText: fmt.Sprint(f["judgeWarningText"]),
-			HintText:        fmt.Sprint(f["hintText"]),
-			StayOnScene:     boolFromAny(f["stayOnScene"], true),
+			HintText:         fmt.Sprint(f["hintText"]),
+			StayOnScene:      boolFromAny(f["stayOnScene"], true),
 		}
 		_ = m.db.Create(&fr).Error
 	}
@@ -2666,11 +2767,11 @@ func (m *module) loadNarrativeCase(c *gin.Context) {
 	// ... (existing evidence/witness copy can be called or duplicated)
 
 	respondOK(c, gin.H{
-		"caseId":        tc.ID,
+		"caseId":          tc.ID,
 		"narrativeCaseId": nc.ID,
-		"narrative":     true,
-		"generatedId":   g.ID,
-		"nextScreen":    "story_intro",
+		"narrative":       true,
+		"generatedId":     g.ID,
+		"nextScreen":      "story_intro",
 	})
 }
 
@@ -2682,9 +2783,9 @@ func (m *module) generatedNarrativeStats(c *gin.Context) {
 	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("has_crisis_moment = ?", true).Count(&withCrisis)
 	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("has_final_reveal = ?", true).Count(&withReveal)
 	respondOK(c, gin.H{
-		"totalGenerated": total,
+		"totalGenerated":    total,
 		"narrativePlayable": narrative,
-		"withCrisis": withCrisis,
-		"withFinalReveal": withReveal,
+		"withCrisis":        withCrisis,
+		"withFinalReveal":   withReveal,
 	})
 }
