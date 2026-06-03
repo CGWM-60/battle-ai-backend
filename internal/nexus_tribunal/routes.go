@@ -2171,42 +2171,78 @@ func (m *module) storyCurrent(c *gin.Context) {
 		allowed = []string{"press", "present_evidence", "objection", "ai_analysis", "ask_hint", "continue_story"}
 	}
 
-	// Load basic linked witnesses/evidence for display (simplified)
+	// Load full cast from generated actors or original generated case
+	var fullCast []gin.H
+	var genCase tribunalmodels.TribunalGeneratedCase
+	if nc.GeneratedCaseID != nil {
+		if err := m.db.First(&genCase, *nc.GeneratedCaseID).Error; err == nil {
+			var castArr []map[string]any
+			if len(genCase.CharacterCastJSON) > 0 {
+				_ = json.Unmarshal(genCase.CharacterCastJSON, &castArr)
+			}
+			for _, c := range castArr {
+				fullCast = append(fullCast, gin.H{
+					"actorType":     c["actorType"],
+					"name":          c["name"],
+					"personality":   c["personality"],
+					"avatarAssetId": c["avatarAssetId"],
+				})
+			}
+		}
+	}
+	if len(fullCast) == 0 {
+		// fallback to actors strings
+		for _, a := range actors {
+			fullCast = append(fullCast, gin.H{"name": a, "avatarAssetId": "tribunal.character.witness_default"})
+		}
+	}
+
+	// Load basic linked witnesses/evidence (for compatibility)
 	var witnesses []TribunalWitness
 	_ = m.db.Where("case_id = ?", item.ID).Limit(5).Find(&witnesses).Error
 	var evidences []TribunalEvidence
 	_ = m.db.Where("case_id = ?", item.ID).Limit(6).Find(&evidences).Error
 
-	// Build statements from old or narrative (use visible)
+	// Build visible statements — use narrative text if no real statements
 	visibleStmts := []gin.H{}
-	for i, sid := range stmts {
-		visibleStmts = append(visibleStmts, gin.H{"id": sid, "content": fmt.Sprintf("Déclaration %s", sid), "isAttackable": true, "index": i})
+	if len(stmts) > 0 {
+		for i, sid := range stmts {
+			visibleStmts = append(visibleStmts, gin.H{"id": sid, "content": fmt.Sprintf("Déclaration %s", sid), "isAttackable": true, "index": i})
+		}
+	} else if sc.NarrativeText != "" {
+		visibleStmts = append(visibleStmts, gin.H{"id": sc.SceneID, "content": sc.NarrativeText, "isAttackable": false, "index": 0})
 	}
 
 	respondOK(c, gin.H{
-		"caseId":        item.ID,
+		"caseId":          item.ID,
 		"narrativeCaseId": nc.ID,
-		"title":         item.Title,
-		"currentPhase":  item.CurrentPhase,
-		"sceneId":       sc.SceneID,
-		"actTitle":      fmt.Sprintf("Acte %d", sc.ActIndex),
-		"sceneTitle":    sc.Title,
-		"objective":     sc.Objective,
-		"sceneType":     sc.SceneType,
-		"narrativeText": sc.NarrativeText,
-		"activeWitness": gin.H{"name": "Témoin en cours", "assetId": "tribunal.character.witness_default"},
-		"actors":        actors,
+		"title":           item.Title,
+		"currentPhase":    item.CurrentPhase,
+		"sceneId":         sc.SceneID,
+		"actTitle":        fmt.Sprintf("Acte %d", sc.ActIndex),
+		"sceneTitle":      sc.Title,
+		"objective":       sc.Objective,
+		"sceneType":       sc.SceneType,
+		"narrativeText":   sc.NarrativeText,
+		"activeWitness":   gin.H{"name": "Témoin en cours", "assetId": "tribunal.character.witness_default"},
+		"actors":          fullCast, // full objects now
 		"visibleStatements": visibleStmts,
-		"availableEvidence": evidences, // simplified, real would map ids
-		"allowedActions": allowed,
+		"availableEvidence": evidences,
+		"allowedActions":  allowed,
 		"scores": gin.H{
 			"defense": item.DefenseScore, "accusation": item.AccusationScore,
 			"pressure": item.Pressure, "witnessCredibility": 72,
 		},
-		"hints":   []string{},
-		"history": []gin.H{},
+		"hints":         []string{},
+		"history":       []gin.H{},
 		"narrativeMode": true,
-		"nextSceneId": sc.NextSceneID,
+		"nextSceneId":   sc.NextSceneID,
+		"fullScene": gin.H{ // extra for rich UI
+			"cast":             fullCast,
+			"objective":        sc.Objective,
+			"narrativeText":    sc.NarrativeText,
+			"allowedActions":   allowed,
+		},
 	})
 }
 
