@@ -1175,50 +1175,59 @@ func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg a
 }
 
 func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cronTrace) ([]generatedTribunalCase, error) {
-	_, user := promptsForTribunalCases()
-	trace.log("prompt_build", "completed", "chars=%d", len(user))
-
-	response, err := callProvider(ctx, cfg, user, trace)
-	if err != nil {
-		return nil, fmt.Errorf("call provider: %w", err)
-	}
-	cleaned := cleanJSON(response)
-	trace.log("json_clean", "completed", "raw=%d cleaned=%d", len(response), len(cleaned))
-
-	var wrapper struct {
-		Cases []generatedTribunalCase `json:"cases"`
-	}
-	if err := json.Unmarshal([]byte(cleaned), &wrapper); err != nil {
-		trace.log("json_parse", "failed", "err=%v preview=%s", err, preview(cleaned, 400))
-		var direct []generatedTribunalCase
-		if err2 := json.Unmarshal([]byte(cleaned), &direct); err2 == nil {
-			wrapper.Cases = direct
-		} else {
-			return nil, fmt.Errorf("parse tribunal cases JSON: %w", err)
-		}
-	}
-	if len(wrapper.Cases) == 0 {
-		return nil, fmt.Errorf("provider returned 0 cases")
-	}
-	seen := map[int]bool{}
+	// Generate 1 by 1 (user requirement) — much more reliable than one huge prompt for 10 complex narrative cases.
 	out := make([]generatedTribunalCase, 0, tribunalCasesPerCron)
-	for _, c := range wrapper.Cases {
-		lvl := clampInt(c.Level, 1, 10)
+	seen := map[int]bool{}
+
+	for lvl := 1; lvl <= tribunalCasesPerCron; lvl++ {
 		if seen[lvl] {
 			continue
 		}
-		seen[lvl] = true
-		if c.EstimatedDurationMinutes <= 0 {
-			c.EstimatedDurationMinutes = 5 + lvl*5
+
+		sys, user := tribunalprompts.BuildSingleNarrativeCasePrompt(lvl)
+		trace.log("prompt_build", "completed", "level=%d chars=%d", lvl, len(user))
+
+		// callProvider puts the prompt as system message
+		fullPrompt := sys + "\n\n" + user
+		response, err := callProvider(ctx, cfg, fullPrompt, trace)
+		if err != nil {
+			trace.log("single_case", "failed", "level=%d err=%v", lvl, err)
+			continue // don't fail the whole batch
 		}
-		out = append(out, c)
+		cleaned := cleanJSON(response)
+		trace.log("json_clean", "completed", "level=%d", lvl)
+
+		var single generatedTribunalCase
+		if uerr := json.Unmarshal([]byte(cleaned), &single); uerr != nil {
+			trace.log("json_parse", "failed", "level=%d err=%v preview=%s", lvl, uerr, preview(cleaned, 400))
+			continue
+		}
+
+		// force correct level
+		single.Level = lvl
+
+		lv := clampInt(single.Level, 1, 10)
+		if seen[lv] {
+			continue
+		}
+		seen[lv] = true
+
+		if single.EstimatedDurationMinutes <= 0 {
+			single.EstimatedDurationMinutes = 5 + lv*5
+		}
+		out = append(out, single)
+		trace.log("single_case", "success", "level=%d title=%s", lv, single.Title)
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("provider returned 0 cases (1-by-1 mode)")
 	}
 	return out, nil
 }
 
 func promptsForTribunalCases() (string, string) {
-	// Correctif: use full narrative scenarized prompt (Phoenix-like)
-	return tribunalprompts.BuildNarrativeCasesPrompt(10)
+	// Kept for compatibility. Real generation now uses BuildSingleNarrativeCasePrompt in a loop (1 by 1).
+	return tribunalprompts.BuildSingleNarrativeCasePrompt(5)
 }
 
 func clampInt(v, min, max int) int {

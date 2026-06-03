@@ -121,7 +121,8 @@ export default function TribunalAIPage() {
       reload();
       alert(payload.message || `Génération terminée : ${payload.generated || 0} affaires.`);
     } catch (e: any) {
-      setError(e.message || "Génération manuelle échouée");
+      const base = e.message || "Génération manuelle échouée";
+      setError(`${base}\n\n→ Vérifie les logs Dokploy (recherche [tribunal-generate]) pour la réponse brute de l'IA et le détail précis. Le batch créé contient aussi l'ErrorMessage.`);
     } finally {
       setBusy(false);
       reload(); // always refresh batches so user can see detailed ErrorMessage in the list

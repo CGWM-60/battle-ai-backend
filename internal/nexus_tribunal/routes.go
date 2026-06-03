@@ -1858,54 +1858,62 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 	}
 	log.Printf("[tribunal-generate] batch created id=%d", batch.ID)
 
-	sys, userPrompt := tribunalprompts.BuildNarrativeCasesPrompt(count)
+	// Generate 1 by 1 (user requirement) to avoid huge prompts + timeouts on complex narrative cases.
+	// We loop over levels 1..count and call the AI for exactly one rich case each time.
 	adapter := tribunaladapters.NewAIProviderAdapter(func(pt string) string { return "" }) // we pass explicit key
-	resp, aerr := adapter.Generate(context.Background(), tribunaladapters.GenerateRequest{
-		ProviderType: providerType,
-		Model:        model,
-		APIKey:       apiKey,
-		SystemPrompt: sys,
-		Prompt:       userPrompt,
-	})
-	if aerr != nil {
-		log.Printf("[tribunal-generate] provider error: provider=%s model=%s err=%v", providerType, model, aerr)
-		batch.Status = "failed"
-		batch.ErrorMessage = fmt.Sprintf("Erreur appel provider IA (%s / %s): %v. Vérifie ta clé API (qu'elle corresponde au provider choisi), le solde/crédit, et que le modèle gère les prompts longs et complexes. Détail: %v", providerType, model, aerr, aerr)
-		db.Save(&batch)
-		return batch.ID, 0, aerr
-	}
 
-	log.Printf("[tribunal-generate] AI call success, response_len=%d preview=%s", len(resp.Text), preview(resp.Text, 300))
-	cleaned := cleanJSONLocal(resp.Text)
-	var wrapper struct {
-		Cases []map[string]any `json:"cases"`
-	}
-	if uerr := json.Unmarshal([]byte(cleaned), &wrapper); uerr != nil {
-		log.Printf("[tribunal-generate] json unmarshal to wrapper failed: %v, cleaned_preview=%s", uerr, preview(cleaned, 300))
-		var direct []map[string]any
-		if uerr2 := json.Unmarshal([]byte(cleaned), &direct); uerr2 == nil {
-			wrapper.Cases = direct
-		} else {
-			log.Printf("[tribunal-generate] direct unmarshal also failed: %v", uerr2)
-		}
-	}
-	if len(wrapper.Cases) == 0 {
-		log.Printf("[tribunal-generate] after unmarshal, 0 cases in wrapper. cleaned_preview=%s", preview(cleaned, 500))
-	} else {
-		log.Printf("[tribunal-generate] parsed %d raw cases from AI", len(wrapper.Cases))
-	}
+	seenLevels := map[int]bool{}
+	allCases := []map[string]any{}
 
-	generated = 0
-	for i, raw := range wrapper.Cases {
-		if i >= count {
-			break
-		}
-		title := strings.TrimSpace(fmt.Sprint(raw["title"]))
-		if title == "" {
-			log.Printf("[tribunal-generate] skipping case %d: no title", i)
+	for lvl := 1; lvl <= count; lvl++ {
+		if seenLevels[lvl] {
 			continue
 		}
-		log.Printf("[tribunal-generate] processing case %d: title=%q level=%v", i, title, raw["level"])
+
+		sys, userPrompt := tribunalprompts.BuildSingleNarrativeCasePrompt(lvl)
+		log.Printf("[tribunal-generate] generating single case level=%d (1-by-1 mode)", lvl)
+
+		resp, aerr := adapter.Generate(context.Background(), tribunaladapters.GenerateRequest{
+			ProviderType: providerType,
+			Model:        model,
+			APIKey:       apiKey,
+			SystemPrompt: sys,
+			Prompt:       userPrompt,
+		})
+		if aerr != nil {
+			log.Printf("[tribunal-generate] single case level=%d failed: %v", lvl, aerr)
+			// continue to next level instead of failing the whole batch
+			continue
+		}
+
+		cleaned := cleanJSONLocal(resp.Text)
+		var singleCase map[string]any
+		if uerr := json.Unmarshal([]byte(cleaned), &singleCase); uerr != nil {
+			log.Printf("[tribunal-generate] single case level=%d json parse failed: %v preview=%s", lvl, uerr, preview(cleaned, 400))
+			continue
+		}
+
+		// ensure level is correct
+		singleCase["level"] = lvl
+
+		lvlVal := intFromAny(singleCase["level"], lvl)
+		if seenLevels[lvlVal] {
+			continue
+		}
+		seenLevels[lvlVal] = true
+		allCases = append(allCases, singleCase)
+	}
+
+	// Process the cases we collected one-by-one above
+	generated = 0
+	for i, raw := range allCases {
+		title := strings.TrimSpace(fmt.Sprint(raw["title"]))
+		if title == "" {
+			log.Printf("[tribunal-generate] skipping single case %d: no title", i)
+			continue
+		}
+		log.Printf("[tribunal-generate] processing single case %d: title=%q", i, title)
+
 		tagsB, _ := json.Marshal(raw["tags"])
 		witB, _ := json.Marshal(raw["witnesses"])
 		evB, _ := json.Marshal(raw["evidence"])
@@ -1983,7 +1991,7 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		}
 		if cerr := db.Create(&rec).Error; cerr == nil {
 			generated++
-			log.Printf("[tribunal-generate] created rec id=%d title=%q", rec.ID, title)
+			log.Printf("[tribunal-generate] created rec id=%d title=%q (1-by-1)", rec.ID, title)
 		} else {
 			log.Printf("[tribunal-generate] DB create failed for %q: %v", title, cerr)
 		}
@@ -1997,11 +2005,9 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 	log.Printf("[tribunal-generate] FINISHED: batch=%d provider=%s model=%s generated=%d duration=%dms", batch.ID, providerType, model, generated, batch.DurationMs)
 
 	if generated == 0 {
-		log.Printf("[tribunal-generate] 0 cases after parsing. provider=%s model=%s batch=%d cleaned_preview=%s", providerType, model, batch.ID, preview(cleaned, 300))
 		batch.Status = "failed"
-		batch.ErrorMessage = "aucune affaire valide générée par l'IA. Vérifie que le provider/modèle supporte le prompt complexe (narrative cases) et que la clé a du crédit. Réponse IA: " + preview(resp.Text, 500)
+		batch.ErrorMessage = "aucune affaire valide générée par l'IA (même en mode 1-by-1). Vérifie ta clé, le modèle et les logs [tribunal-generate] pour les previews de réponses IA."
 		db.Save(&batch)
-		// Return success with 0 so admin doesn't get 502, but log the issue. The batch has the error.
 		return batch.ID, 0, nil
 	}
 	batch.Status = "success"
