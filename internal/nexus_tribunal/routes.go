@@ -176,6 +176,10 @@ type providerTestRequest struct {
 	Prompt        string `json:"prompt"`
 }
 
+type providerOverrideRequest struct {
+	Provider providerConfig `json:"provider"`
+}
+
 type apiError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -270,6 +274,7 @@ func (m *module) providers(c *gin.Context) {
 	items = append(items,
 		gin.H{"providerType": "ollama", "providerName": "Ollama", "isLocal": true, "status": "endpoint_required", "defaultModel": "llama3.2", "defaultEndpoint": "http://localhost:11434", "apiKeyMode": "no_key_local"},
 		gin.H{"providerType": "lmstudio", "providerName": "LM Studio", "isLocal": true, "status": "endpoint_required", "defaultModel": "local-model", "defaultEndpoint": "http://localhost:1234", "apiKeyMode": "no_key_local"},
+		gin.H{"providerType": "local", "providerName": "Local OpenAI-compatible", "isLocal": true, "status": "endpoint_required", "defaultModel": "local-model", "defaultEndpoint": "http://localhost:1234", "apiKeyMode": "optional_key"},
 		gin.H{"providerType": "custom", "providerName": "Custom OpenAI-compatible", "isLocal": true, "status": "endpoint_required", "defaultModel": "local-model", "defaultEndpoint": "http://localhost:1234", "apiKeyMode": "optional_key"},
 	)
 	respondOK(c, gin.H{"providers": items})
@@ -498,12 +503,13 @@ func (m *module) generateTestimony(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	override := bindProviderOverride(c)
 	var witness TribunalWitness
 	if err := m.db.Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Order("id asc").First(&witness).Error; err != nil {
 		respondErr(c, http.StatusBadRequest, "WITNESS_REQUIRED", "Ajoutez au moins un temoin avant le temoignage.", nil)
 		return
 	}
-	if err := m.seedStatements(item, witness); err != nil {
+	if err := m.seedStatements(item, witness, override); err != nil {
 		respondErr(c, http.StatusInternalServerError, "TESTIMONY_GENERATE_FAILED", "Impossible de generer le temoignage.", nil)
 		return
 	}
@@ -579,17 +585,19 @@ func (m *module) aiAnalysis(c *gin.Context) {
 	if err != nil {
 		return
 	}
+	override := bindProviderOverride(c)
 	evidence, witnesses := m.caseEvidenceWitnesses(item.ID, item.OwnerID)
 
 	// Try real AI advisory via adapter for richer analysis
 	adapter := tribunaladapters.NewAIProviderAdapter(providerEnvKey)
 	aiText := ""
 	if resp, aerr := adapter.Generate(c.Request.Context(), tribunaladapters.GenerateRequest{
-		ProviderType: item.ProviderType,
-		Model:        item.ProviderModel,
-		LocalEndpoint: item.LocalEndpoint,
-		SystemPrompt: "Tu es un analyste de tribunal IA cyberpunk. Donne 2-3 suggestions courtes et precises pour le joueur en fonction du contexte de l'affaire, des scores et des preuves.",
-		Prompt: fmt.Sprintf("Affaire: %s. Defense:%d Accusation:%d Pression:%d. %d preuves, %d temoins. Sujets: %s vs %s. Reponds en 2 bullets max.", item.Title, item.DefenseScore, item.AccusationScore, item.Pressure, len(evidence), len(witnesses), item.DefensePosition, item.AccusationPosition),
+		ProviderType:  providerOverrideText(override.ProviderType, item.ProviderType),
+		Model:         providerOverrideText(override.Model, item.ProviderModel),
+		APIKey:        override.APIKey,
+		LocalEndpoint: providerOverrideText(override.LocalEndpoint, item.LocalEndpoint),
+		SystemPrompt:  "Tu es un analyste de tribunal IA cyberpunk. Donne 2-3 suggestions courtes et precises pour le joueur en fonction du contexte de l'affaire, des scores et des preuves.",
+		Prompt:        fmt.Sprintf("Affaire: %s. Defense:%d Accusation:%d Pression:%d. %d preuves, %d temoins. Sujets: %s vs %s. Reponds en 2 bullets max.", item.Title, item.DefenseScore, item.AccusationScore, item.Pressure, len(evidence), len(witnesses), item.DefensePosition, item.AccusationPosition),
 	}); aerr == nil {
 		aiText = strings.TrimSpace(resp.Text)
 	}
@@ -598,8 +606,8 @@ func (m *module) aiAnalysis(c *gin.Context) {
 	}
 
 	respondOK(c, gin.H{
-		"caseId": item.ID,
-		"analysis": aiText,
+		"caseId":       item.ID,
+		"analysis":     aiText,
 		"advisoryOnly": true,
 	})
 }
@@ -745,7 +753,7 @@ func (m *module) seedMinimumDossier(ctx context.Context, item TribunalCase) erro
 	return nil
 }
 
-func (m *module) seedStatements(item TribunalCase, witness TribunalWitness) error {
+func (m *module) seedStatements(item TribunalCase, witness TribunalWitness, override providerConfig) error {
 	var count int64
 	m.db.Model(&TribunalStatement{}).Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Count(&count)
 	if count > 0 {
@@ -762,9 +770,10 @@ func (m *module) seedStatements(item TribunalCase, witness TribunalWitness) erro
 		"Si contradiction il y a, elle vient probablement d'un journal secondaire.",
 	}
 	if resp, aerr := adapter.Generate(context.Background(), tribunaladapters.GenerateRequest{
-		ProviderType:  item.ProviderType,
-		Model:         item.ProviderModel,
-		LocalEndpoint: item.LocalEndpoint,
+		ProviderType:  providerOverrideText(override.ProviderType, item.ProviderType),
+		Model:         providerOverrideText(override.Model, item.ProviderModel),
+		APIKey:        override.APIKey,
+		LocalEndpoint: providerOverrideText(override.LocalEndpoint, item.LocalEndpoint),
 		SystemPrompt:  "Tu es un greffier IA qui produit des declarations de temoin coherentes et contradictoires potentielles pour un tribunal cyberpunk. Reponds strictement au format demande.",
 		Prompt:        aiPrompt,
 	}); aerr == nil && strings.TrimSpace(resp.Text) != "" {
@@ -791,6 +800,23 @@ func (m *module) seedStatements(item TribunalCase, witness TribunalWitness) erro
 		}
 	}
 	return nil
+}
+
+func bindProviderOverride(c *gin.Context) providerConfig {
+	var req providerOverrideRequest
+	_ = bindJSON(c, &req)
+	req.Provider.ProviderType = normalizeProvider(req.Provider.ProviderType)
+	req.Provider.Model = strings.TrimSpace(req.Provider.Model)
+	req.Provider.LocalEndpoint = strings.TrimSpace(req.Provider.LocalEndpoint)
+	req.Provider.APIKey = strings.TrimSpace(req.Provider.APIKey)
+	return req.Provider
+}
+
+func providerOverrideText(override string, fallback string) string {
+	if strings.TrimSpace(override) != "" {
+		return strings.TrimSpace(override)
+	}
+	return fallback
 }
 
 func testAIProvider(ctx context.Context, req providerTestRequest) (gin.H, error) {
