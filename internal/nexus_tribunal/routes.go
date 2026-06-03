@@ -1511,6 +1511,16 @@ func (m *module) getGeneratedCase(c *gin.Context) {
 	_ = json.Unmarshal(g.EvidenceJSON, &evidence)
 	_ = json.Unmarshal(g.TestimonyJSON, &testimony)
 	_ = json.Unmarshal(g.ExpectedContradictionsJSON, &contradictions)
+
+	// Narrative JSON payloads (scenes, cast, acts, rules...) for rich Flutter detail + admin
+	var scenes, cast, acts, progressionRules, failureRules, nexusHints any
+	_ = json.Unmarshal(g.ScenesJSON, &scenes)
+	_ = json.Unmarshal(g.CharacterCastJSON, &cast)
+	_ = json.Unmarshal(g.ActsJSON, &acts)
+	_ = json.Unmarshal(g.ProgressionRulesJSON, &progressionRules)
+	_ = json.Unmarshal(g.FailureRulesJSON, &failureRules)
+	_ = json.Unmarshal(g.NexusBridgeHintsJSON, &nexusHints)
+
 	respondOK(c, gin.H{
 		"id":                       g.ID,
 		"title":                    g.Title,
@@ -1536,6 +1546,29 @@ func (m *module) getGeneratedCase(c *gin.Context) {
 		"providerType":             g.ProviderType,
 		"model":                    g.ProviderModel,
 		"createdAt":                g.CreatedAt,
+		// Narrative Phoenix-like (full for scenarios list/detail)
+		"isNarrativePlayable":   g.IsNarrativePlayable,
+		"hasCrisisMoment":       g.HasCrisisMoment,
+		"hasFinalReveal":        g.HasFinalReveal,
+		"hasIntro":              g.HasIntro,
+		"hasBriefing":           g.HasBriefing,
+		"actsCount":             g.ActsCount,
+		"scenesCount":           g.ScenesCount,
+		"witnessesCount":        g.WitnessesCount,
+		"evidenceCount":         g.EvidenceCount,
+		"progressionRulesCount": g.ProgressionRulesCount,
+		"hasPossibleVerdicts":   g.HasPossibleVerdicts,
+		"hasNexusBridge":        g.HasNexusBridge,
+		"realTruth":             g.RealTruth,
+		"publicTruth":           g.PublicTruth,
+		"finalReveal":           g.FinalReveal,
+		"replayabilitySeed":     g.ReplayabilitySeed,
+		"scenes":                scenes,
+		"characterCast":         cast,
+		"acts":                  acts,
+		"progressionRules":      progressionRules,
+		"failureRules":          failureRules,
+		"nexusBridgeHints":      nexusHints,
 	})
 }
 
@@ -2389,14 +2422,21 @@ func (m *module) storyTimeline(c *gin.Context) {
 func (m *module) listNarrativeGenerated(c *gin.Context) {
 	_ = m.db.AutoMigrate(&tribunalmodels.TribunalGeneratedCase{})
 	var items []tribunalmodels.TribunalGeneratedCase
-	q := m.db.Where("is_narrative_playable = ? OR scenes_json IS NOT NULL OR acts_json IS NOT NULL", true).Order("level asc, id desc").Limit(50)
+	// Broad inclusive query for "scénarisées" / Phoenix narrative cases (1-by-1 gens set the JSONs + counts + flag).
+	// Includes any playable ready case that has narrative payload (scenes/cast/acts json or counts or explicit flag).
+	q := m.db.Where(
+		"(is_narrative_playable = ? OR scenes_json IS NOT NULL OR acts_json IS NOT NULL OR scenes_count > 0 OR witnesses_count > 0 OR acts_count > 0) AND (is_playable = ? AND status IN ?)",
+		true, true, []string{"ready", "published"},
+	).Order("level asc, id desc").Limit(50)
 	if lvl := c.Query("level"); lvl != "" {
 		q = q.Where("level = ?", lvl)
 	}
 	if err := q.Find(&items).Error; err != nil {
-		// defensive: if query fails due to schema (e.g. no restart), fallback to all recent
-		_ = m.db.Where("is_playable = ?", true).Order("level asc, id desc").Limit(50).Find(&items).Error
+		log.Printf("[tribunal-narrative-list] primary query err, fallback: %v", err)
+		// defensive fallback to recent playable
+		_ = m.db.Where("is_playable = ? AND status IN ?", true, []string{"ready", "published"}).Order("level asc, id desc").Limit(50).Find(&items).Error
 	}
+	log.Printf("[tribunal-narrative-list] returned %d narrative/scenarised items (level filter=%q)", len(items), c.Query("level"))
 	respondOK(c, gin.H{"cases": items})
 }
 
