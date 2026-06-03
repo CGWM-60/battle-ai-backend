@@ -1588,7 +1588,7 @@ func (m *module) generatedFilters(c *gin.Context) {
 func (m *module) getGeneratedCase(c *gin.Context) {
 	genID, _ := strconv.Atoi(c.Param("genId"))
 	var g tribunalmodels.TribunalGeneratedCase
-	if err := m.db.First(&g, genID).Error; err != nil {
+	if res := m.db.Where("id = ?", genID).Limit(1).Find(&g); res.Error != nil || res.RowsAffected == 0 {
 		respondErr(c, http.StatusNotFound, "NOT_FOUND", "Affaire generee introuvable.", nil)
 		return
 	}
@@ -1658,6 +1658,41 @@ func (m *module) getGeneratedCase(c *gin.Context) {
 		"failureRules":          failureRules,
 		"nexusBridgeHints":      nexusHints,
 	})
+}
+
+func (m *module) findGeneratedCaseForNarrativeLoad(requestedID uint) (tribunalmodels.TribunalGeneratedCase, bool, error) {
+	var g tribunalmodels.TribunalGeneratedCase
+	if requestedID > 0 {
+		if res := m.db.Where("id = ?", requestedID).Limit(1).Find(&g); res.Error != nil {
+			return g, false, res.Error
+		} else if res.RowsAffected > 0 {
+			return g, false, nil
+		}
+		if res := m.db.Where("case_id = ?", requestedID).Limit(1).Find(&g); res.Error != nil {
+			return g, false, res.Error
+		} else if res.RowsAffected > 0 {
+			return g, false, nil
+		}
+		if res := m.db.Unscoped().Where("id = ?", requestedID).Limit(1).Find(&g); res.Error != nil {
+			return g, false, res.Error
+		} else if res.RowsAffected > 0 && g.DeletedAt.Valid {
+			log.Printf("[tribunal-load-narrative] requested generated id %d is soft-deleted, fallback to latest playable narrative", requestedID)
+		}
+	}
+
+	var fallback tribunalmodels.TribunalGeneratedCase
+	res := m.db.Where(
+		"(is_narrative_playable = ? OR scenes_json IS NOT NULL OR scenes_count > 0 OR acts_count > 0) AND is_playable = ? AND status IN ?",
+		true, true, []string{"ready", "published"},
+	).Order("updated_at desc, id desc").Limit(1).Find(&fallback)
+	if res.Error != nil {
+		return fallback, false, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fallback, false, gorm.ErrRecordNotFound
+	}
+	log.Printf("[tribunal-load-narrative] requested generated id %d not found, fallback generated id %d", requestedID, fallback.ID)
+	return fallback, true, nil
 }
 
 func (m *module) loadGeneratedCase(c *gin.Context) {
@@ -2949,13 +2984,19 @@ func (m *module) listNarrativeGenerated(c *gin.Context) {
 
 func (m *module) loadNarrativeCase(c *gin.Context) {
 	genId, _ := strconv.Atoi(c.Param("genId"))
-	var g tribunalmodels.TribunalGeneratedCase
-	if err := m.db.First(&g, genId).Error; err != nil {
-		respondErr(c, http.StatusNotFound, "NOT_FOUND", "Generated case introuvable.", nil)
+	g, usedFallback, err := m.findGeneratedCaseForNarrativeLoad(uint(genId))
+	if err != nil {
+		respondErr(c, http.StatusNotFound, "NOT_FOUND", "Aucune affaire narrative chargeable n'est disponible. Rafraichis la liste ou regenere des affaires.", gin.H{
+			"requestedGeneratedId": genId,
+		})
 		return
 	}
 	if !g.IsPlayable || g.Status == "archived" || g.Status == "rejected" {
-		respondErr(c, http.StatusBadRequest, "NOT_PLAYABLE", "Cette affaire n'est plus chargeable.", nil)
+		respondErr(c, http.StatusBadRequest, "NOT_PLAYABLE", "Cette affaire n'est plus chargeable. Rafraichis la liste.", gin.H{
+			"requestedGeneratedId": genId,
+			"loadedGeneratedId":    g.ID,
+			"status":               g.Status,
+		})
 		return
 	}
 
@@ -3135,11 +3176,13 @@ func (m *module) loadNarrativeCase(c *gin.Context) {
 	// ... (existing evidence/witness copy can be called or duplicated)
 
 	respondOK(c, gin.H{
-		"caseId":          tc.ID,
-		"narrativeCaseId": nc.ID,
-		"narrative":       true,
-		"generatedId":     g.ID,
-		"nextScreen":      "story_intro",
+		"caseId":               tc.ID,
+		"narrativeCaseId":      nc.ID,
+		"narrative":            true,
+		"generatedId":          g.ID,
+		"requestedGeneratedId": genId,
+		"fallbackLoaded":       usedFallback,
+		"nextScreen":           "story_intro",
 	})
 }
 
