@@ -3,6 +3,7 @@ package router
 import (
 	"cgwm/battle/internal/admin"
 	"cgwm/battle/internal/models"
+	nexustribunal "cgwm/battle/internal/nexus_tribunal"
 	"cgwm/battle/internal/repository"
 	"errors"
 	"net/http"
@@ -75,6 +76,7 @@ func RouterApp(database *gorm.DB) {
 	private.PATCH("/me", updateMe(database))
 	private.POST("/ai/providers/test", testAIProvider())
 	private.POST("/ai/providers/generate", generateAIProviderText())
+	nexustribunal.RegisterRoutes(router, database, jwtAuth(), adminAPIAuth())
 
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())

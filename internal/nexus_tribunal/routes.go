@@ -1,0 +1,942 @@
+package nexustribunal
+
+import (
+	"cgwm/battle/internal/provider"
+	"cgwm/battle/internal/service"
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
+)
+
+const (
+	phaseInvestigation = "investigation"
+	phaseTestimony     = "testimony"
+	phaseLive          = "live_trial"
+	phaseVerdict       = "verdict"
+	statusCreated      = "created"
+	statusOpen         = "open"
+	statusClosed       = "closed"
+)
+
+type TribunalCase struct {
+	ID                  uint      `gorm:"primaryKey" json:"id"`
+	OwnerID             uint      `gorm:"index" json:"ownerId"`
+	Title               string    `gorm:"size:180;not null" json:"title"`
+	CaseType            string    `gorm:"size:80" json:"caseType"`
+	Description         string    `gorm:"type:text" json:"description"`
+	AccusationPosition  string    `gorm:"type:text" json:"accusationPosition"`
+	DefensePosition     string    `gorm:"type:text" json:"defensePosition"`
+	PlayerRole          string    `gorm:"size:40" json:"playerRole"`
+	Mode                string    `gorm:"size:40;index" json:"mode"`
+	Tone                string    `gorm:"size:80" json:"tone"`
+	Visibility          string    `gorm:"size:40" json:"visibility"`
+	ProviderType        string    `gorm:"size:80" json:"providerType"`
+	ProviderModel       string    `gorm:"size:160" json:"providerModel"`
+	ProviderIsLocal     bool      `json:"providerIsLocal"`
+	LocalEndpoint       string    `gorm:"size:255" json:"localEndpoint"`
+	ProviderStream      bool      `json:"providerStream"`
+	APIKeyMode          string    `gorm:"size:80" json:"apiKeyMode"`
+	JuryCount           int       `json:"juryCount"`
+	EnableInvestigation bool      `json:"enableInvestigation"`
+	EnableObjections    bool      `json:"enableObjections"`
+	Status              string    `gorm:"size:40;index" json:"status"`
+	CurrentPhase        string    `gorm:"size:60;index" json:"currentPhase"`
+	DefenseScore        int       `json:"defenseScore"`
+	AccusationScore     int       `json:"accusationScore"`
+	Pressure            int       `json:"pressure"`
+	Verdict             string    `gorm:"size:80" json:"verdict"`
+	VerdictSummary      string    `gorm:"type:text" json:"verdictSummary"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
+}
+
+type TribunalEvidence struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	CaseID       uint      `gorm:"index" json:"caseId"`
+	OwnerID      uint      `gorm:"index" json:"ownerId"`
+	Title        string    `gorm:"size:180;not null" json:"title"`
+	Description  string    `gorm:"type:text" json:"description"`
+	EvidenceType string    `gorm:"size:80" json:"evidenceType"`
+	SourceType   string    `gorm:"size:80" json:"sourceType"`
+	SourceID     string    `gorm:"size:120" json:"sourceId"`
+	Strength     int       `json:"strength"`
+	Reliability  int       `json:"reliability"`
+	Tags         string    `gorm:"size:255" json:"tags"`
+	SupportsSide string    `gorm:"size:40" json:"supportsSide"`
+	AssetID      string    `gorm:"size:120" json:"assetId"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type TribunalWitness struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	CaseID      uint      `gorm:"index" json:"caseId"`
+	OwnerID     uint      `gorm:"index" json:"ownerId"`
+	Name        string    `gorm:"size:160;not null" json:"name"`
+	Role        string    `gorm:"size:120" json:"role"`
+	Personality string    `gorm:"size:255" json:"personality"`
+	Credibility int       `json:"credibility"`
+	Bias        string    `gorm:"size:120" json:"bias"`
+	Knowledge   string    `gorm:"type:text" json:"knowledge"`
+	Secrets     string    `gorm:"type:text" json:"-"`
+	AssetID     string    `gorm:"size:120" json:"assetId"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+type TribunalStatement struct {
+	ID                 uint      `gorm:"primaryKey" json:"id"`
+	CaseID             uint      `gorm:"index" json:"caseId"`
+	WitnessID          uint      `gorm:"index" json:"witnessId"`
+	OwnerID            uint      `gorm:"index" json:"ownerId"`
+	Content            string    `gorm:"type:text" json:"content"`
+	StatementIndex     int       `json:"statementIndex"`
+	Tags               string    `gorm:"size:255" json:"tags"`
+	TruthLevel         string    `gorm:"size:60" json:"truthLevel"`
+	ContradictionHints string    `gorm:"type:text" json:"contradictionHints"`
+	IsAttackable       bool      `json:"isAttackable"`
+	PressureCount      int       `json:"pressureCount"`
+	Status             string    `gorm:"size:60" json:"status"`
+	CreatedAt          time.Time `json:"createdAt"`
+	UpdatedAt          time.Time `json:"updatedAt"`
+}
+
+type createCaseRequest struct {
+	Title               string         `json:"title"`
+	CaseType            string         `json:"caseType"`
+	Description         string         `json:"description"`
+	AccusationPosition  string         `json:"accusationPosition"`
+	DefensePosition     string         `json:"defensePosition"`
+	PlayerRole          string         `json:"playerRole"`
+	Mode                string         `json:"mode"`
+	Tone                string         `json:"tone"`
+	Visibility          string         `json:"visibility"`
+	EnableInvestigation bool           `json:"enableInvestigation"`
+	EnableObjections    bool           `json:"enableObjections"`
+	Provider            providerConfig `json:"provider"`
+	JuryCount           int            `json:"juryCount"`
+	NexusContext        map[string]any `json:"nexusContext"`
+}
+
+type providerConfig struct {
+	ProviderType  string `json:"providerType"`
+	Model         string `json:"model"`
+	IsLocal       bool   `json:"isLocal"`
+	LocalEndpoint string `json:"localEndpoint"`
+	Stream        bool   `json:"stream"`
+	APIKeyMode    string `json:"apiKeyMode"`
+	APIKey        string `json:"apiKey"`
+}
+
+type evidenceRequest struct {
+	Title        string   `json:"title"`
+	Description  string   `json:"description"`
+	EvidenceType string   `json:"evidenceType"`
+	SourceType   string   `json:"sourceType"`
+	SourceID     string   `json:"sourceId"`
+	Strength     int      `json:"strength"`
+	Reliability  int      `json:"reliability"`
+	Tags         []string `json:"tags"`
+	SupportsSide string   `json:"supportsSide"`
+	AssetID      string   `json:"assetId"`
+}
+
+type witnessRequest struct {
+	Name        string `json:"name"`
+	Role        string `json:"role"`
+	Personality string `json:"personality"`
+	Credibility int    `json:"credibility"`
+	Bias        string `json:"bias"`
+	Knowledge   string `json:"knowledge"`
+	Secrets     string `json:"secrets"`
+	AssetID     string `json:"assetId"`
+}
+
+type statementActionRequest struct {
+	StatementID uint   `json:"statementId"`
+	EvidenceID  uint   `json:"evidenceId"`
+	Argument    string `json:"argument"`
+}
+
+type providerTestRequest struct {
+	ProviderType  string `json:"providerType"`
+	Model         string `json:"model"`
+	LocalEndpoint string `json:"localEndpoint"`
+	Stream        bool   `json:"stream"`
+	APIKeyMode    string `json:"apiKeyMode"`
+	APIKey        string `json:"apiKey"`
+	Prompt        string `json:"prompt"`
+}
+
+type apiError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+	Details any    `json:"details,omitempty"`
+}
+
+// RegisterRoutes wires the autonomous Tribunal module. The caller can mount it
+// once from the main router without leaking Tribunal handlers into router files.
+func RegisterRoutes(router *gin.Engine, db *gorm.DB, authMiddleware gin.HandlerFunc, adminMiddleware gin.HandlerFunc) {
+	_ = db.AutoMigrate(&TribunalCase{}, &TribunalEvidence{}, &TribunalWitness{}, &TribunalStatement{})
+	module := newModule(db)
+	for _, prefix := range []string{"/api/nexus-tribunal", "/api/v1/nexus-tribunal"} {
+		group := router.Group(prefix)
+		group.Use(authMiddleware)
+		module.mount(group)
+		admin := group.Group("/admin")
+		admin.Use(adminMiddleware)
+		admin.GET("/debug", module.debug)
+	}
+}
+
+type module struct {
+	db *gorm.DB
+}
+
+func newModule(db *gorm.DB) *module {
+	return &module{db: db}
+}
+
+func (m *module) mount(group *gin.RouterGroup) {
+	group.GET("/index", m.index)
+	group.GET("/providers", m.providers)
+	group.POST("/providers/test", m.testProvider)
+	group.POST("/cases", m.createCase)
+	group.GET("/cases/:caseId", m.getCase)
+	group.GET("/cases/:caseId/investigation", m.getInvestigation)
+	group.POST("/cases/:caseId/investigation/generate", m.generateInvestigation)
+	group.POST("/cases/:caseId/investigation/ready", m.markInvestigationReady)
+	group.GET("/cases/:caseId/evidence", m.listEvidence)
+	group.POST("/cases/:caseId/evidence", m.addEvidence)
+	group.GET("/cases/:caseId/witnesses", m.listWitnesses)
+	group.POST("/cases/:caseId/witnesses", m.addWitness)
+	group.GET("/cases/:caseId/testimony/current", m.currentTestimony)
+	group.POST("/cases/:caseId/testimony/generate", m.generateTestimony)
+	group.POST("/cases/:caseId/press", m.pressStatement)
+	group.POST("/cases/:caseId/objection", m.objectStatement)
+	group.POST("/cases/:caseId/present-evidence", m.presentEvidence)
+	group.POST("/cases/:caseId/ai-analysis", m.aiAnalysis)
+	group.POST("/cases/:caseId/jury-vote", m.juryVote)
+	group.POST("/cases/:caseId/verdict", m.verdict)
+	group.GET("/archives", m.archives)
+}
+
+func (m *module) index(c *gin.Context) {
+	ownerID := currentOwnerID(c)
+	var openCases int64
+	var closedCases int64
+	var archivedCases int64
+	m.db.Model(&TribunalCase{}).Where("owner_id = ? AND status <> ?", ownerID, statusClosed).Count(&openCases)
+	m.db.Model(&TribunalCase{}).Where("owner_id = ? AND status = ?", ownerID, statusClosed).Count(&closedCases)
+	archivedCases = closedCases
+	var recent []TribunalCase
+	_ = m.db.Where("owner_id = ?", ownerID).Order("updated_at desc").Limit(6).Find(&recent).Error
+	respondOK(c, gin.H{
+		"activeProvider": activeProviderSummary(),
+		"availableModes": []string{"quick_trial", "full_case", "debate_only", "auto_play"},
+		"recentCases":    recent,
+		"stats": gin.H{
+			"openCases":     openCases,
+			"closedCases":   closedCases,
+			"archivedCases": archivedCases,
+		},
+	})
+}
+
+func (m *module) providers(c *gin.Context) {
+	items := make([]gin.H, 0)
+	for _, item := range service.SupportedAIProviders() {
+		keyEnv, modelEnv := providerEnvNames(item.Name)
+		items = append(items, gin.H{
+			"providerType":              item.Name,
+			"providerName":              item.DisplayName,
+			"aliases":                   item.Aliases,
+			"chatCompletionsCompatible": item.ChatCompletionsCompatible,
+			"isLocal":                   false,
+			"configuredFromEnv":         strings.TrimSpace(os.Getenv(keyEnv)) != "",
+			"defaultModel":              defaultModel(item.Name, os.Getenv(modelEnv)),
+			"apiKeyMode":                "local_client_key",
+		})
+	}
+	items = append(items,
+		gin.H{"providerType": "ollama", "providerName": "Ollama", "isLocal": true, "status": "planned", "apiKeyMode": "no_key_local"},
+		gin.H{"providerType": "lmstudio", "providerName": "LM Studio", "isLocal": true, "status": "planned", "apiKeyMode": "no_key_local"},
+	)
+	respondOK(c, gin.H{"providers": items})
+}
+
+func (m *module) testProvider(c *gin.Context) {
+	var req providerTestRequest
+	if err := bindJSON(c, &req); err != nil {
+		respondErr(c, http.StatusBadRequest, "INVALID_PAYLOAD", "Payload provider invalide.", nil)
+		return
+	}
+	result, err := testAIProvider(c.Request.Context(), req)
+	if err != nil {
+		respondErr(c, http.StatusBadGateway, "PROVIDER_UNAVAILABLE", err.Error(), gin.H{"providerType": normalizeProvider(req.ProviderType)})
+		return
+	}
+	respondOK(c, result)
+}
+
+func (m *module) createCase(c *gin.Context) {
+	var req createCaseRequest
+	if err := bindJSON(c, &req); err != nil {
+		respondErr(c, http.StatusBadRequest, "INVALID_PAYLOAD", "Payload de creation d'affaire invalide.", nil)
+		return
+	}
+	title := strings.TrimSpace(req.Title)
+	if title == "" {
+		respondErr(c, http.StatusBadRequest, "TITLE_REQUIRED", "Le titre de l'affaire est obligatoire.", nil)
+		return
+	}
+	mode := defaultText(req.Mode, "quick_trial")
+	nextPhase := phaseInvestigation
+	if mode == "quick_trial" || !req.EnableInvestigation {
+		nextPhase = phaseLive
+	}
+	item := TribunalCase{
+		OwnerID:             currentOwnerID(c),
+		Title:               title,
+		CaseType:            defaultText(req.CaseType, "civil"),
+		Description:         strings.TrimSpace(req.Description),
+		AccusationPosition:  strings.TrimSpace(req.AccusationPosition),
+		DefensePosition:     strings.TrimSpace(req.DefensePosition),
+		PlayerRole:          defaultText(req.PlayerRole, "defense"),
+		Mode:                mode,
+		Tone:                defaultText(req.Tone, "cyberpunk_serious"),
+		Visibility:          defaultText(req.Visibility, "private"),
+		ProviderType:        normalizeProvider(defaultText(req.Provider.ProviderType, "openai")),
+		ProviderModel:       defaultText(req.Provider.Model, defaultModel(req.Provider.ProviderType, "")),
+		ProviderIsLocal:     req.Provider.IsLocal,
+		LocalEndpoint:       strings.TrimSpace(req.Provider.LocalEndpoint),
+		ProviderStream:      req.Provider.Stream,
+		APIKeyMode:          defaultText(req.Provider.APIKeyMode, "local_client_key"),
+		JuryCount:           clamp(req.JuryCount, 3, 9),
+		EnableInvestigation: req.EnableInvestigation,
+		EnableObjections:    req.EnableObjections,
+		Status:              statusCreated,
+		CurrentPhase:        nextPhase,
+		DefenseScore:        50,
+		AccusationScore:     50,
+		Pressure:            20,
+	}
+	if err := m.db.Create(&item).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "CASE_CREATE_FAILED", "Impossible de creer l'affaire.", nil)
+		return
+	}
+	if mode == "quick_trial" {
+		_ = m.seedMinimumDossier(c.Request.Context(), item)
+	}
+	respondOK(c, gin.H{"caseId": item.ID, "status": item.Status, "currentPhase": item.CurrentPhase, "nextScreen": nextScreen(item.CurrentPhase)})
+}
+
+func (m *module) getCase(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	respondOK(c, m.casePayload(item))
+}
+
+func (m *module) getInvestigation(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	evidence, witnesses := m.caseEvidenceWitnesses(item.ID, item.OwnerID)
+	respondOK(c, gin.H{
+		"case":              item,
+		"objectives":        investigationObjectives(item),
+		"evidence":          evidence,
+		"witnesses":         witnesses,
+		"locations":         []string{"Archive reseau", "Salle d'audience holographique", "Noeud de logs biométriques"},
+		"accusationTheory":  defaultText(item.AccusationPosition, "L'accusation doit etablir une responsabilite claire."),
+		"defenseTheory":     defaultText(item.DefensePosition, "La defense doit isoler les contradictions utiles."),
+		"readyForTrial":     len(evidence) > 0 && len(witnesses) > 0,
+		"currentPhase":      item.CurrentPhase,
+		"recommendedAction": "generate",
+	})
+}
+
+func (m *module) generateInvestigation(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	if err := m.seedMinimumDossier(c.Request.Context(), item); err != nil {
+		respondErr(c, http.StatusInternalServerError, "INVESTIGATION_GENERATE_FAILED", "Impossible de generer le dossier.", nil)
+		return
+	}
+	item.Status = statusOpen
+	item.CurrentPhase = phaseInvestigation
+	_ = m.db.Save(&item).Error
+	evidence, witnesses := m.caseEvidenceWitnesses(item.ID, item.OwnerID)
+	respondOK(c, gin.H{"case": item, "evidence": evidence, "witnesses": witnesses, "readyForTrial": true})
+}
+
+func (m *module) markInvestigationReady(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	item.Status = statusOpen
+	item.CurrentPhase = phaseLive
+	if err := m.db.Save(&item).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "CASE_UPDATE_FAILED", "Impossible de changer de phase.", nil)
+		return
+	}
+	respondOK(c, gin.H{"caseId": item.ID, "currentPhase": item.CurrentPhase, "nextScreen": "live"})
+}
+
+func (m *module) listEvidence(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	var evidence []TribunalEvidence
+	_ = m.db.Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Order("id asc").Find(&evidence).Error
+	respondOK(c, gin.H{"evidence": evidence})
+}
+
+func (m *module) addEvidence(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	var req evidenceRequest
+	if err := bindJSON(c, &req); err != nil || strings.TrimSpace(req.Title) == "" {
+		respondErr(c, http.StatusBadRequest, "INVALID_EVIDENCE", "La preuve doit avoir un titre valide.", nil)
+		return
+	}
+	evidence := TribunalEvidence{
+		CaseID:       item.ID,
+		OwnerID:      item.OwnerID,
+		Title:        strings.TrimSpace(req.Title),
+		Description:  strings.TrimSpace(req.Description),
+		EvidenceType: defaultText(req.EvidenceType, "document"),
+		SourceType:   defaultText(req.SourceType, "manual"),
+		SourceID:     strings.TrimSpace(req.SourceID),
+		Strength:     clamp(req.Strength, 1, 100),
+		Reliability:  clamp(req.Reliability, 1, 100),
+		Tags:         strings.Join(req.Tags, ","),
+		SupportsSide: defaultText(req.SupportsSide, "neutral"),
+		AssetID:      defaultText(req.AssetID, "tribunal.evidence.document"),
+	}
+	if err := m.db.Create(&evidence).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "EVIDENCE_CREATE_FAILED", "Impossible d'ajouter la preuve.", nil)
+		return
+	}
+	respondOK(c, evidence)
+}
+
+func (m *module) listWitnesses(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	var witnesses []TribunalWitness
+	_ = m.db.Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Order("id asc").Find(&witnesses).Error
+	respondOK(c, gin.H{"witnesses": witnesses})
+}
+
+func (m *module) addWitness(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	var req witnessRequest
+	if err := bindJSON(c, &req); err != nil || strings.TrimSpace(req.Name) == "" {
+		respondErr(c, http.StatusBadRequest, "INVALID_WITNESS", "Le temoin doit avoir un nom valide.", nil)
+		return
+	}
+	witness := TribunalWitness{
+		CaseID:      item.ID,
+		OwnerID:     item.OwnerID,
+		Name:        strings.TrimSpace(req.Name),
+		Role:        defaultText(req.Role, "temoin"),
+		Personality: defaultText(req.Personality, "precis, prudent"),
+		Credibility: clamp(req.Credibility, 1, 100),
+		Bias:        defaultText(req.Bias, "neutral"),
+		Knowledge:   strings.TrimSpace(req.Knowledge),
+		Secrets:     strings.TrimSpace(req.Secrets),
+		AssetID:     defaultText(req.AssetID, "tribunal.character.witness_default"),
+	}
+	if err := m.db.Create(&witness).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "WITNESS_CREATE_FAILED", "Impossible d'ajouter le temoin.", nil)
+		return
+	}
+	respondOK(c, witness)
+}
+
+func (m *module) currentTestimony(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	var statements []TribunalStatement
+	_ = m.db.Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Order("statement_index asc").Find(&statements).Error
+	if len(statements) == 0 {
+		respondOK(c, gin.H{"case": item, "statements": []TribunalStatement{}, "activeStatement": nil})
+		return
+	}
+	respondOK(c, gin.H{"case": item, "statements": statements, "activeStatement": statements[0]})
+}
+
+func (m *module) generateTestimony(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	var witness TribunalWitness
+	if err := m.db.Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Order("id asc").First(&witness).Error; err != nil {
+		respondErr(c, http.StatusBadRequest, "WITNESS_REQUIRED", "Ajoutez au moins un temoin avant le temoignage.", nil)
+		return
+	}
+	if err := m.seedStatements(item, witness); err != nil {
+		respondErr(c, http.StatusInternalServerError, "TESTIMONY_GENERATE_FAILED", "Impossible de generer le temoignage.", nil)
+		return
+	}
+	item.CurrentPhase = phaseTestimony
+	item.Status = statusOpen
+	_ = m.db.Save(&item).Error
+	var statements []TribunalStatement
+	_ = m.db.Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Order("statement_index asc").Find(&statements).Error
+	respondOK(c, gin.H{"case": item, "witness": witness, "statements": statements})
+}
+
+func (m *module) pressStatement(c *gin.Context) {
+	item, statement, ok := m.statementAction(c)
+	if !ok {
+		return
+	}
+	statement.PressureCount++
+	statement.Status = "pressed"
+	_ = m.db.Save(&statement).Error
+	item.Pressure = clamp(item.Pressure+5, 0, 100)
+	_ = m.db.Save(&item).Error
+	respondOK(c, gin.H{"case": item, "statement": statement, "response": "Le temoin precise sa phrase, mais expose davantage sa logique interne."})
+}
+
+func (m *module) objectStatement(c *gin.Context) {
+	item, statement, ok := m.statementAction(c)
+	if !ok {
+		return
+	}
+	var req statementActionRequest
+	_ = bindJSON(c, &req)
+	var evidence TribunalEvidence
+	if req.EvidenceID == 0 || m.db.Where("id = ? AND case_id = ? AND owner_id = ?", req.EvidenceID, item.ID, item.OwnerID).First(&evidence).Error != nil {
+		item.Pressure = clamp(item.Pressure+8, 0, 100)
+		item.DefenseScore = clamp(item.DefenseScore-3, 0, 100)
+		_ = m.db.Save(&item).Error
+		respondOK(c, gin.H{"accepted": false, "case": item, "statement": statement, "message": "Objection rejetee : aucune preuve valide n'a ete presentee."})
+		return
+	}
+	statement.Status = "contradicted"
+	_ = m.db.Save(&statement).Error
+	item.DefenseScore = clamp(item.DefenseScore+8, 0, 100)
+	item.AccusationScore = clamp(item.AccusationScore-5, 0, 100)
+	item.Pressure = clamp(item.Pressure+4, 0, 100)
+	_ = m.db.Save(&item).Error
+	respondOK(c, gin.H{"accepted": true, "case": item, "statement": statement, "evidence": evidence, "message": "Contradiction acceptee : la preuve remet en cause la declaration."})
+}
+
+func (m *module) presentEvidence(c *gin.Context) {
+	item, _, ok := m.statementAction(c)
+	if !ok {
+		return
+	}
+	var req statementActionRequest
+	_ = bindJSON(c, &req)
+	var evidence TribunalEvidence
+	if req.EvidenceID == 0 || m.db.Where("id = ? AND case_id = ? AND owner_id = ?", req.EvidenceID, item.ID, item.OwnerID).First(&evidence).Error != nil {
+		respondErr(c, http.StatusBadRequest, "EVIDENCE_REQUIRED", "Une preuve valide est obligatoire.", nil)
+		return
+	}
+	impact := clamp(evidence.Strength/10, 1, 10)
+	if evidence.SupportsSide == "defense" {
+		item.DefenseScore = clamp(item.DefenseScore+impact, 0, 100)
+	} else if evidence.SupportsSide == "accusation" {
+		item.AccusationScore = clamp(item.AccusationScore+impact, 0, 100)
+	}
+	_ = m.db.Save(&item).Error
+	respondOK(c, gin.H{"case": item, "evidence": evidence, "officialEffect": gin.H{"scoreImpact": impact}})
+}
+
+func (m *module) aiAnalysis(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	evidence, witnesses := m.caseEvidenceWitnesses(item.ID, item.OwnerID)
+	respondOK(c, gin.H{
+		"caseId": item.ID,
+		"analysis": fmt.Sprintf(
+			"Analyse consultative : %d preuve(s), %d temoin(s), pression %d. La defense doit cibler les phrases attaquables et l'accusation doit proteger les preuves fortes.",
+			len(evidence),
+			len(witnesses),
+			item.Pressure,
+		),
+		"advisoryOnly": true,
+	})
+}
+
+func (m *module) juryVote(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	count := clamp(item.JuryCount, 3, 9)
+	votes := make([]gin.H, 0, count)
+	for i := 1; i <= count; i++ {
+		lean := "neutral"
+		if item.DefenseScore > item.AccusationScore+i {
+			lean = "defense"
+		} else if item.AccusationScore > item.DefenseScore+i {
+			lean = "accusation"
+		}
+		votes = append(votes, gin.H{"jurorId": i, "stance": lean, "confidence": clamp(45+i*6+abs(item.DefenseScore-item.AccusationScore)/2, 1, 100), "reason": "Vote calcule depuis les scores officiels et les contradictions validees."})
+	}
+	respondOK(c, gin.H{"caseId": item.ID, "votes": votes})
+}
+
+func (m *module) verdict(c *gin.Context) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return
+	}
+	if item.DefenseScore > item.AccusationScore+10 {
+		item.Verdict = "innocent"
+	} else if item.AccusationScore > item.DefenseScore+10 {
+		item.Verdict = "guilty"
+	} else {
+		item.Verdict = "neutral"
+	}
+	item.VerdictSummary = fmt.Sprintf("Verdict %s. Score defense %d, accusation %d, pression %d.", item.Verdict, item.DefenseScore, item.AccusationScore, item.Pressure)
+	item.CurrentPhase = phaseVerdict
+	item.Status = statusClosed
+	if err := m.db.Save(&item).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "VERDICT_FAILED", "Impossible d'enregistrer le verdict.", nil)
+		return
+	}
+	respondOK(c, gin.H{
+		"case":    item,
+		"verdict": item.Verdict,
+		"summary": item.VerdictSummary,
+		"proposedConsequences": []gin.H{
+			{"type": "create_lore_entry", "visibility": "private", "reason": "Verdict Tribunal archive."},
+		},
+	})
+}
+
+func (m *module) archives(c *gin.Context) {
+	var cases []TribunalCase
+	_ = m.db.Where("owner_id = ? AND status = ?", currentOwnerID(c), statusClosed).Order("updated_at desc").Limit(50).Find(&cases).Error
+	respondOK(c, gin.H{"archives": cases})
+}
+
+func (m *module) debug(c *gin.Context) {
+	respondOK(c, gin.H{"module": "nexus_tribunal", "status": "mounted", "serverTime": time.Now().UTC()})
+}
+
+func (m *module) casePayload(item TribunalCase) gin.H {
+	evidence, witnesses := m.caseEvidenceWitnesses(item.ID, item.OwnerID)
+	var statements []TribunalStatement
+	_ = m.db.Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Order("statement_index asc").Find(&statements).Error
+	return gin.H{"case": item, "evidence": evidence, "witnesses": witnesses, "statements": statements}
+}
+
+func (m *module) caseByParam(c *gin.Context) (TribunalCase, error) {
+	id, err := strconv.ParseUint(c.Param("caseId"), 10, 64)
+	if err != nil || id == 0 {
+		respondErr(c, http.StatusBadRequest, "INVALID_CASE_ID", "Identifiant d'affaire invalide.", nil)
+		return TribunalCase{}, errors.New("invalid case id")
+	}
+	var item TribunalCase
+	if err := m.db.Where("id = ? AND owner_id = ?", uint(id), currentOwnerID(c)).First(&item).Error; err != nil {
+		respondErr(c, http.StatusNotFound, "CASE_NOT_FOUND", "Affaire introuvable.", gin.H{"caseId": id})
+		return TribunalCase{}, err
+	}
+	return item, nil
+}
+
+func (m *module) statementAction(c *gin.Context) (TribunalCase, TribunalStatement, bool) {
+	item, err := m.caseByParam(c)
+	if err != nil {
+		return TribunalCase{}, TribunalStatement{}, false
+	}
+	var req statementActionRequest
+	_ = bindJSON(c, &req)
+	var statement TribunalStatement
+	query := m.db.Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Order("statement_index asc")
+	if req.StatementID != 0 {
+		query = m.db.Where("id = ? AND case_id = ? AND owner_id = ?", req.StatementID, item.ID, item.OwnerID)
+	}
+	if err := query.First(&statement).Error; err != nil {
+		respondErr(c, http.StatusBadRequest, "STATEMENT_REQUIRED", "Aucune phrase attaquable disponible.", nil)
+		return item, TribunalStatement{}, false
+	}
+	return item, statement, true
+}
+
+func (m *module) caseEvidenceWitnesses(caseID uint, ownerID uint) ([]TribunalEvidence, []TribunalWitness) {
+	var evidence []TribunalEvidence
+	var witnesses []TribunalWitness
+	_ = m.db.Where("case_id = ? AND owner_id = ?", caseID, ownerID).Order("id asc").Find(&evidence).Error
+	_ = m.db.Where("case_id = ? AND owner_id = ?", caseID, ownerID).Order("id asc").Find(&witnesses).Error
+	return evidence, witnesses
+}
+
+func (m *module) seedMinimumDossier(ctx context.Context, item TribunalCase) error {
+	var count int64
+	m.db.Model(&TribunalEvidence{}).Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Count(&count)
+	if count == 0 {
+		if err := m.db.WithContext(ctx).Create(&TribunalEvidence{
+			CaseID: item.ID, OwnerID: item.OwnerID, Title: "Journal de coherence Nexus",
+			Description:  "Trace serveur horodatee permettant de verifier une contradiction temporelle.",
+			EvidenceType: "surveillance_log", SourceType: "system", Strength: 72, Reliability: 86,
+			Tags: "time,log,contradiction", SupportsSide: "defense", AssetID: "tribunal.evidence.surveillance_log",
+		}).Error; err != nil {
+			return err
+		}
+	}
+	m.db.Model(&TribunalWitness{}).Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Count(&count)
+	if count == 0 {
+		if err := m.db.WithContext(ctx).Create(&TribunalWitness{
+			CaseID: item.ID, OwnerID: item.OwnerID, Name: "Temoin protocol-7", Role: "operateur reseau",
+			Personality: "methodique, evasif sous pression", Credibility: 68, Bias: "institutional",
+			Knowledge: "A observe les logs et les decisions automatisees liees a l'affaire.",
+			AssetID:   "tribunal.character.witness_default",
+		}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *module) seedStatements(item TribunalCase, witness TribunalWitness) error {
+	var count int64
+	m.db.Model(&TribunalStatement{}).Where("case_id = ? AND owner_id = ?", item.ID, item.OwnerID).Count(&count)
+	if count > 0 {
+		return nil
+	}
+	lines := []string{
+		"J'ai consulte les journaux avant que le protocole ne verrouille le dossier.",
+		"L'horodatage principal indiquait une sequence stable, sans anomalie apparente.",
+		"Je n'ai vu aucun acces externe pendant la fenetre critique.",
+		"Si contradiction il y a, elle vient probablement d'un journal secondaire.",
+	}
+	for index, line := range lines {
+		statement := TribunalStatement{
+			CaseID: item.ID, OwnerID: item.OwnerID, WitnessID: witness.ID, Content: line,
+			StatementIndex: index + 1, Tags: "log,time", TruthLevel: "partial",
+			ContradictionHints: "Comparer avec les preuves de type surveillance_log ou biometric_log.",
+			IsAttackable:       index >= 1, Status: "active",
+		}
+		if err := m.db.Create(&statement).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func testAIProvider(ctx context.Context, req providerTestRequest) (gin.H, error) {
+	providerType := normalizeProvider(req.ProviderType)
+	if providerType == "ollama" || providerType == "lmstudio" || providerType == "local" {
+		return nil, fmt.Errorf("provider local %s non encore branche cote backend central", providerType)
+	}
+	model := defaultText(req.Model, defaultModel(providerType, ""))
+	url, err := service.ProviderURL(providerType)
+	if err != nil {
+		return nil, fmt.Errorf("provider %s non supporte", providerType)
+	}
+	apiKey := strings.TrimSpace(req.APIKey)
+	if apiKey == "" {
+		apiKey = providerEnvKey(providerType)
+	}
+	if apiKey == "" {
+		return nil, fmt.Errorf("aucune cle disponible pour %s", providerType)
+	}
+	prompt := defaultText(req.Prompt, "Reponds uniquement OK")
+	startedAt := time.Now()
+	callCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	client := provider.NewsProvider(apiKey, url, model)
+	output, err := client.Chat(callCtx, []provider.ProviderMessage{
+		{Role: "system", Content: "Tu verifies une configuration technique. Reponds tres court."},
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("provider indisponible: %w", err)
+	}
+	return gin.H{"status": "connected", "latencyMs": time.Since(startedAt).Milliseconds(), "modelAvailable": true, "message": truncate(strings.TrimSpace(output), 180)}, nil
+}
+
+func bindJSON(c *gin.Context, target any) error {
+	if c.Request.Body == nil {
+		return nil
+	}
+	return c.ShouldBindJSON(target)
+}
+
+func respondOK(c *gin.Context, data any) {
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": data, "meta": gin.H{"requestId": requestID(c), "serverTime": time.Now().UTC().Format(time.RFC3339)}})
+}
+
+func respondErr(c *gin.Context, status int, code string, message string, details any) {
+	c.JSON(status, gin.H{"success": false, "error": gin.H{"code": code, "message": message, "details": details, "requestId": requestID(c)}})
+}
+
+func requestID(c *gin.Context) string {
+	if value := strings.TrimSpace(c.GetHeader("X-Request-Id")); value != "" {
+		return value
+	}
+	return fmt.Sprintf("tribunal-%d", time.Now().UnixNano())
+}
+
+func currentOwnerID(c *gin.Context) uint {
+	if value, ok := c.Get("auth.user_id"); ok {
+		if id, ok := value.(uint); ok {
+			return id
+		}
+	}
+	return 0
+}
+
+func activeProviderSummary() gin.H {
+	providerType := defaultText(os.Getenv("TRIBUNAL_AI_PROVIDER"), defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "openai"))
+	return gin.H{
+		"providerType": providerType,
+		"providerName": displayProvider(providerType),
+		"model":        defaultModel(providerType, os.Getenv(providerModelEnv(providerType))),
+		"isLocal":      false,
+		"status":       configuredStatus(providerType),
+		"apiKeyMode":   "local_client_key",
+	}
+}
+
+func providerEnvKey(providerType string) string {
+	keyEnv, _ := providerEnvNames(providerType)
+	return strings.TrimSpace(os.Getenv(keyEnv))
+}
+
+func providerModelEnv(providerType string) string {
+	_, modelEnv := providerEnvNames(providerType)
+	return modelEnv
+}
+
+func providerEnvNames(providerType string) (string, string) {
+	switch normalizeProvider(providerType) {
+	case "mistral":
+		return "MISTRAL_AI_KEY", "MISTRAL_AI_MODEL"
+	case "claude", "anthropic":
+		return "ANTHROPIC_AI_KEY", "ANTHROPIC_AI_MODEL"
+	case "gemini", "google", "google_ai", "google-ai":
+		return "GEMINI_AI_KEY", "GEMINI_AI_MODEL"
+	case "xia", "xai", "x-ai":
+		return "XAI_AI_KEY", "XAI_AI_MODEL"
+	case "openrouter", "open_router":
+		return "OPENROUTER_AI_KEY", "OPENROUTER_AI_MODEL"
+	default:
+		return "OPEN_AI_KEY", "OPEN_AI_MODEL"
+	}
+}
+
+func configuredStatus(providerType string) string {
+	if providerEnvKey(providerType) != "" {
+		return "configured"
+	}
+	return "client_key_required"
+}
+
+func displayProvider(providerType string) string {
+	for _, item := range service.SupportedAIProviders() {
+		if normalizeProvider(item.Name) == normalizeProvider(providerType) {
+			return item.DisplayName
+		}
+	}
+	return providerType
+}
+
+func defaultModel(providerType string, configured string) string {
+	if strings.TrimSpace(configured) != "" {
+		return strings.TrimSpace(configured)
+	}
+	switch normalizeProvider(providerType) {
+	case "mistral":
+		return "mistral-large-latest"
+	case "openrouter", "open_router":
+		return "openai/gpt-4o-mini"
+	case "xia", "xai", "x-ai":
+		return "grok-3-mini"
+	case "claude", "anthropic":
+		return "claude-sonnet-4-20250514"
+	case "gemini", "google", "google_ai", "google-ai":
+		return "gemini-3.5-flash"
+	default:
+		return "gpt-4o-mini"
+	}
+}
+
+func normalizeProvider(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func defaultText(value string, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return strings.TrimSpace(value)
+}
+
+func clamp(value int, minValue int, maxValue int) int {
+	if value < minValue {
+		return minValue
+	}
+	if value > maxValue {
+		return maxValue
+	}
+	return value
+}
+
+func abs(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+func truncate(value string, limit int) string {
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit]
+}
+
+func nextScreen(phase string) string {
+	switch phase {
+	case phaseInvestigation:
+		return "investigation"
+	case phaseVerdict:
+		return "verdict"
+	default:
+		return "live"
+	}
+}
+
+func investigationObjectives(item TribunalCase) []string {
+	return []string{
+		"Identifier au moins une preuve exploitable.",
+		"Ajouter ou verifier un temoin.",
+		fmt.Sprintf("Preparer une ligne %s avant le proces live.", defaultText(item.PlayerRole, "defense")),
+	}
+}
