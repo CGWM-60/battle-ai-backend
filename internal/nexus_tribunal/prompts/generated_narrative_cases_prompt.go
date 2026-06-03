@@ -35,7 +35,7 @@ Structure EXACTE de l'affaire (objet JSON racine, pas de "cases"):
   "publicTruth": "ce que l'opinion publique croit",
   "finalReveal": "la révélation finale",
   "cast": [
-    {"actorType":"judge|prosecutor|defense_attorney|witness|expert_witness|assistant|clerk|jury_logic|...", "name":"...", "personality":"...", "avatarAssetId":"tribunal.character.xxx"}
+    {"actorType":"judge|prosecutor|defense_attorney|witness|expert_witness|assistant|clerk|jury_logic|jury_emotional|jury_expert|...", "name":"...", "personality":"...", "avatarAssetId":"ID_MANIFEST_AUTORISE_UNIQUEMENT"}
   ],
   "acts": [{"actIndex":1,"title":"...","objective":"...","summary":"..."}],
   "scenes": [
@@ -85,6 +85,39 @@ Structure EXACTE de l'affaire (objet JSON racine, pas de "cases"):
   "epilogue": "...",
   "nexusBridgeHints": [{"type":"...","targetId":"...","delta":-5}]
 }
+
+VERROU ASSETS PERSONNAGES:
+- Interdiction absolue d'inventer un avatarAssetId depuis le nom du personnage.
+- avatarAssetId doit être exactement un des IDs suivants, aucun autre:
+  tribunal.character.judge_ai
+  tribunal.character.prosecutor_ai
+  tribunal.character.defense_ai
+  tribunal.character.witness_default
+  tribunal.character.clerk_ai
+  tribunal.character.fact_checker_ai
+  tribunal.character.jury_logic
+  tribunal.character.jury_emotional
+  tribunal.character.jury_expert
+  tribunal.character.assistant_ai
+  tribunal.character.expert_witness
+  tribunal.character.witness_civilian
+  tribunal.character.witness_agent
+  tribunal.character.witness_hacker
+  tribunal.character.witness_guild_master
+  tribunal.character.witness_faction_envoy
+  tribunal.character.witness_android
+  tribunal.character.witness_corrupted_ai
+- Mapping obligatoire:
+  judge -> tribunal.character.judge_ai
+  prosecutor -> tribunal.character.prosecutor_ai
+  defense_attorney -> tribunal.character.defense_ai
+  assistant -> tribunal.character.assistant_ai
+  clerk -> tribunal.character.clerk_ai
+  expert_witness -> tribunal.character.expert_witness
+  jury_logic -> tribunal.character.jury_logic
+  jury_emotional -> tribunal.character.jury_emotional
+  jury_expert -> tribunal.character.jury_expert
+  witness -> un witness_* adapté; si doute -> tribunal.character.witness_default
 
 Génère l'objet JSON complet pour le niveau %d. JSON strict uniquement, rien d'autre.`, level, level, level, level)
 

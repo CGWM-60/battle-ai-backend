@@ -2045,6 +2045,7 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		realTruth := fmt.Sprint(raw["realTruth"])
 		publicTruth := fmt.Sprint(raw["publicTruth"])
 		finalReveal := fmt.Sprint(raw["finalReveal"])
+		raw["cast"] = normalizeTribunalCastAny(raw["cast"])
 		castB, _ := json.Marshal(raw["cast"])
 		actsB, _ := json.Marshal(raw["acts"])
 		scenesB, _ := json.Marshal(raw["scenes"])
@@ -2262,6 +2263,102 @@ func lenFromAny(v any) int {
 	return 0
 }
 
+var tribunalAvatarAssetIDs = map[string]bool{
+	"tribunal.character.judge_ai":             true,
+	"tribunal.character.prosecutor_ai":        true,
+	"tribunal.character.defense_ai":           true,
+	"tribunal.character.witness_default":      true,
+	"tribunal.character.clerk_ai":             true,
+	"tribunal.character.fact_checker_ai":      true,
+	"tribunal.character.jury_logic":           true,
+	"tribunal.character.jury_emotional":       true,
+	"tribunal.character.jury_expert":          true,
+	"tribunal.character.assistant_ai":         true,
+	"tribunal.character.expert_witness":       true,
+	"tribunal.character.witness_civilian":     true,
+	"tribunal.character.witness_agent":        true,
+	"tribunal.character.witness_hacker":       true,
+	"tribunal.character.witness_guild_master": true,
+	"tribunal.character.witness_faction_envoy": true,
+	"tribunal.character.witness_android":      true,
+	"tribunal.character.witness_corrupted_ai": true,
+}
+
+func normalizeTribunalAvatarAsset(assetID string, actorType string) string {
+	id := strings.TrimSpace(assetID)
+	if tribunalAvatarAssetIDs[id] {
+		return id
+	}
+	t := strings.ToLower(strings.TrimSpace(actorType))
+	switch {
+	case strings.Contains(t, "judge"):
+		return "tribunal.character.judge_ai"
+	case strings.Contains(t, "prosecut"):
+		return "tribunal.character.prosecutor_ai"
+	case strings.Contains(t, "defense"):
+		return "tribunal.character.defense_ai"
+	case strings.Contains(t, "assistant"):
+		return "tribunal.character.assistant_ai"
+	case strings.Contains(t, "clerk") || strings.Contains(t, "greff"):
+		return "tribunal.character.clerk_ai"
+	case strings.Contains(t, "fact"):
+		return "tribunal.character.fact_checker_ai"
+	case strings.Contains(t, "expert"):
+		return "tribunal.character.expert_witness"
+	case strings.Contains(t, "jury") && strings.Contains(t, "emotion"):
+		return "tribunal.character.jury_emotional"
+	case strings.Contains(t, "jury") && strings.Contains(t, "expert"):
+		return "tribunal.character.jury_expert"
+	case strings.Contains(t, "jury"):
+		return "tribunal.character.jury_logic"
+	case strings.Contains(t, "hacker"):
+		return "tribunal.character.witness_hacker"
+	case strings.Contains(t, "guild"):
+		return "tribunal.character.witness_guild_master"
+	case strings.Contains(t, "faction"):
+		return "tribunal.character.witness_faction_envoy"
+	case strings.Contains(t, "android"):
+		return "tribunal.character.witness_android"
+	case strings.Contains(t, "corrupt") || strings.Contains(t, "corrompu"):
+		return "tribunal.character.witness_corrupted_ai"
+	case strings.Contains(t, "agent"):
+		return "tribunal.character.witness_agent"
+	case strings.Contains(t, "civil"):
+		return "tribunal.character.witness_civilian"
+	default:
+		return "tribunal.character.witness_default"
+	}
+}
+
+func normalizeTribunalCastAssets(cast []map[string]any) []map[string]any {
+	for i := range cast {
+		cast[i]["avatarAssetId"] = normalizeTribunalAvatarAsset(
+			fmt.Sprint(cast[i]["avatarAssetId"]),
+			fmt.Sprint(cast[i]["actorType"]),
+		)
+	}
+	return cast
+}
+
+func normalizeTribunalCastAny(v any) any {
+	switch cast := v.(type) {
+	case []map[string]any:
+		return normalizeTribunalCastAssets(cast)
+	case []any:
+		for _, item := range cast {
+			if row, ok := item.(map[string]any); ok {
+				row["avatarAssetId"] = normalizeTribunalAvatarAsset(
+					fmt.Sprint(row["avatarAssetId"]),
+					fmt.Sprint(row["actorType"]),
+				)
+			}
+		}
+		return cast
+	default:
+		return v
+	}
+}
+
 // ==================== STORY / NARRATIVE HANDLERS (correctif Phoenix-like) ====================
 
 func (m *module) storyCurrent(c *gin.Context) {
@@ -2320,12 +2417,13 @@ func (m *module) storyCurrent(c *gin.Context) {
 			if len(genCase.CharacterCastJSON) > 0 {
 				_ = json.Unmarshal(genCase.CharacterCastJSON, &castArr)
 			}
+			castArr = normalizeTribunalCastAssets(castArr)
 			for _, c := range castArr {
 				fullCast = append(fullCast, gin.H{
 					"actorType":     c["actorType"],
 					"name":          c["name"],
 					"personality":   c["personality"],
-					"avatarAssetId": c["avatarAssetId"],
+					"avatarAssetId": normalizeTribunalAvatarAsset(fmt.Sprint(c["avatarAssetId"]), fmt.Sprint(c["actorType"])),
 				})
 			}
 		}
@@ -2407,6 +2505,8 @@ func (m *module) storyAction(c *gin.Context) {
 	var payload struct {
 		SceneId     string `json:"sceneId"`
 		ActionType  string `json:"actionType"`
+		Action      string `json:"action"`
+		TriggerAction string `json:"triggerAction"`
 		StatementId string `json:"statementId"`
 		EvidenceId  string `json:"evidenceId"`
 		Argument    string `json:"argument"`
@@ -2415,25 +2515,85 @@ func (m *module) storyAction(c *gin.Context) {
 		// allow partial
 	}
 
+	payload.SceneId = strings.TrimSpace(payload.SceneId)
+	payload.ActionType = strings.TrimSpace(payload.ActionType)
+	if payload.ActionType == "" {
+		payload.ActionType = strings.TrimSpace(payload.TriggerAction)
+	}
+	if payload.ActionType == "" {
+		payload.ActionType = strings.TrimSpace(payload.Action)
+	}
+	if payload.ActionType == "" {
+		payload.ActionType = "continue_story"
+	}
+
 	// Find linked narrative + current scene
 	var nc tribunalmodels.TribunalNarrativeCase
-	_ = m.db.Where("case_id = ?", item.ID).First(&nc).Error
+	if err := m.db.Where("case_id = ?", item.ID).First(&nc).Error; err != nil {
+		respondOK(c, gin.H{
+			"actionSuccess":   false,
+			"caseId":          item.ID,
+			"sceneAdvanced":   false,
+			"resultType":      "no_narrative_case",
+			"narrativeResult": "Aucune affaire narrative active n'est liée à ce dossier.",
+		})
+		return
+	}
+	if payload.SceneId == "" || payload.SceneId == "current" {
+		payload.SceneId = nc.CurrentSceneID
+	}
 
 	var sc tribunalmodels.TribunalScene
-	_ = m.db.Where("narrative_case_id = ? AND scene_id = ?", nc.ID, payload.SceneId).First(&sc).Error
+	var sceneErr error
+	if payload.SceneId != "" {
+		sceneErr = m.db.Where("narrative_case_id = ? AND scene_id = ?", nc.ID, payload.SceneId).First(&sc).Error
+	} else {
+		sceneErr = gorm.ErrRecordNotFound
+	}
+	if sceneErr != nil {
+		sceneErr = m.db.Where("narrative_case_id = ? AND status = ?", nc.ID, "active").Order("act_index, scene_index").First(&sc).Error
+	}
+	if sceneErr != nil {
+		sceneErr = m.db.Where("narrative_case_id = ?", nc.ID).Order("act_index, scene_index").First(&sc).Error
+	}
+	if sceneErr == nil && sc.SceneID != "" {
+		payload.SceneId = sc.SceneID
+		if nc.CurrentSceneID == "" {
+			nc.CurrentSceneID = sc.SceneID
+			_ = m.db.Save(&nc).Error
+		}
+	}
 
 	// Try to find matching ProgressionRule (precise workflow)
 	var rule tribunalmodels.TribunalProgressionRule
 	ruleFound := false
 	if nc.ID > 0 {
-		q := m.db.Where("narrative_case_id = ? AND scene_id = ? AND trigger_action = ?", nc.ID, payload.SceneId, payload.ActionType)
-		if payload.StatementId != "" {
-			q = q.Where("required_statement_id = ? OR required_statement_id IS NULL", payload.StatementId)
+		findRule := func(withStatement bool, withEvidence bool) error {
+			q := m.db.Where("narrative_case_id = ? AND scene_id = ? AND trigger_action = ?", nc.ID, payload.SceneId, payload.ActionType)
+			if withStatement && payload.StatementId != "" {
+				q = q.Where("required_statement_id = ?", payload.StatementId)
+			}
+			if withEvidence && payload.EvidenceId != "" {
+				q = q.Where("required_evidence_id = ?", payload.EvidenceId)
+			}
+			return q.Order("is_critical desc, id asc").First(&rule).Error
 		}
-		if payload.EvidenceId != "" {
-			q = q.Where("required_evidence_id = ? OR required_evidence_id IS NULL", payload.EvidenceId)
+		if err := findRule(true, true); err == nil {
+			ruleFound = true
+		} else if payload.StatementId != "" || payload.EvidenceId != "" {
+			if err := findRule(false, false); err == nil {
+				ruleFound = true
+			}
 		}
-		if err := q.First(&rule).Error; err == nil {
+		if !ruleFound && sc.NextSceneID != nil && *sc.NextSceneID != "" && payload.ActionType == "continue_story" {
+			rule = tribunalmodels.TribunalProgressionRule{
+				NarrativeCaseID: nc.ID,
+				SceneID:         payload.SceneId,
+				TriggerAction:   payload.ActionType,
+				ResultType:      "guided_progress",
+				NarrativeResult: "L'action clarifie la scène et prépare la suite du dossier.",
+				UnlockSceneID:   sc.NextSceneID,
+			}
 			ruleFound = true
 		}
 	}
@@ -2470,13 +2630,61 @@ func (m *module) storyAction(c *gin.Context) {
 		}
 		// also unlock evidence/witness from rule JSON if present
 	} else {
-		// Failure path - find FailureRule or default penalty
-		success = false
-		resultType = "weak_action"
-		narrativeResult = "L'action n'a pas produit de contradiction décisive."
-		defenseDelta = -3
-		pressureDelta = 2
-		// after N failures could give hint (stub)
+		switch payload.ActionType {
+		case "press":
+			success = true
+			resultType = "press_success"
+			narrativeResult = "La pression fait ressortir une précision utile, sans contradiction décisive pour l'instant."
+			defenseDelta = 2
+			pressureDelta = 3
+		case "ai_analysis", "ask_hint":
+			success = true
+			resultType = "guided_hint"
+			narrativeResult = "L'analyse IA isole les points à comparer: déclaration ciblée, preuve disponible, puis objection si le lien est solide."
+			defenseDelta = 0
+			pressureDelta = 0
+		case "inspect", "inspect_evidence", "compare_evidence":
+			success = true
+			resultType = "evidence_review"
+			if payload.EvidenceId != "" {
+				narrativeResult = fmt.Sprintf("La preuve %s est examinée. Elle peut servir si elle contredit une déclaration visible.", payload.EvidenceId)
+			} else {
+				narrativeResult = "Les preuves disponibles sont passées en revue. Sélectionnez une preuve avant de présenter une contradiction."
+			}
+			defenseDelta = 1
+			pressureDelta = 0
+		case "continue_story":
+			success = true
+			resultType = "scene_hold"
+			narrativeResult = "Le briefing de la scène est confirmé. Aucun embranchement supplémentaire n'est défini pour cette étape."
+			defenseDelta = 0
+			pressureDelta = 0
+		default:
+			// Failure path - find FailureRule or default penalty.
+			success = false
+			resultType = "weak_action"
+			narrativeResult = "L'action n'a pas produit de contradiction décisive."
+			defenseDelta = -3
+			pressureDelta = 2
+			var fr tribunalmodels.TribunalFailureRule
+			if err := m.db.Where("narrative_case_id = ? AND scene_id = ? AND trigger_action = ?", nc.ID, payload.SceneId, payload.ActionType).First(&fr).Error; err == nil {
+				if fr.JudgeWarningText != "" {
+					narrativeResult = fr.JudgeWarningText
+				} else if fr.HintText != "" {
+					narrativeResult = fr.HintText
+				}
+				if fr.ScoreEffectsJSON != nil {
+					var eff map[string]any
+					_ = json.Unmarshal(fr.ScoreEffectsJSON, &eff)
+					if d, ok := eff["defenseScoreDelta"]; ok {
+						defenseDelta = intFromAny(d, defenseDelta)
+					}
+					if p, ok := eff["tribunalPressureDelta"]; ok {
+						pressureDelta = intFromAny(p, pressureDelta)
+					}
+				}
+			}
+		}
 	}
 
 	// Default progression for "continue_story" to allow story to advance even without specific rule
@@ -2496,11 +2704,18 @@ func (m *module) storyAction(c *gin.Context) {
 	_ = m.db.Save(&item).Error
 
 	// Record story event (precise workflow)
+	eventType := "action_failure"
+	if success {
+		eventType = "action_success"
+	}
+	if sceneAdvanced {
+		eventType = "scene_advance"
+	}
 	ev := tribunalmodels.TribunalStoryEvent{
 		NarrativeCaseID: nc.ID,
 		CaseID:          &item.ID,
 		SceneID:         payload.SceneId,
-		EventType:       "action",
+		EventType:       eventType,
 		PlayerAction:    payload.ActionType,
 		IsSuccess:       success,
 		NarrativeText:   narrativeResult,
@@ -2749,6 +2964,7 @@ func (m *module) loadNarrativeCase(c *gin.Context) {
 	// 7. Create GeneratedActors (cast)
 	var cast []map[string]any
 	_ = json.Unmarshal(g.CharacterCastJSON, &cast)
+	cast = normalizeTribunalCastAssets(cast)
 	for _, ca := range cast {
 		actor := tribunalmodels.TribunalGeneratedActor{
 			GeneratedCaseID: &g.ID,
@@ -2757,7 +2973,7 @@ func (m *module) loadNarrativeCase(c *gin.Context) {
 			Name:            fmt.Sprint(ca["name"]),
 			Role:            fmt.Sprint(ca["role"]),
 			Personality:     fmt.Sprint(ca["personality"]),
-			AvatarAssetID:   defaultText(fmt.Sprint(ca["avatarAssetId"]), "tribunal.character.witness_default"),
+			AvatarAssetID:   normalizeTribunalAvatarAsset(fmt.Sprint(ca["avatarAssetId"]), fmt.Sprint(ca["actorType"])),
 		}
 		_ = m.db.Create(&actor).Error
 	}

@@ -1006,6 +1006,83 @@ func preview(value string, maxLength int) string {
 	return clean[:maxLength] + "...(truncated)"
 }
 
+var tribunalCronAvatarAssetIDs = map[string]bool{
+	"tribunal.character.judge_ai":              true,
+	"tribunal.character.prosecutor_ai":         true,
+	"tribunal.character.defense_ai":            true,
+	"tribunal.character.witness_default":       true,
+	"tribunal.character.clerk_ai":              true,
+	"tribunal.character.fact_checker_ai":       true,
+	"tribunal.character.jury_logic":            true,
+	"tribunal.character.jury_emotional":        true,
+	"tribunal.character.jury_expert":           true,
+	"tribunal.character.assistant_ai":          true,
+	"tribunal.character.expert_witness":        true,
+	"tribunal.character.witness_civilian":      true,
+	"tribunal.character.witness_agent":         true,
+	"tribunal.character.witness_hacker":        true,
+	"tribunal.character.witness_guild_master":  true,
+	"tribunal.character.witness_faction_envoy": true,
+	"tribunal.character.witness_android":       true,
+	"tribunal.character.witness_corrupted_ai":  true,
+}
+
+func normalizeTribunalCronAvatarAsset(assetID string, actorType string) string {
+	id := strings.TrimSpace(assetID)
+	if tribunalCronAvatarAssetIDs[id] {
+		return id
+	}
+	t := strings.ToLower(strings.TrimSpace(actorType))
+	switch {
+	case strings.Contains(t, "judge"):
+		return "tribunal.character.judge_ai"
+	case strings.Contains(t, "prosecut"):
+		return "tribunal.character.prosecutor_ai"
+	case strings.Contains(t, "defense"):
+		return "tribunal.character.defense_ai"
+	case strings.Contains(t, "assistant"):
+		return "tribunal.character.assistant_ai"
+	case strings.Contains(t, "clerk") || strings.Contains(t, "greff"):
+		return "tribunal.character.clerk_ai"
+	case strings.Contains(t, "fact"):
+		return "tribunal.character.fact_checker_ai"
+	case strings.Contains(t, "expert"):
+		return "tribunal.character.expert_witness"
+	case strings.Contains(t, "jury") && strings.Contains(t, "emotion"):
+		return "tribunal.character.jury_emotional"
+	case strings.Contains(t, "jury") && strings.Contains(t, "expert"):
+		return "tribunal.character.jury_expert"
+	case strings.Contains(t, "jury"):
+		return "tribunal.character.jury_logic"
+	case strings.Contains(t, "hacker"):
+		return "tribunal.character.witness_hacker"
+	case strings.Contains(t, "guild"):
+		return "tribunal.character.witness_guild_master"
+	case strings.Contains(t, "faction"):
+		return "tribunal.character.witness_faction_envoy"
+	case strings.Contains(t, "android"):
+		return "tribunal.character.witness_android"
+	case strings.Contains(t, "corrupt") || strings.Contains(t, "corrompu"):
+		return "tribunal.character.witness_corrupted_ai"
+	case strings.Contains(t, "agent"):
+		return "tribunal.character.witness_agent"
+	case strings.Contains(t, "civil"):
+		return "tribunal.character.witness_civilian"
+	default:
+		return "tribunal.character.witness_default"
+	}
+}
+
+func normalizeTribunalCronCastAssets(cast []map[string]any) []map[string]any {
+	for i := range cast {
+		cast[i]["avatarAssetId"] = normalizeTribunalCronAvatarAsset(
+			fmt.Sprint(cast[i]["avatarAssetId"]),
+			fmt.Sprint(cast[i]["actorType"]),
+		)
+	}
+	return cast
+}
+
 // =============================================================================
 // TRIBUNAL GENERATED CASES CRON JOB (reuses existing hourly + provider machinery)
 // =============================================================================
@@ -1083,6 +1160,7 @@ func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg a
 			trace.log("insert", "skipped", "index=%d reason=missing_title_or_cast level=%d", i, c.Level)
 			continue
 		}
+		c.Cast = normalizeTribunalCronCastAssets(c.Cast)
 		tagsJSON, _ := json.Marshal(c.Tags)
 		witJSON, _ := json.Marshal(c.Witnesses)
 		evJSON, _ := json.Marshal(c.Evidence)
