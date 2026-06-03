@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -267,8 +268,9 @@ func (m *module) providers(c *gin.Context) {
 		})
 	}
 	items = append(items,
-		gin.H{"providerType": "ollama", "providerName": "Ollama", "isLocal": true, "status": "planned", "apiKeyMode": "no_key_local"},
-		gin.H{"providerType": "lmstudio", "providerName": "LM Studio", "isLocal": true, "status": "planned", "apiKeyMode": "no_key_local"},
+		gin.H{"providerType": "ollama", "providerName": "Ollama", "isLocal": true, "status": "endpoint_required", "defaultModel": "llama3.2", "defaultEndpoint": "http://localhost:11434", "apiKeyMode": "no_key_local"},
+		gin.H{"providerType": "lmstudio", "providerName": "LM Studio", "isLocal": true, "status": "endpoint_required", "defaultModel": "local-model", "defaultEndpoint": "http://localhost:1234", "apiKeyMode": "no_key_local"},
+		gin.H{"providerType": "custom", "providerName": "Custom OpenAI-compatible", "isLocal": true, "status": "endpoint_required", "defaultModel": "local-model", "defaultEndpoint": "http://localhost:1234", "apiKeyMode": "optional_key"},
 	)
 	respondOK(c, gin.H{"providers": items})
 }
@@ -751,16 +753,31 @@ func (m *module) seedStatements(item TribunalCase, witness TribunalWitness) erro
 
 func testAIProvider(ctx context.Context, req providerTestRequest) (gin.H, error) {
 	providerType := normalizeProvider(req.ProviderType)
-	if providerType == "ollama" || providerType == "lmstudio" || providerType == "local" {
-		return nil, fmt.Errorf("provider local %s non encore branche cote backend central", providerType)
-	}
 	model := defaultText(req.Model, defaultModel(providerType, ""))
-	url, err := service.ProviderURL(providerType)
-	if err != nil {
-		return nil, fmt.Errorf("provider %s non supporte", providerType)
-	}
+	providerURL := ""
 	apiKey := strings.TrimSpace(req.APIKey)
-	if apiKey == "" {
+
+	if isLocalProvider(providerType) {
+		localURL, err := localChatCompletionsURL(req.LocalEndpoint)
+		if err != nil {
+			return nil, err
+		}
+		providerURL = localURL
+		if apiKey == "" {
+			apiKey = "local-no-key"
+		}
+	} else {
+		url, err := service.ProviderURL(providerType)
+		if err != nil {
+			return nil, fmt.Errorf("provider %s non supporte", providerType)
+		}
+		providerURL = url
+		if apiKey == "" {
+			apiKey = providerEnvKey(providerType)
+		}
+	}
+
+	if !isLocalProvider(providerType) && apiKey == "" {
 		apiKey = providerEnvKey(providerType)
 	}
 	if apiKey == "" {
@@ -770,7 +787,7 @@ func testAIProvider(ctx context.Context, req providerTestRequest) (gin.H, error)
 	startedAt := time.Now()
 	callCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	client := provider.NewsProvider(apiKey, url, model)
+	client := provider.NewsProvider(apiKey, providerURL, model)
 	output, err := client.Chat(callCtx, []provider.ProviderMessage{
 		{Role: "system", Content: "Tu verifies une configuration technique. Reponds tres court."},
 		{Role: "user", Content: prompt},
@@ -779,6 +796,34 @@ func testAIProvider(ctx context.Context, req providerTestRequest) (gin.H, error)
 		return nil, fmt.Errorf("provider indisponible: %w", err)
 	}
 	return gin.H{"status": "connected", "latencyMs": time.Since(startedAt).Milliseconds(), "modelAvailable": true, "message": truncate(strings.TrimSpace(output), 180)}, nil
+}
+
+func isLocalProvider(providerType string) bool {
+	switch normalizeProvider(providerType) {
+	case "ollama", "lmstudio", "lm_studio", "local", "custom":
+		return true
+	default:
+		return false
+	}
+}
+
+func localChatCompletionsURL(endpoint string) (string, error) {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return "", fmt.Errorf("localEndpoint est obligatoire pour un provider local")
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return "", fmt.Errorf("localEndpoint invalide")
+	}
+	clean := strings.TrimRight(endpoint, "/")
+	if strings.HasSuffix(clean, "/chat/completions") {
+		return clean, nil
+	}
+	if strings.HasSuffix(clean, "/v1") {
+		return clean + "/chat/completions", nil
+	}
+	return clean + "/v1/chat/completions", nil
 }
 
 func bindJSON(c *gin.Context, target any) error {
