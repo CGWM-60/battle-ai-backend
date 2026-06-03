@@ -2,13 +2,16 @@ package prompts
 
 import "fmt"
 
-// BuildGeneratedCasesPrompt returns the system + user prompt to generate exactly 10 Tribunal cases
-// with increasing difficulty per the spec (level 1-10).
+// BuildGeneratedCasesPrompt returns the system + user prompt to generate exactly N Tribunal cases
+// (N from the count param, typically 10) with increasing difficulty per the spec (level 1-10, repeating patterns if N>10).
 // Output must be strict JSON: {"cases": [ ... ]}
-func BuildGeneratedCasesPrompt() (system string, user string) {
+func BuildGeneratedCasesPrompt(count int) (system string, user string) {
+	if count <= 0 {
+		count = 10
+	}
 	system = "Tu es un generateur d'affaires de Tribunal IA cyberpunk original. Tu produis des cas jouables, coherents, avec contradictions exploitables. Reponds UNIQUEMENT en JSON valide strict (pas de markdown, pas de texte hors JSON)."
 
-	user = fmt.Sprintf(`Genere exactement 10 affaires Tribunal IA avec les niveaux 1 a 10 decrits ci-dessous.
+	user = fmt.Sprintf(`Genere exactement %d affaires Tribunal IA avec les niveaux decrits ci-dessous (utilise les niveaux 1 a 10 de facon unique et croissante, repete le pattern de complexite si plus de 10).
 Chaque affaire doit etre complete, coherente, et contenir les champs demandes.
 Niveaux (respecte les specs de complexite):
 1. Initiation: 1 temoin, 2 preuves, contradiction simple, 5-8min
@@ -43,10 +46,10 @@ Reponds STRICTEMENT au format:
       "testimonyStatements": [{"witnessName":"...","content":"phrase attackable courte","tags":["..."],"isAttackable":true}],
       "expectedContradictions": [{"statementContent":"...","evidenceTitle":"...","contradictionType":"time|fact|..."}]
     }
-    // ... exactement 10 entrees, level 1 a 10 distincts
+    // ... exactement %d entrees
   ]
 }
 
-Contraintes absolues: exactement 10; niveaux uniques 1-10; tout en francais cyberpunk; titres/summaries courts; contradictions exploitables dans les phrases vs preuves; pas de licence existante, pas de nom connu, pas de contenu interdit.`)
+Contraintes absolues: exactement %d; niveaux uniques 1-10 (croissants); tout en francais cyberpunk; titres/summaries courts; contradictions exploitables dans les phrases vs preuves; pas de licence existante, pas de nom connu, pas de contenu interdit.`, count, count, count)
 	return system, user
 }

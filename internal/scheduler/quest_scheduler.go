@@ -16,6 +16,7 @@ import (
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
 	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
+	tribunalprompts "cgwm/battle/internal/nexus_tribunal/prompts"
 	"cgwm/battle/internal/provider"
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/service"
@@ -1179,10 +1180,7 @@ func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cron
 }
 
 func promptsForTribunalCases() (string, string) {
-	sys := "Tu es un generateur d'affaires de Tribunal IA cyberpunk. Reponds uniquement JSON strict."
-	user := `Genere exactement 10 affaires Tribunal IA niveaux 1 a 10. Format: {"cases":[{ "title": "...", "summary":"...", "caseType":"moral", "level":1, "difficulty":"initiation", "estimatedDurationMinutes":7, "mode":"full_case", "tone":"cyberpunk_serious", "playerRoleSuggestion":"defense", "accusationPosition":"...", "defensePosition":"...", "tags":["ia"], "witnesses":[{"name":"...","role":"...","credibility":70,"bias":"neutral","personality":"...","knowledge":"..."}], "evidence":[{"title":"...","description":"...","evidenceType":"document","strength":60,"reliability":75,"tags":[],"supportsSide":"defense"}], "testimonyStatements":[{"witnessName":"...","content":"...","tags":[],"isAttackable":true}], "expectedContradictions":[{"statementContent":"...","evidenceTitle":"...","contradictionType":"fact"}]} ] } . Respecte complexite par niveau (1: simple 1temoin/2preuves ; 10: 5temoins/10preuves + lien nexus). Tout en francais, titres courts, contradictions exploitables.`
-	_ = sys
-	return sys, user
+	return tribunalprompts.BuildGeneratedCasesPrompt(10)
 }
 
 func clampInt(v, min, max int) int {

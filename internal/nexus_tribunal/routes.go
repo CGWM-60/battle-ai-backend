@@ -1380,7 +1380,7 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		return 0, 0, fmt.Errorf("batch create: %w", err)
 	}
 
-	sys, userPrompt := tribunalprompts.BuildGeneratedCasesPrompt()
+	sys, userPrompt := tribunalprompts.BuildGeneratedCasesPrompt(count)
 	adapter := tribunaladapters.NewAIProviderAdapter(func(pt string) string { return "" }) // we pass explicit key
 	resp, aerr := adapter.Generate(context.Background(), tribunaladapters.GenerateRequest{
 		ProviderType: providerType,
