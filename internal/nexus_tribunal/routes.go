@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -1863,21 +1864,29 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		Prompt:       userPrompt,
 	})
 	if aerr != nil {
+		log.Printf("[tribunal-generate] provider error: provider=%s model=%s err=%v", providerType, model, aerr)
 		batch.Status = "failed"
-		batch.ErrorMessage = fmt.Sprintf("Erreur appel provider IA (%s / %s): %v. Vérifie ta clé API (qu'elle corresponde au provider choisi), le solde/crédit, et que le modèle gère les prompts longs et complexes.", providerType, model, aerr)
+		batch.ErrorMessage = fmt.Sprintf("Erreur appel provider IA (%s / %s): %v. Vérifie ta clé API (qu'elle corresponde au provider choisi), le solde/crédit, et que le modèle gère les prompts longs et complexes. Détail: %v", providerType, model, aerr, aerr)
 		db.Save(&batch)
 		return batch.ID, 0, aerr
 	}
 
+	log.Printf("[tribunal-generate] AI call success, response_len=%d preview=%s", len(resp.Text), preview(resp.Text, 300))
 	cleaned := cleanJSONLocal(resp.Text)
 	var wrapper struct {
 		Cases []map[string]any `json:"cases"`
 	}
 	if uerr := json.Unmarshal([]byte(cleaned), &wrapper); uerr != nil {
+		log.Printf("[tribunal-generate] json unmarshal to wrapper failed: %v, cleaned_preview=%s", uerr, preview(cleaned, 300))
 		var direct []map[string]any
 		if uerr2 := json.Unmarshal([]byte(cleaned), &direct); uerr2 == nil {
 			wrapper.Cases = direct
+		} else {
+			log.Printf("[tribunal-generate] direct unmarshal also failed: %v", uerr2)
 		}
+	}
+	if len(wrapper.Cases) == 0 {
+		log.Printf("[tribunal-generate] after unmarshal, 0 cases in wrapper. cleaned=%s", preview(cleaned, 500))
 	}
 
 	generated = 0
@@ -1975,10 +1984,12 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 	batch.PublishedCount = generated
 	batch.DurationMs = time.Since(batch.StartedAt).Milliseconds()
 	if generated == 0 {
+		log.Printf("[tribunal-generate] 0 cases after parsing. provider=%s model=%s batch=%d cleaned_preview=%s", providerType, model, batch.ID, preview(cleaned, 300))
 		batch.Status = "failed"
-		batch.ErrorMessage = "aucune affaire valide générée par l'IA. Vérifie que le provider/modèle supporte le prompt complexe (narrative cases) et que la clé a du crédit."
+		batch.ErrorMessage = "aucune affaire valide générée par l'IA. Vérifie que le provider/modèle supporte le prompt complexe (narrative cases) et que la clé a du crédit. Réponse IA: " + preview(resp.Text, 500)
 		db.Save(&batch)
-		return batch.ID, 0, fmt.Errorf("aucune affaire valide générée par l'IA (batch %d). Vérifie la clé API, le modèle choisi et les logs du batch pour la réponse brute de l'IA.", batch.ID)
+		// Return success with 0 so admin doesn't get 502, but log the issue. The batch has the error.
+		return batch.ID, 0, nil
 	}
 	batch.Status = "success"
 	db.Save(&batch)
@@ -2004,6 +2015,13 @@ func cleanJSONLocal(value string) string {
 		return clean[start : end+1]
 	}
 	return clean
+}
+
+func preview(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
 }
 
 func clampInt(v, min, max int) int {
