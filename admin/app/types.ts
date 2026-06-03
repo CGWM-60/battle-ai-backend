@@ -320,3 +320,40 @@ export type AdminRolePlayQuestsResponse = {
   };
   quests: AdminRolePlayQuest[];
 };
+
+export type TribunalGeneratedCaseAdmin = {
+  id: number;
+  createdAt: string;
+  title: string;
+  summary: string;
+  caseType: string;
+  level: number;
+  difficulty: string;
+  estimatedDurationMinutes: number;
+  mode: string;
+  tone: string;
+  playerRoleSuggestion: string;
+  accusationPosition: string;
+  defensePosition: string;
+  tags: any;
+  witnesses: any;
+  evidence: any;
+  testimonyStatements: any;
+  expectedContradictions: any;
+  status: string;
+  isPlayable: boolean;
+  isPublished: boolean;
+  generatedByCron: boolean;
+  providerType: string;
+  providerModel: string;
+  generationBatchID?: number;
+};
+
+export type TribunalGeneratedAdminResponse = {
+  cases: TribunalGeneratedCaseAdmin[];
+  batches: any[];
+  stats: {
+    totalGenerated: number;
+    published: number;
+  };
+};

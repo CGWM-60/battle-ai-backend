@@ -3,6 +3,7 @@ package nexustribunal
 import (
 	tribunaladapters "cgwm/battle/internal/nexus_tribunal/adapters"
 	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
+	tribunalprompts "cgwm/battle/internal/nexus_tribunal/prompts"
 	"cgwm/battle/internal/service"
 	"context"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -1320,25 +1322,187 @@ func (m *module) listGenerationBatches(c *gin.Context) {
 }
 
 func (m *module) triggerGenerateNow(c *gin.Context) {
-	// For admin: trigger a synchronous limited generation (uses default env provider)
-	// Reuse the adapter or direct call for simplicity in low-credit impl.
-	respondOK(c, gin.H{"success": true, "message": "Trigger not fully wired in this pass (use real cron or implement direct generate). Check /api/nexus-tribunal/admin/generated-cases/batches after cron run."})
+	var req struct {
+		Provider string `form:"provider" json:"provider"`
+		Model    string `form:"model" json:"model"`
+		APIKey   string `form:"api_key" json:"apiKey"`
+		Count    int    `form:"count" json:"count"`
+	}
+	ct := c.ContentType()
+	if strings.Contains(ct, "json") {
+		_ = c.ShouldBindJSON(&req)
+	} else {
+		_ = c.ShouldBind(&req)
+	}
+	count := req.Count
+	if count <= 0 || count > 20 {
+		count = 10
+	}
+	providerType := normalizeProvider(req.Provider)
+	model := defaultText(req.Model, tribunaladapters.DefaultModelForProvider(providerType))
+	apiKey := strings.TrimSpace(req.APIKey)
+	if apiKey == "" {
+		respondErr(c, http.StatusBadRequest, "API_KEY_REQUIRED", "Clé API temporaire requise pour la génération manuelle.", nil)
+		return
+	}
+
+	batch := tribunalmodels.TribunalCaseGenerationBatch{
+		StartedAt:      time.Now(),
+		Source:         "admin_manual",
+		TriggerType:    "manual",
+		Status:         "running",
+		RequestedCount: count,
+		ProviderType:   providerType,
+		ProviderModel:  model,
+	}
+	if err := m.db.Create(&batch).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "BATCH_CREATE_FAILED", "Impossible de créer le batch de génération.", nil)
+		return
+	}
+
+	sys, userPrompt := tribunalprompts.BuildGeneratedCasesPrompt()
+	adapter := tribunaladapters.NewAIProviderAdapter(providerEnvKey)
+	resp, aerr := adapter.Generate(c.Request.Context(), tribunaladapters.GenerateRequest{
+		ProviderType: providerType,
+		Model:        model,
+		APIKey:       apiKey,
+		SystemPrompt: sys,
+		Prompt:       userPrompt,
+	})
+	if aerr != nil {
+		batch.Status = "failed"
+		batch.ErrorMessage = aerr.Error()
+		_ = m.db.Save(&batch).Error
+		respondErr(c, http.StatusBadGateway, "PROVIDER_ERROR", aerr.Error(), nil)
+		return
+	}
+
+	cleaned := cleanJSONLocal(resp.Text)
+	var wrapper struct {
+		Cases []map[string]any `json:"cases"`
+	}
+	if uerr := json.Unmarshal([]byte(cleaned), &wrapper); uerr != nil {
+		var direct []map[string]any
+		if uerr2 := json.Unmarshal([]byte(cleaned), &direct); uerr2 == nil {
+			wrapper.Cases = direct
+		}
+	}
+
+	generated := 0
+	for i, raw := range wrapper.Cases {
+		if i >= count {
+			break
+		}
+		title := strings.TrimSpace(fmt.Sprint(raw["title"]))
+		if title == "" {
+			continue
+		}
+		tagsB, _ := json.Marshal(raw["tags"])
+		witB, _ := json.Marshal(raw["witnesses"])
+		evB, _ := json.Marshal(raw["evidence"])
+		testB, _ := json.Marshal(raw["testimonyStatements"])
+		contrB, _ := json.Marshal(raw["expectedContradictions"])
+
+		rec := tribunalmodels.TribunalGeneratedCase{
+			GenerationBatchID:          batch.ID,
+			Title:                      title,
+			Summary:                    fmt.Sprint(raw["summary"]),
+			CaseType:                   defaultText(fmt.Sprint(raw["caseType"]), "custom"),
+			Level:                      clampInt(intFromAny(raw["level"], 1), 1, 10),
+			Difficulty:                 defaultText(fmt.Sprint(raw["difficulty"]), "standard"),
+			EstimatedDurationMinutes:   intFromAny(raw["estimatedDurationMinutes"], 5+clampInt(intFromAny(raw["level"], 5),1,10)*5),
+			Mode:                       defaultText(fmt.Sprint(raw["mode"]), "full_case"),
+			Tone:                       defaultText(fmt.Sprint(raw["tone"]), "cyberpunk_serious"),
+			PlayerRoleSuggestion:       defaultText(fmt.Sprint(raw["playerRoleSuggestion"]), "neutral"),
+			AccusationPosition:         fmt.Sprint(raw["accusationPosition"]),
+			DefensePosition:            fmt.Sprint(raw["defensePosition"]),
+			TagsJSON:                   datatypes.JSON(tagsB),
+			WitnessesJSON:              datatypes.JSON(witB),
+			EvidenceJSON:               datatypes.JSON(evB),
+			TestimonyJSON:              datatypes.JSON(testB),
+			ExpectedContradictionsJSON: datatypes.JSON(contrB),
+			Status:                     "ready",
+			IsPlayable:                 true,
+			IsPublished:                true,
+			GeneratedByCron:            false,
+			ProviderType:               providerType,
+			ProviderModel:              model,
+		}
+		if cerr := m.db.Create(&rec).Error; cerr == nil {
+			generated++
+		}
+	}
+
+	now := time.Now()
+	batch.FinishedAt = &now
+	batch.GeneratedCount = generated
+	batch.PublishedCount = generated
+	batch.DurationMs = time.Since(batch.StartedAt).Milliseconds()
+	if generated == 0 {
+		batch.Status = "failed"
+		batch.ErrorMessage = "aucune affaire valide générée par l'IA"
+	} else {
+		batch.Status = "success"
+	}
+	_ = m.db.Save(&batch).Error
+
+	respondOK(c, gin.H{
+		"success":   true,
+		"batchId":   batch.ID,
+		"generated": generated,
+		"message":   fmt.Sprintf("%d affaires Tribunal générées manuellement.", generated),
+	})
 }
 
-// small helpers for load
+// cleanJSONLocal is a local copy of the scheduler's cleanJSON for parsing LLM JSON output.
+func cleanJSONLocal(value string) string {
+	clean := strings.TrimSpace(value)
+	clean = strings.TrimPrefix(clean, "```json")
+	clean = strings.TrimPrefix(clean, "```")
+	clean = strings.TrimSuffix(clean, "```")
+	clean = strings.TrimSpace(clean)
+	start := strings.IndexAny(clean, "[{")
+	endArray := strings.LastIndex(clean, "]")
+	endObject := strings.LastIndex(clean, "}")
+	end := endArray
+	if endObject > end {
+		end = endObject
+	}
+	if start >= 0 && end >= start {
+		return clean[start : end+1]
+	}
+	return clean
+}
+
+func clampInt(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
 func intFromAny(v any, fb int) int {
 	switch x := v.(type) {
 	case float64:
 		return int(x)
 	case int:
 		return x
+	case int32:
+		return int(x)
+	case int64:
+		return int(x)
 	case string:
-		if n, _ := strconv.Atoi(x); n != 0 {
+		if n, err := strconv.Atoi(strings.TrimSpace(x)); err == nil {
 			return n
 		}
 	}
 	return fb
 }
+
+// small helpers for load (intFromAny already defined above for the trigger)
 func boolFromAny(v any, fb bool) bool {
 	if b, ok := v.(bool); ok {
 		return b

@@ -119,6 +119,12 @@ function DashboardContent({ data }: { data: DashboardData }) {
         <RecentList title="Dernieres quetes RP" items={data.Recent.RolePlayQuests.map((item) => `#${item.Id} ${item.Title} - ${item.Status}`)} />
         <RecentList title="Dernieres battles" items={data.Recent.Battles.map((item) => `#${item.Id} ${item.Title} - ${item.Status}`)} />
       </section>
+
+      <section className="panel">
+        <h2>Tribunal IA — Affaires générées</h2>
+        <p>Consultez l'historique complet des 10 affaires par cycle (cron ou manuel), avec tous les paramètres (témoins, preuves, déclarations, contradictions) et le bouton de génération manuelle.</p>
+        <a href="/admin/tribunal-ai" style={{ display: 'inline-block', marginTop: 8 }} className="secondary">Ouvrir la page dédiée Tribunal AI →</a>
+      </section>
     </>
   );
 }

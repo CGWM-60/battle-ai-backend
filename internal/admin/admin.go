@@ -27,6 +27,7 @@ import (
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
+	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -371,6 +372,7 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.PUT("/roleplay-quests/:id", server.updateRolePlayQuestAdminAPI)
 	api.DELETE("/roleplay-quests", server.clearRolePlayQuestsAdminAPI)
 	api.DELETE("/roleplay-quests/:id", server.deleteRolePlayQuestAdminAPI)
+	api.GET("/tribunal-generated", server.tribunalGeneratedAdminAPI)
 	api.GET("/nexus-coin", server.nexusCoinAPI)
 	api.POST("/nexus-coin/plans", server.createNexusCoinPlanAPI)
 	api.PUT("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
@@ -388,6 +390,7 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	group.POST("/quests/rp", server.createRolePlayQuest)
 	group.POST("/generate/battle", server.generateBattleQuests)
 	group.POST("/generate/rp", server.generateRolePlayQuests)
+	group.POST("/generate/tribunal", server.generateTribunalCases)
 	group.POST("/live/:id/end", server.endLiveSession)
 
 	router.NoRoute(server.adminNoRoute)
@@ -1888,4 +1891,43 @@ func urlQueryEscape(value string) string {
 
 func adminAuthLog(format string, args ...any) {
 	log.Printf("[admin-auth] "+format, args...)
+}
+
+// tribunalGeneratedAdminAPI returns data for the dedicated Tribunal AI admin page (list of generated cases + batches).
+func (s *Server) tribunalGeneratedAdminAPI(c *gin.Context) {
+	var cases []tribunalmodels.TribunalGeneratedCase
+	s.db.Order("created_at desc").Limit(100).Find(&cases)
+
+	var batches []tribunalmodels.TribunalCaseGenerationBatch
+	s.db.Order("created_at desc").Limit(20).Find(&batches)
+
+	// simple stats
+	total := len(cases)
+	published := 0
+	for _, c := range cases {
+		if c.IsPublished {
+			published++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"cases":   cases,
+		"batches": batches,
+		"stats": gin.H{
+			"totalGenerated": total,
+			"published":      published,
+		},
+	})
+}
+
+// generateTribunalCases handles the manual "Générer 10 affaires" from the dedicated page or form.
+// The real work is in the tribunal module's /.../generate-now which supports the same form fields.
+func (s *Server) generateTribunalCases(c *gin.Context) {
+	// Delegate to the tribunal package handler by re-using its form-capable trigger.
+	// For the registered /admin/generate/tribunal we can forward the request or just message.
+	// The Tribunal AI dedicated page uses fetch to the direct nexus-tribunal admin generate-now for full control.
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "Pour générer manuellement des affaires Tribunal, utilisez le bouton sur la page dédiée 'Tribunal AI' (elle appelle l'endpoint avec provider/model/clé).",
+	})
 }
