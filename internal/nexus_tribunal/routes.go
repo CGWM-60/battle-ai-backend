@@ -2568,22 +2568,22 @@ func (m *module) storyAction(c *gin.Context) {
 	var rule tribunalmodels.TribunalProgressionRule
 	ruleFound := false
 	if nc.ID > 0 {
-		findRule := func(withStatement bool, withEvidence bool) error {
+		findRule := func() error {
 			q := m.db.Where("narrative_case_id = ? AND scene_id = ? AND trigger_action = ?", nc.ID, payload.SceneId, payload.ActionType)
-			if withStatement && payload.StatementId != "" {
-				q = q.Where("required_statement_id = ?", payload.StatementId)
+			if payload.StatementId != "" {
+				q = q.Where("(required_statement_id = ? OR required_statement_id IS NULL)", payload.StatementId)
+			} else {
+				q = q.Where("required_statement_id IS NULL")
 			}
-			if withEvidence && payload.EvidenceId != "" {
-				q = q.Where("required_evidence_id = ?", payload.EvidenceId)
+			if payload.EvidenceId != "" {
+				q = q.Where("(required_evidence_id = ? OR required_evidence_id IS NULL)", payload.EvidenceId)
+			} else {
+				q = q.Where("required_evidence_id IS NULL")
 			}
 			return q.Order("is_critical desc, id asc").First(&rule).Error
 		}
-		if err := findRule(true, true); err == nil {
+		if err := findRule(); err == nil {
 			ruleFound = true
-		} else if payload.StatementId != "" || payload.EvidenceId != "" {
-			if err := findRule(false, false); err == nil {
-				ruleFound = true
-			}
 		}
 		if !ruleFound && sc.NextSceneID != nil && *sc.NextSceneID != "" && payload.ActionType == "continue_story" {
 			rule = tribunalmodels.TribunalProgressionRule{
