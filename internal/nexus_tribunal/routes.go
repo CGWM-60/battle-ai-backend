@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/datatypes"
@@ -2458,6 +2459,63 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func tribunalActorRef(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return r
+		}
+		return -1
+	}, value)
+}
+
+func actorMatchesRef(actor gin.H, ref string) bool {
+	cleanRef := tribunalActorRef(ref)
+	if cleanRef == "" {
+		return false
+	}
+	for _, key := range []string{"actorId", "id", "name", "actorType", "role"} {
+		value := tribunalActorRef(fmt.Sprint(actor[key]))
+		if value != "" && (value == cleanRef || strings.Contains(value, cleanRef) || strings.Contains(cleanRef, value)) {
+			return true
+		}
+	}
+	return false
+}
+
+func selectNarrativeActiveActor(cast []gin.H, refs []string, sceneType string) gin.H {
+	for _, ref := range refs {
+		for _, actor := range cast {
+			if actorMatchesRef(actor, ref) {
+				return actor
+			}
+		}
+	}
+	scene := strings.ToLower(sceneType)
+	preferred := []string{"witness", "expert", "assistant", "clerk"}
+	if strings.Contains(scene, "briefing") || strings.Contains(scene, "intro") {
+		preferred = []string{"assistant", "clerk", "prosecut", "defense", "witness"}
+	}
+	for _, wanted := range preferred {
+		for _, actor := range cast {
+			t := strings.ToLower(fmt.Sprint(actor["actorType"]))
+			if strings.Contains(t, wanted) {
+				return actor
+			}
+		}
+	}
+	for _, actor := range cast {
+		t := strings.ToLower(fmt.Sprint(actor["actorType"]))
+		if !strings.Contains(t, "judge") && !strings.Contains(t, "prosecut") {
+			return actor
+		}
+	}
+	if len(cast) > 0 {
+		return cast[0]
+	}
+	return nil
+}
+
 // ==================== STORY / NARRATIVE HANDLERS (correctif Phoenix-like) ====================
 
 func (m *module) storyCurrent(c *gin.Context) {
@@ -2602,6 +2660,20 @@ func (m *module) storyCurrent(c *gin.Context) {
 			actors = []string{speaker}
 		}
 	}
+	activeActorRefs := append([]string{}, actors...)
+	if len(visibleStmts) > 0 {
+		if speaker := strings.TrimSpace(fmt.Sprint(visibleStmts[0]["speakerActorId"])); speaker != "" && speaker != "<nil>" {
+			activeActorRefs = append([]string{speaker}, activeActorRefs...)
+		}
+	}
+	activeActor := selectNarrativeActiveActor(fullCast, activeActorRefs, sc.SceneType)
+	activeWitness := gin.H{"name": "Témoin en cours", "assetId": "tribunal.character.witness_default"}
+	if activeActor != nil {
+		activeWitness = gin.H{
+			"name":    firstNonEmpty(fmt.Sprint(activeActor["name"]), firstNonEmpty(activeActorRefs...)),
+			"assetId": normalizeTribunalAvatarAsset(fmt.Sprint(activeActor["avatarAssetId"]), fmt.Sprint(activeActor["actorType"])),
+		}
+	}
 
 	respondOK(c, gin.H{
 		"caseId":               item.ID,
@@ -2615,7 +2687,8 @@ func (m *module) storyCurrent(c *gin.Context) {
 		"sceneType":            sc.SceneType,
 		"narrativeText":        sc.NarrativeText,
 		"activeActorIds":       actors,
-		"activeWitness":        gin.H{"name": firstNonEmpty(strings.Join(actors, ", "), "Témoin en cours"), "assetId": "tribunal.character.witness_default"},
+		"activeActor":          activeActor,
+		"activeWitness":        activeWitness,
 		"actors":               fullCast, // full objects now
 		"visibleStatements":    visibleStmts,
 		"availableEvidence":    availableEvidence,
