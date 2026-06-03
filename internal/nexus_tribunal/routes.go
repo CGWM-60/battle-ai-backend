@@ -2178,6 +2178,16 @@ func lenFromAny(v any) int {
 // ==================== STORY / NARRATIVE HANDLERS (correctif Phoenix-like) ====================
 
 func (m *module) storyCurrent(c *gin.Context) {
+	caseIdStr := c.Param("caseId")
+	if caseIdStr == "0" || caseIdStr == "" {
+		respondOK(c, gin.H{
+			"caseId": 0,
+			"narrativeMode": false,
+			"error": "no_case_loaded",
+			"message": "Aucune affaire chargée. Veuillez charger un scénario depuis la liste 'Affaires Scénarisées'.",
+		})
+		return
+	}
 	item, err := m.caseByParam(c)
 	if err != nil {
 		return
@@ -2290,6 +2300,15 @@ func (m *module) storyCurrent(c *gin.Context) {
 }
 
 func (m *module) storyAction(c *gin.Context) {
+	caseIdStr := c.Param("caseId")
+	if caseIdStr == "0" || caseIdStr == "" {
+		respondOK(c, gin.H{
+			"success": false,
+			"error": "no_case_loaded",
+			"message": "Aucune affaire chargée pour l'action.",
+		})
+		return
+	}
 	item, err := m.caseByParam(c)
 	if err != nil {
 		return

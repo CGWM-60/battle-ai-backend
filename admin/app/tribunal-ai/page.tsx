@@ -41,13 +41,31 @@ export default function TribunalAIPage() {
       fetch("/api/nexus-tribunal/admin/generated-cases/narrative-stats", { credentials: "same-origin" }).then(r => r.json().catch(() => null)),
     ]).then(([listPayload, narrListPayload, adminPayload, narrStats]) => {
       if (narrStats) setNarrativeStats(narrStats);
-      const baseCases = (adminPayload?.cases || listPayload?.data || []);
-      const narrCases = (narrListPayload?.cases || narrListPayload?.data || []);
+      const listInner = (listPayload?.data || listPayload || []);
+      const adminCases = (adminPayload?.cases || []);
+      const baseCases = (Array.isArray(adminCases) && adminCases.length > 0 ? adminCases : (Array.isArray(listInner) ? listInner : []));
+      const narrPayload = (narrListPayload || {});
+      const narrInner = (narrPayload.data || narrPayload);
+      const narrCases = (Array.isArray(narrInner?.cases) ? narrInner.cases : (Array.isArray(narrInner) ? narrInner : []));
       const narrById = new Map<number, any>();
-      for (const nc of narrCases) { if (nc && (nc.id != null)) narrById.set(Number(nc.id), nc); }
+      for (const nc of narrCases) {
+        if (!nc) continue;
+        const nid = Number(nc.id ?? nc.ID ?? nc["id"] ?? nc["ID"] ?? 0);
+        if (!isNaN(nid) && nid > 0) narrById.set(nid, nc);
+      }
       const cases: TribunalGeneratedCaseAdmin[] = baseCases.map((c: any) => {
-        const id = Number(c.id);
+        const rawId = c.id ?? c.ID ?? c["id"] ?? c["ID"];
+        let id = Number(rawId);
+        if (Number.isNaN(id) || id <= 0) {
+          // fallback from rich later, but set 0 for now
+          id = 0;
+        }
         const rich = narrById.get(id) || {};
+        // if still bad id, try from rich
+        if (id <= 0 && rich) {
+          const rid = Number(rich.id ?? rich.ID ?? rich["id"] ?? rich["ID"] ?? 0);
+          if (!Number.isNaN(rid) && rid > 0) id = rid;
+        }
         return {
           id: id,
           createdAt: c.createdAt || c.CreatedAt || rich.createdAt,
@@ -82,7 +100,11 @@ export default function TribunalAIPage() {
       const batches = adminPayload?.batches || [];
       const stats = adminPayload?.stats || { totalGenerated: cases.length, published: cases.filter(c => c.isPublished).length };
       setData({ cases, batches, stats });
-      setSelectedId((current) => current ?? cases[0]?.id ?? null);
+      const firstValid = cases.find((c: any) => !Number.isNaN(Number(c.id)) && Number(c.id) > 0);
+      setSelectedId((current) => {
+        if (current != null && !Number.isNaN(Number(current)) && Number(current) > 0) return current;
+        return firstValid?.id ?? null;
+      });
     }).catch((err: Error) => setError(err.message));
   };
 
@@ -272,7 +294,7 @@ export default function TribunalAIPage() {
                         className={`cursor-pointer hover:bg-white/5 ${selected?.id === c.id ? "selected" : ""}`}
                         onClick={() => setSelectedId(c.id)}
                       >
-                        <td>#{c.id}</td>
+                        <td>#{Number.isNaN(Number(c.id)) ? '?' : c.id}</td>
                         <td><strong>{c.level}</strong> <small>{c.difficulty}</small></td>
                         <td>
                           <strong>{c.title}</strong>
@@ -327,7 +349,7 @@ function TribunalCaseDetail({ cas }: { cas: TribunalGeneratedCaseAdmin | null })
     <aside className="panel rp-detail" style={{ maxHeight: '82vh', overflowY: 'auto', fontSize: '0.82em', color: '#e2e8f0' }}>
       <header>
         <span className={`status ${cas.status}`}>{cas.status}</span>
-        <h2 style={{ color: '#67e8f9' }}>#{cas.id} — Niv.{cas.level} ({cas.difficulty || 'standard'}) — {cas.title || anyCas.Title}</h2>
+        <h2 style={{ color: '#67e8f9' }}>#{Number.isNaN(Number(cas.id)) ? '?' : cas.id} — Niv.{cas.level} ({cas.difficulty || 'standard'}) — {cas.title || anyCas.Title}</h2>
         <p style={{ margin: '4px 0', color: '#cbd5e1' }}>{synopsis}</p>
       </header>
 
