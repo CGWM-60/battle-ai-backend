@@ -32,7 +32,7 @@ type GenerateResponse struct {
 func NewAIProviderAdapter(envAPIKey func(providerType string) string) AIProviderAdapter {
 	return AIProviderAdapter{
 		envAPIKey: envAPIKey,
-		timeout:   45 * time.Second,
+		timeout:   120 * time.Second, // increased for complex narrative generation prompts
 	}
 }
 

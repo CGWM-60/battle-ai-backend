@@ -1400,6 +1400,7 @@ func assetRecord(id string, category string, name string, path string) gin.H {
 // =============================================================================
 
 func (m *module) listGeneratedCases(c *gin.Context) {
+	_ = m.db.AutoMigrate(&tribunalmodels.TribunalGeneratedCase{})
 	ownerID := currentOwnerID(c) // not strictly owner for generated (public templates), but keep for future
 	_ = ownerID
 	q := m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("is_playable = ? AND status IN ?", true, []string{"ready", "published"})
@@ -1832,6 +1833,9 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 // ManualGenerateTribunalCases is the shared implementation for manual generation
 // (used by the Tribunal admin page via /admin/generate/tribunal and by the internal trigger).
 func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string, count int) (batchID uint, generated int, err error) {
+	// Ensure new narrative columns exist (in case server wasn't fully restarted after model updates)
+	_ = db.AutoMigrate(&tribunalmodels.TribunalGeneratedCase{}, &tribunalmodels.TribunalCaseGenerationBatch{})
+
 	if count <= 0 || count > 20 {
 		count = 10
 	}
@@ -1860,7 +1864,7 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 	})
 	if aerr != nil {
 		batch.Status = "failed"
-		batch.ErrorMessage = aerr.Error()
+		batch.ErrorMessage = fmt.Sprintf("Erreur appel provider IA (%s / %s): %v. Vérifie ta clé API (qu'elle corresponde au provider choisi), le solde/crédit, et que le modèle gère les prompts longs et complexes.", providerType, model, aerr)
 		db.Save(&batch)
 		return batch.ID, 0, aerr
 	}
@@ -1972,10 +1976,11 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 	batch.DurationMs = time.Since(batch.StartedAt).Milliseconds()
 	if generated == 0 {
 		batch.Status = "failed"
-		batch.ErrorMessage = "aucune affaire valide générée par l'IA"
-	} else {
-		batch.Status = "success"
+		batch.ErrorMessage = "aucune affaire valide générée par l'IA. Vérifie que le provider/modèle supporte le prompt complexe (narrative cases) et que la clé a du crédit."
+		db.Save(&batch)
+		return batch.ID, 0, fmt.Errorf("aucune affaire valide générée par l'IA (batch %d). Vérifie la clé API, le modèle choisi et les logs du batch pour la réponse brute de l'IA.", batch.ID)
 	}
+	batch.Status = "success"
 	db.Save(&batch)
 
 	return batch.ID, generated, nil
@@ -2309,12 +2314,16 @@ func (m *module) storyTimeline(c *gin.Context) {
 }
 
 func (m *module) listNarrativeGenerated(c *gin.Context) {
+	_ = m.db.AutoMigrate(&tribunalmodels.TribunalGeneratedCase{})
 	var items []tribunalmodels.TribunalGeneratedCase
-	q := m.db.Where("is_narrative_playable = ? OR length(scenes_json) > 2 OR length(acts_json) > 2", true).Order("level asc, id desc").Limit(50)
+	q := m.db.Where("is_narrative_playable = ? OR scenes_json IS NOT NULL OR acts_json IS NOT NULL", true).Order("level asc, id desc").Limit(50)
 	if lvl := c.Query("level"); lvl != "" {
 		q = q.Where("level = ?", lvl)
 	}
-	_ = q.Find(&items).Error
+	if err := q.Find(&items).Error; err != nil {
+		// defensive: if query fails due to schema (e.g. no restart), fallback to all recent
+		_ = m.db.Where("is_playable = ?", true).Order("level asc, id desc").Limit(50).Find(&items).Error
+	}
 	respondOK(c, gin.H{"cases": items})
 }
 
