@@ -2256,11 +2256,15 @@ func (m *module) storyCurrent(c *gin.Context) {
 	var evidences []TribunalEvidence
 	_ = m.db.Where("case_id = ?", item.ID).Limit(6).Find(&evidences).Error
 
-	// Build visible statements — use narrative text if no real statements
+	// Build visible statements — use narrative text for meaningful content
 	visibleStmts := []gin.H{}
 	if len(stmts) > 0 {
 		for i, sid := range stmts {
-			visibleStmts = append(visibleStmts, gin.H{"id": sid, "content": fmt.Sprintf("Déclaration %s", sid), "isAttackable": true, "index": i})
+			content := sc.NarrativeText
+			if content == "" {
+				content = fmt.Sprintf("Déclaration %s", sid)
+			}
+			visibleStmts = append(visibleStmts, gin.H{"id": sid, "content": content, "isAttackable": true, "index": i})
 		}
 	} else if sc.NarrativeText != "" {
 		visibleStmts = append(visibleStmts, gin.H{"id": sc.SceneID, "content": sc.NarrativeText, "isAttackable": false, "index": 0})
@@ -2386,6 +2390,18 @@ func (m *module) storyAction(c *gin.Context) {
 		defenseDelta = -3
 		pressureDelta = 2
 		// after N failures could give hint (stub)
+	}
+
+	// Default progression for "continue_story" to allow story to advance even without specific rule
+	if payload.ActionType == "continue_story" && sc.NextSceneID != nil && *sc.NextSceneID != "" {
+		sceneAdvanced = true
+		unlocked["sceneIds"] = []string{*sc.NextSceneID}
+		m.db.Model(&tribunalmodels.TribunalScene{}).Where("narrative_case_id = ? AND scene_id = ?", nc.ID, *sc.NextSceneID).Update("status", "active")
+		nc.CurrentSceneID = *sc.NextSceneID
+		_ = m.db.Save(&nc).Error
+		narrativeResult = "Vous passez à la scène suivante."
+		success = true
+		resultType = "scene_advance"
 	}
 
 	item.DefenseScore = clamp(item.DefenseScore+defenseDelta, 0, 100)
