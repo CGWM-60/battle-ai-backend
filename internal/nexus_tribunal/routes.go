@@ -203,7 +203,12 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, authMiddleware gin.HandlerF
 		admin.Use(adminMiddleware)
 		admin.GET("/debug", module.debug)
 		admin.GET("/generated-cases/batches", module.listGenerationBatches)
+		admin.GET("/generated-cases/batches/:batchId", module.getGenerationBatch)
 		admin.POST("/generated-cases/generate-now", module.triggerGenerateNow)
+		admin.POST("/generated-cases/:genId/publish", module.publishGeneratedCase)
+		admin.POST("/generated-cases/:genId/archive", module.archiveGeneratedCase)
+		admin.POST("/generated-cases/:genId/reject", module.rejectGeneratedCase)
+		admin.GET("/generated-cases/stats", module.generatedCasesStats)
 	}
 }
 
@@ -243,6 +248,8 @@ func (m *module) mount(group *gin.RouterGroup) {
 	group.GET("/generated-cases/filters", m.generatedFilters)
 	group.GET("/generated-cases/:genId", m.getGeneratedCase)
 	group.POST("/generated-cases/:genId/load", m.loadGeneratedCase)
+	group.POST("/generated-cases/:genId/start", m.loadGeneratedCase)
+	group.GET("/debug/generated-cases", m.debugGeneratedCases)
 	// Admin/debug for generated (protected by adminMiddleware on /admin sub)
 }
 
@@ -1126,7 +1133,7 @@ func (m *module) listGeneratedCases(c *gin.Context) {
 			"isPublished":              it.IsPublished,
 			"createdAt":                it.CreatedAt,
 			"providerType":             it.ProviderType,
-			"model":                    it.Model,
+			"model":                    it.ProviderModel,
 		})
 	}
 	respondOK(c, gin.H{
@@ -1216,23 +1223,23 @@ func (m *module) loadGeneratedCase(c *gin.Context) {
 
 	// Create real playable TribunalCase
 	tc := TribunalCase{
-		OwnerID:            ownerID,
-		Title:              g.Title,
-		CaseType:           g.CaseType,
-		Description:        g.Summary,
-		AccusationPosition: g.AccusationPosition,
-		DefensePosition:    g.DefensePosition,
-		PlayerRole:         defaultText(req.PlayerRole, "neutral"),
-		Mode:               defaultText(g.Mode, "full_case"),
-		Tone:               defaultText(g.Tone, "cyberpunk_serious"),
-		ProviderType:       defaultText(req.Provider.ProviderType, g.ProviderType),
-		ProviderModel:      defaultText(req.Provider.Model, g.ProviderModel),
-		Status:             statusOpen,
-		CurrentPhase:       phaseInvestigation,
-		DefenseScore:       50,
-		AccusationScore:    50,
-		Pressure:           10,
-		JuryCount:          5,
+		OwnerID:             ownerID,
+		Title:               g.Title,
+		CaseType:            g.CaseType,
+		Description:         g.Summary,
+		AccusationPosition:  g.AccusationPosition,
+		DefensePosition:     g.DefensePosition,
+		PlayerRole:          defaultText(req.PlayerRole, "neutral"),
+		Mode:                defaultText(g.Mode, "full_case"),
+		Tone:                defaultText(g.Tone, "cyberpunk_serious"),
+		ProviderType:        defaultText(req.Provider.ProviderType, g.ProviderType),
+		ProviderModel:       defaultText(req.Provider.Model, g.ProviderModel),
+		Status:              statusOpen,
+		CurrentPhase:        phaseInvestigation,
+		DefenseScore:        50,
+		AccusationScore:     50,
+		Pressure:            10,
+		JuryCount:           5,
 		EnableInvestigation: true,
 		EnableObjections:    true,
 	}
@@ -1243,7 +1250,7 @@ func (m *module) loadGeneratedCase(c *gin.Context) {
 
 	// Copy evidences
 	var evs []tribunalmodels.TribunalGeneratedCase // reuse for unmarshal only
-	_ = json.Unmarshal(g.EvidenceJSON, &evs) // actually array of maps
+	_ = json.Unmarshal(g.EvidenceJSON, &evs)       // actually array of maps
 	var evList []map[string]any
 	_ = json.Unmarshal(g.EvidenceJSON, &evList)
 	for _, e := range evList {
@@ -1319,6 +1326,131 @@ func (m *module) listGenerationBatches(c *gin.Context) {
 	var batches []tribunalmodels.TribunalCaseGenerationBatch
 	_ = m.db.Order("created_at desc").Limit(20).Find(&batches).Error
 	respondOK(c, gin.H{"batches": batches})
+}
+
+func (m *module) getGenerationBatch(c *gin.Context) {
+	batchID, err := strconv.ParseUint(c.Param("batchId"), 10, 64)
+	if err != nil || batchID == 0 {
+		respondErr(c, http.StatusBadRequest, "INVALID_BATCH_ID", "Identifiant de batch invalide.", nil)
+		return
+	}
+
+	var batch tribunalmodels.TribunalCaseGenerationBatch
+	if err := m.db.First(&batch, uint(batchID)).Error; err != nil {
+		respondErr(c, http.StatusNotFound, "BATCH_NOT_FOUND", "Batch de generation introuvable.", nil)
+		return
+	}
+
+	var cases []tribunalmodels.TribunalGeneratedCase
+	_ = m.db.Where("generation_batch_id = ?", batch.ID).Order("level asc, created_at desc").Find(&cases).Error
+	respondOK(c, gin.H{"batch": batch, "cases": cases})
+}
+
+func (m *module) publishGeneratedCase(c *gin.Context) {
+	m.updateGeneratedCaseStatus(c, "published")
+}
+
+func (m *module) archiveGeneratedCase(c *gin.Context) {
+	m.updateGeneratedCaseStatus(c, "archived")
+}
+
+func (m *module) rejectGeneratedCase(c *gin.Context) {
+	m.updateGeneratedCaseStatus(c, "rejected")
+}
+
+func (m *module) updateGeneratedCaseStatus(c *gin.Context, status string) {
+	genID, err := strconv.ParseUint(c.Param("genId"), 10, 64)
+	if err != nil || genID == 0 {
+		respondErr(c, http.StatusBadRequest, "INVALID_GENERATED_CASE_ID", "Identifiant d'affaire generee invalide.", nil)
+		return
+	}
+
+	var item tribunalmodels.TribunalGeneratedCase
+	if err := m.db.First(&item, uint(genID)).Error; err != nil {
+		respondErr(c, http.StatusNotFound, "NOT_FOUND", "Affaire generee introuvable.", nil)
+		return
+	}
+
+	item.Status = status
+	switch status {
+	case "published":
+		item.IsPublished = true
+		item.IsPlayable = true
+	case "archived", "rejected":
+		item.IsPublished = false
+		item.IsPlayable = false
+	}
+	if err := m.db.Save(&item).Error; err != nil {
+		respondErr(c, http.StatusInternalServerError, "STATUS_UPDATE_FAILED", "Impossible de changer le statut de l'affaire generee.", nil)
+		return
+	}
+
+	respondOK(c, gin.H{
+		"id":          item.ID,
+		"status":      item.Status,
+		"isPlayable":  item.IsPlayable,
+		"isPublished": item.IsPublished,
+	})
+}
+
+func (m *module) generatedCasesStats(c *gin.Context) {
+	respondOK(c, m.generatedCasesStatsPayload())
+}
+
+func (m *module) debugGeneratedCases(c *gin.Context) {
+	var latest []tribunalmodels.TribunalGeneratedCase
+	_ = m.db.Order("created_at desc").Limit(10).Find(&latest).Error
+
+	items := make([]gin.H, 0, len(latest))
+	for _, item := range latest {
+		items = append(items, gin.H{
+			"id":                item.ID,
+			"title":             item.Title,
+			"level":             item.Level,
+			"status":            item.Status,
+			"isPlayable":        item.IsPlayable,
+			"isPublished":       item.IsPublished,
+			"generationBatchId": item.GenerationBatchID,
+			"providerType":      item.ProviderType,
+			"model":             item.ProviderModel,
+			"createdAt":         item.CreatedAt,
+		})
+	}
+
+	respondOK(c, gin.H{
+		"stats":  m.generatedCasesStatsPayload(),
+		"latest": items,
+		"routes": []string{
+			"GET /generated-cases",
+			"GET /generated-cases/filters",
+			"GET /generated-cases/{id}",
+			"POST /generated-cases/{id}/load",
+			"POST /generated-cases/{id}/start",
+		},
+	})
+}
+
+func (m *module) generatedCasesStatsPayload() gin.H {
+	var total, ready, published, archived, rejected, playable, cronGenerated, batches int64
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Count(&total)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("status = ?", "ready").Count(&ready)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("status = ? OR is_published = ?", "published", true).Count(&published)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("status = ?", "archived").Count(&archived)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("status = ?", "rejected").Count(&rejected)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("is_playable = ?", true).Count(&playable)
+	m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("generated_by_cron = ?", true).Count(&cronGenerated)
+	m.db.Model(&tribunalmodels.TribunalCaseGenerationBatch{}).Count(&batches)
+
+	return gin.H{
+		"total":         total,
+		"ready":         ready,
+		"published":     published,
+		"archived":      archived,
+		"rejected":      rejected,
+		"playable":      playable,
+		"cronGenerated": cronGenerated,
+		"batches":       batches,
+	}
 }
 
 func (m *module) triggerGenerateNow(c *gin.Context) {
@@ -1428,7 +1560,7 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 			CaseType:                   defaultText(fmt.Sprint(raw["caseType"]), "custom"),
 			Level:                      clampInt(intFromAny(raw["level"], 1), 1, 10),
 			Difficulty:                 defaultText(fmt.Sprint(raw["difficulty"]), "standard"),
-			EstimatedDurationMinutes:   intFromAny(raw["estimatedDurationMinutes"], 5+clampInt(intFromAny(raw["level"], 5),1,10)*5),
+			EstimatedDurationMinutes:   intFromAny(raw["estimatedDurationMinutes"], 5+clampInt(intFromAny(raw["level"], 5), 1, 10)*5),
 			Mode:                       defaultText(fmt.Sprint(raw["mode"]), "full_case"),
 			Tone:                       defaultText(fmt.Sprint(raw["tone"]), "cyberpunk_serious"),
 			PlayerRoleSuggestion:       defaultText(fmt.Sprint(raw["playerRoleSuggestion"]), "neutral"),
