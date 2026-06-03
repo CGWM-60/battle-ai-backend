@@ -1938,7 +1938,13 @@ func (s *Server) generateTribunalCases(c *gin.Context) {
 
 	batchID, generated, err := nexustribunal.ManualGenerateTribunalCases(s.db, provider, model, apiKey, count)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"success": false, "error": err.Error()})
+		log.Printf("[admin] tribunal generate failed: %v (batchID=%d)", err, batchID)
+		c.JSON(http.StatusOK, gin.H{
+			"success":   false,
+			"error":     err.Error(),
+			"batchId":   batchID,
+			"generated": generated,
+		})
 		return
 	}
 
