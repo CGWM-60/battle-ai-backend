@@ -2,6 +2,7 @@ package adapters
 
 import "testing"
 
+
 func TestLocalChatCompletionsURL(t *testing.T) {
 	cases := map[string]string{
 		"http://localhost:11434":                       "http://localhost:11434/v1/chat/completions",
