@@ -1849,7 +1849,7 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		return 0, 0, fmt.Errorf("batch create: %w", err)
 	}
 
-	sys, userPrompt := tribunalprompts.BuildGeneratedCasesPrompt(count)
+	sys, userPrompt := tribunalprompts.BuildNarrativeCasesPrompt(count)
 	adapter := tribunaladapters.NewAIProviderAdapter(func(pt string) string { return "" }) // we pass explicit key
 	resp, aerr := adapter.Generate(context.Background(), tribunaladapters.GenerateRequest{
 		ProviderType: providerType,
@@ -1891,6 +1891,28 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		testB, _ := json.Marshal(raw["testimonyStatements"])
 		contrB, _ := json.Marshal(raw["expectedContradictions"])
 
+		// Narrative fields (correctif Phoenix-like)
+		realTruth := fmt.Sprint(raw["realTruth"])
+		publicTruth := fmt.Sprint(raw["publicTruth"])
+		finalReveal := fmt.Sprint(raw["finalReveal"])
+		castB, _ := json.Marshal(raw["cast"])
+		actsB, _ := json.Marshal(raw["acts"])
+		scenesB, _ := json.Marshal(raw["scenes"])
+		prB, _ := json.Marshal(raw["progressionRules"])
+		frB, _ := json.Marshal(raw["failureRules"])
+		nexusB, _ := json.Marshal(raw["nexusBridgeHints"])
+
+		// Compute quality counts
+		actsCount := lenFromAny(raw["acts"])
+		scenesCount := lenFromAny(raw["scenes"])
+		witCount := lenFromAny(raw["witnesses"]) + lenFromAny(raw["cast"])
+		evCount := lenFromAny(raw["evidence"])
+		prCount := lenFromAny(raw["progressionRules"])
+		hasCrisis := raw["crisisMoment"] != nil && fmt.Sprint(raw["crisisMoment"]) != "map[]"
+		hasFinal := finalReveal != ""
+		hasVerdicts := lenFromAny(raw["possibleVerdicts"]) > 0
+		hasNexus := lenFromAny(raw["nexusBridgeHints"]) > 0
+
 		rec := tribunalmodels.TribunalGeneratedCase{
 			GenerationBatchID:          batch.ID,
 			Title:                      title,
@@ -1915,6 +1937,28 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 			GeneratedByCron:            false,
 			ProviderType:               providerType,
 			ProviderModel:              model,
+			// New narrative fields
+			RealTruth:              realTruth,
+			PublicTruth:            publicTruth,
+			FinalReveal:            finalReveal,
+			CharacterCastJSON:      datatypes.JSON(castB),
+			ActsJSON:               datatypes.JSON(actsB),
+			ScenesJSON:             datatypes.JSON(scenesB),
+			ProgressionRulesJSON:   datatypes.JSON(prB),
+			FailureRulesJSON:       datatypes.JSON(frB),
+			NexusBridgeHintsJSON:   datatypes.JSON(nexusB),
+			IsNarrativePlayable:    scenesCount > 0 || prCount > 0,
+			HasCrisisMoment:        hasCrisis,
+			HasFinalReveal:         hasFinal,
+			HasIntro:               true,
+			HasBriefing:            true,
+			ActsCount:              actsCount,
+			ScenesCount:            scenesCount,
+			WitnessesCount:         witCount,
+			EvidenceCount:          evCount,
+			ProgressionRulesCount:  prCount,
+			HasPossibleVerdicts:    hasVerdicts,
+			HasNexusBridge:         hasNexus,
 		}
 		if cerr := db.Create(&rec).Error; cerr == nil {
 			generated++
@@ -2024,6 +2068,26 @@ func ptrStringOrNil(v any) *string {
 		return nil
 	}
 	return &s
+}
+
+func lenFromAny(v any) int {
+	if v == nil {
+		return 0
+	}
+	if arr, ok := v.([]any); ok {
+		return len(arr)
+	}
+	if arr, ok := v.([]map[string]any); ok {
+		return len(arr)
+	}
+	// try to unmarshal if it's a json raw or string
+	if b, ok := v.([]byte); ok {
+		var arr []any
+		if json.Unmarshal(b, &arr) == nil {
+			return len(arr)
+		}
+	}
+	return 0
 }
 
 // ==================== STORY / NARRATIVE HANDLERS (correctif Phoenix-like) ====================
@@ -2246,7 +2310,7 @@ func (m *module) storyTimeline(c *gin.Context) {
 
 func (m *module) listNarrativeGenerated(c *gin.Context) {
 	var items []tribunalmodels.TribunalGeneratedCase
-	q := m.db.Where("is_narrative_playable = ?", true).Order("level asc, id desc").Limit(50)
+	q := m.db.Where("is_narrative_playable = ? OR length(scenes_json) > 2 OR length(acts_json) > 2", true).Order("level asc, id desc").Limit(50)
 	if lvl := c.Query("level"); lvl != "" {
 		q = q.Where("level = ?", lvl)
 	}
