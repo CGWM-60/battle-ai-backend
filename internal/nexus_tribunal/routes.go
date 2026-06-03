@@ -1057,7 +1057,7 @@ func assetRecord(id string, category string, name string, path string) gin.H {
 func (m *module) listGeneratedCases(c *gin.Context) {
 	ownerID := currentOwnerID(c) // not strictly owner for generated (public templates), but keep for future
 	_ = ownerID
-	q := m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("is_published = ? AND status IN ?", true, []string{"ready", "published"})
+	q := m.db.Model(&tribunalmodels.TribunalGeneratedCase{}).Where("is_playable = ? AND status IN ?", true, []string{"ready", "published"})
 	if lvl := c.Query("level"); lvl != "" {
 		if n, _ := strconv.Atoi(lvl); n > 0 {
 			q = q.Where("level = ?", n)
@@ -1073,7 +1073,11 @@ func (m *module) listGeneratedCases(c *gin.Context) {
 		q = q.Where("mode = ?", mode)
 	}
 	if status := c.Query("status"); status != "" {
-		q = q.Where("status = ?", status)
+		if status == "published" {
+			q = q.Where("(status = ? OR is_published = ?)", status, true)
+		} else {
+			q = q.Where("status = ?", status)
+		}
 	}
 	if tag := c.Query("tag"); tag != "" {
 		q = q.Where("JSON_CONTAINS(tags_json, ?)", `"`+tag+`"`)
@@ -1126,8 +1130,7 @@ func (m *module) listGeneratedCases(c *gin.Context) {
 		})
 	}
 	respondOK(c, gin.H{
-		"success": true,
-		"data":    data,
+		"data": data,
 		"pagination": gin.H{
 			"page":    page,
 			"limit":   limit,
@@ -1139,15 +1142,12 @@ func (m *module) listGeneratedCases(c *gin.Context) {
 
 func (m *module) generatedFilters(c *gin.Context) {
 	respondOK(c, gin.H{
-		"success": true,
-		"data": gin.H{
-			"levels":       []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
-			"difficulties": []string{"initiation", "easy", "standard", "intermediate", "confirmed", "hard", "expert", "master", "legendary", "nexus"},
-			"types":        []string{"moral", "political", "guild_conflict", "player_conflict", "world_event", "quest_consequence", "roleplay", "absurd", "custom"},
-			"modes":        []string{"quick_trial", "full_case", "debate_only", "auto_play", "nexus_integrated"},
-			"statuses":     []string{"published", "ready", "archived"},
-			"tags":         []string{"ia", "ville", "guilde", "preuve", "trahison", "liberte", "nexus"},
-		},
+		"levels":       []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+		"difficulties": []string{"initiation", "easy", "standard", "intermediate", "confirmed", "hard", "expert", "master", "legendary", "nexus"},
+		"types":        []string{"moral", "political", "guild_conflict", "player_conflict", "world_event", "quest_consequence", "roleplay", "absurd", "custom"},
+		"modes":        []string{"quick_trial", "full_case", "debate_only", "auto_play", "nexus_integrated"},
+		"statuses":     []string{"published", "ready", "archived"},
+		"tags":         []string{"ia", "ville", "guilde", "preuve", "trahison", "liberte", "nexus"},
 	})
 }
 
@@ -1165,33 +1165,30 @@ func (m *module) getGeneratedCase(c *gin.Context) {
 	_ = json.Unmarshal(g.TestimonyJSON, &testimony)
 	_ = json.Unmarshal(g.ExpectedContradictionsJSON, &contradictions)
 	respondOK(c, gin.H{
-		"success": true,
-		"data": gin.H{
-			"id":                       g.ID,
-			"title":                    g.Title,
-			"summary":                  g.Summary,
-			"caseType":                 g.CaseType,
-			"level":                    g.Level,
-			"difficulty":               g.Difficulty,
-			"estimatedDurationMinutes": g.EstimatedDurationMinutes,
-			"mode":                     g.Mode,
-			"tone":                     g.Tone,
-			"playerRoleSuggestion":     g.PlayerRoleSuggestion,
-			"accusationPosition":       g.AccusationPosition,
-			"defensePosition":          g.DefensePosition,
-			"tags":                     tags,
-			"witnesses":                witnesses,
-			"evidence":                 evidence,
-			"testimonyStatements":      testimony,
-			"expectedContradictions":   contradictions,
-			"status":                   g.Status,
-			"isPlayable":               g.IsPlayable,
-			"isPublished":              g.IsPublished,
-			"generatedByCron":          g.GeneratedByCron,
-			"providerType":             g.ProviderType,
-			"model":                    g.Model,
-			"createdAt":                g.CreatedAt,
-		},
+		"id":                       g.ID,
+		"title":                    g.Title,
+		"summary":                  g.Summary,
+		"caseType":                 g.CaseType,
+		"level":                    g.Level,
+		"difficulty":               g.Difficulty,
+		"estimatedDurationMinutes": g.EstimatedDurationMinutes,
+		"mode":                     g.Mode,
+		"tone":                     g.Tone,
+		"playerRoleSuggestion":     g.PlayerRoleSuggestion,
+		"accusationPosition":       g.AccusationPosition,
+		"defensePosition":          g.DefensePosition,
+		"tags":                     tags,
+		"witnesses":                witnesses,
+		"evidence":                 evidence,
+		"testimonyStatements":      testimony,
+		"expectedContradictions":   contradictions,
+		"status":                   g.Status,
+		"isPlayable":               g.IsPlayable,
+		"isPublished":              g.IsPublished,
+		"generatedByCron":          g.GeneratedByCron,
+		"providerType":             g.ProviderType,
+		"model":                    g.ProviderModel,
+		"createdAt":                g.CreatedAt,
 	})
 }
 
@@ -1309,16 +1306,19 @@ func (m *module) loadGeneratedCase(c *gin.Context) {
 	_ = m.db.Save(&g).Error
 
 	respondOK(c, gin.H{
-		"success":       true,
-		"data":          gin.H{"caseId": tc.ID, "generatedCaseId": g.ID, "status": "created", "currentPhase": tc.CurrentPhase, "nextScreen": "investigation"},
-		"message":       "Affaire chargee avec succes.",
+		"caseId":          tc.ID,
+		"generatedCaseId": g.ID,
+		"status":          "created",
+		"currentPhase":    tc.CurrentPhase,
+		"nextScreen":      "investigation",
+		"message":         "Affaire chargee avec succes.",
 	})
 }
 
 func (m *module) listGenerationBatches(c *gin.Context) {
 	var batches []tribunalmodels.TribunalCaseGenerationBatch
 	_ = m.db.Order("created_at desc").Limit(20).Find(&batches).Error
-	respondOK(c, gin.H{"success": true, "data": batches})
+	respondOK(c, gin.H{"batches": batches})
 }
 
 func (m *module) triggerGenerateNow(c *gin.Context) {
@@ -1353,7 +1353,6 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 	}
 
 	respondOK(c, gin.H{
-		"success":   true,
 		"batchId":   batchID,
 		"generated": generated,
 		"message":   fmt.Sprintf("%d affaires Tribunal générées manuellement.", generated),
