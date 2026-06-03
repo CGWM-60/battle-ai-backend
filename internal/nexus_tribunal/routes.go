@@ -1,13 +1,12 @@
 package nexustribunal
 
 import (
-	"cgwm/battle/internal/provider"
+	tribunaladapters "cgwm/battle/internal/nexus_tribunal/adapters"
 	"cgwm/battle/internal/service"
 	"context"
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -210,6 +209,7 @@ func (m *module) mount(group *gin.RouterGroup) {
 	group.GET("/index", m.index)
 	group.GET("/providers", m.providers)
 	group.POST("/providers/test", m.testProvider)
+	group.GET("/assets/manifest", m.assetManifest)
 	group.POST("/cases", m.createCase)
 	group.GET("/cases/:caseId", m.getCase)
 	group.GET("/cases/:caseId/investigation", m.getInvestigation)
@@ -650,6 +650,14 @@ func (m *module) debug(c *gin.Context) {
 	respondOK(c, gin.H{"module": "nexus_tribunal", "status": "mounted", "serverTime": time.Now().UTC()})
 }
 
+func (m *module) assetManifest(c *gin.Context) {
+	respondOK(c, gin.H{
+		"version":  1,
+		"fallback": "assets/nexus_games/tribunal/ui/tribunal_ui_placeholder.png",
+		"assets":   tribunalAssetManifest(),
+	})
+}
+
 func (m *module) casePayload(item TribunalCase) gin.H {
 	evidence, witnesses := m.caseEvidenceWitnesses(item.ID, item.OwnerID)
 	var statements []TribunalStatement
@@ -753,77 +761,20 @@ func (m *module) seedStatements(item TribunalCase, witness TribunalWitness) erro
 
 func testAIProvider(ctx context.Context, req providerTestRequest) (gin.H, error) {
 	providerType := normalizeProvider(req.ProviderType)
-	model := defaultText(req.Model, defaultModel(providerType, ""))
-	providerURL := ""
-	apiKey := strings.TrimSpace(req.APIKey)
-
-	if isLocalProvider(providerType) {
-		localURL, err := localChatCompletionsURL(req.LocalEndpoint)
-		if err != nil {
-			return nil, err
-		}
-		providerURL = localURL
-		if apiKey == "" {
-			apiKey = "local-no-key"
-		}
-	} else {
-		url, err := service.ProviderURL(providerType)
-		if err != nil {
-			return nil, fmt.Errorf("provider %s non supporte", providerType)
-		}
-		providerURL = url
-		if apiKey == "" {
-			apiKey = providerEnvKey(providerType)
-		}
-	}
-
-	if !isLocalProvider(providerType) && apiKey == "" {
-		apiKey = providerEnvKey(providerType)
-	}
-	if apiKey == "" {
-		return nil, fmt.Errorf("aucune cle disponible pour %s", providerType)
-	}
-	prompt := defaultText(req.Prompt, "Reponds uniquement OK")
-	startedAt := time.Now()
-	callCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
-	defer cancel()
-	client := provider.NewsProvider(apiKey, providerURL, model)
-	output, err := client.Chat(callCtx, []provider.ProviderMessage{
-		{Role: "system", Content: "Tu verifies une configuration technique. Reponds tres court."},
-		{Role: "user", Content: prompt},
+	model := defaultText(req.Model, tribunaladapters.DefaultModelForProvider(providerType))
+	adapter := tribunaladapters.NewAIProviderAdapter(providerEnvKey)
+	response, err := adapter.Generate(ctx, tribunaladapters.GenerateRequest{
+		ProviderType:  providerType,
+		Model:         model,
+		APIKey:        req.APIKey,
+		LocalEndpoint: req.LocalEndpoint,
+		SystemPrompt:  "Tu verifies une configuration technique. Reponds tres court.",
+		Prompt:        defaultText(req.Prompt, "Reponds uniquement OK"),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("provider indisponible: %w", err)
+		return nil, err
 	}
-	return gin.H{"status": "connected", "latencyMs": time.Since(startedAt).Milliseconds(), "modelAvailable": true, "message": truncate(strings.TrimSpace(output), 180)}, nil
-}
-
-func isLocalProvider(providerType string) bool {
-	switch normalizeProvider(providerType) {
-	case "ollama", "lmstudio", "lm_studio", "local", "custom":
-		return true
-	default:
-		return false
-	}
-}
-
-func localChatCompletionsURL(endpoint string) (string, error) {
-	endpoint = strings.TrimSpace(endpoint)
-	if endpoint == "" {
-		return "", fmt.Errorf("localEndpoint est obligatoire pour un provider local")
-	}
-	parsed, err := url.Parse(endpoint)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return "", fmt.Errorf("localEndpoint invalide")
-	}
-	clean := strings.TrimRight(endpoint, "/")
-	if strings.HasSuffix(clean, "/chat/completions") {
-		return clean, nil
-	}
-	if strings.HasSuffix(clean, "/v1") {
-		return clean + "/chat/completions", nil
-	}
-	return clean + "/v1/chat/completions", nil
+	return gin.H{"status": "connected", "latencyMs": response.LatencyMs, "modelAvailable": true, "message": truncate(response.Text, 180)}, nil
 }
 
 func bindJSON(c *gin.Context, target any) error {
@@ -983,5 +934,46 @@ func investigationObjectives(item TribunalCase) []string {
 		"Identifier au moins une preuve exploitable.",
 		"Ajouter ou verifier un temoin.",
 		fmt.Sprintf("Preparer une ligne %s avant le proces live.", defaultText(item.PlayerRole, "defense")),
+	}
+}
+
+func tribunalAssetManifest() []gin.H {
+	return []gin.H{
+		assetRecord("tribunal.background.main", "background", "Fond principal Tribunal", "assets/nexus_games/tribunal/backgrounds/tribunal_background_main.webp"),
+		assetRecord("tribunal.background.courtroom", "background", "Salle d'audience", "assets/nexus_games/tribunal/backgrounds/tribunal_background_courtroom.webp"),
+		assetRecord("tribunal.background.investigation", "background", "Enquete", "assets/nexus_games/tribunal/backgrounds/tribunal_background_investigation.webp"),
+		assetRecord("tribunal.character.judge_ai", "character", "Juge IA", "assets/nexus_games/tribunal/characters/tribunal_character_judge_ai.png"),
+		assetRecord("tribunal.character.prosecutor_ai", "character", "Accusation IA", "assets/nexus_games/tribunal/characters/tribunal_character_prosecutor_ai.png"),
+		assetRecord("tribunal.character.defense_ai", "character", "Defense IA", "assets/nexus_games/tribunal/characters/tribunal_character_defense_ai.png"),
+		assetRecord("tribunal.character.witness_default", "character", "Temoin par defaut", "assets/nexus_games/tribunal/characters/tribunal_character_witness_default.png"),
+		assetRecord("tribunal.character.clerk_ai", "character", "Greffier IA", "assets/nexus_games/tribunal/characters/tribunal_character_clerk_ai.png"),
+		assetRecord("tribunal.action.objection", "action", "Objection", "assets/nexus_games/tribunal/actions/tribunal_action_objection.png"),
+		assetRecord("tribunal.action.press", "action", "Appuyer", "assets/nexus_games/tribunal/actions/tribunal_action_press.png"),
+		assetRecord("tribunal.action.present_evidence", "action", "Presenter une preuve", "assets/nexus_games/tribunal/actions/tribunal_action_present_evidence.png"),
+		assetRecord("tribunal.action.ai_analysis", "action", "Analyse IA", "assets/nexus_games/tribunal/actions/tribunal_action_ai_analysis.png"),
+		assetRecord("tribunal.evidence.document", "evidence", "Document", "assets/nexus_games/tribunal/evidence/tribunal_evidence_document.png"),
+		assetRecord("tribunal.evidence.surveillance_log", "evidence", "Log surveillance", "assets/nexus_games/tribunal/evidence/tribunal_evidence_surveillance_log.png"),
+		assetRecord("tribunal.evidence.biometric_log", "evidence", "Log biometrique", "assets/nexus_games/tribunal/evidence/tribunal_evidence_biometric_log.png"),
+		assetRecord("tribunal.ui.dialog_panel", "ui", "Panneau dialogue", "assets/nexus_games/tribunal/ui/tribunal_ui_dialog_panel.png"),
+		assetRecord("tribunal.ui.evidence_panel", "ui", "Panneau preuves", "assets/nexus_games/tribunal/ui/tribunal_ui_evidence_panel.png"),
+		assetRecord("tribunal.ui.placeholder", "ui", "Placeholder", "assets/nexus_games/tribunal/ui/tribunal_ui_placeholder.png"),
+		assetRecord("tribunal.gauge.pressure", "gauge", "Pression tribunal", "assets/nexus_games/tribunal/gauges/tribunal_gauge_pressure.png"),
+		assetRecord("tribunal.verdict.guilty", "verdict", "Coupable", "assets/nexus_games/tribunal/verdicts/tribunal_verdict_guilty.png"),
+		assetRecord("tribunal.verdict.innocent", "verdict", "Innocent", "assets/nexus_games/tribunal/verdicts/tribunal_verdict_innocent.png"),
+		assetRecord("tribunal.verdict.neutral", "verdict", "Neutre", "assets/nexus_games/tribunal/verdicts/tribunal_verdict_neutral.png"),
+	}
+}
+
+func assetRecord(id string, category string, name string, path string) gin.H {
+	return gin.H{
+		"id":        id,
+		"type":      "tribunal",
+		"category":  category,
+		"name":      name,
+		"path":      path,
+		"fallback":  "assets/nexus_games/tribunal/ui/tribunal_ui_placeholder.png",
+		"tags":      []string{"tribunal", category},
+		"isPremium": false,
+		"isRemote":  false,
 	}
 }
