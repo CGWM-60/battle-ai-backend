@@ -66,6 +66,8 @@ export default function TribunalAIPage() {
         providerType: c.providerType,
         providerModel: c.model || c.providerModel,
         generationBatchID: c.generationBatchID || c.GenerationBatchID,
+        // Preserve full narrative data for the detail view
+        ...c, // cast, acts, scenes, progressionRules, failureRules, realTruth, etc. will be available
       }));
       const batches = adminPayload?.batches || [];
       const stats = adminPayload?.stats || { totalGenerated: cases.length, published: cases.filter(c => c.isPublished).length };
@@ -181,7 +183,29 @@ export default function TribunalAIPage() {
               </label>
               <button className="secondary" type="button" onClick={generateNow} disabled={busy || !genModel || !genKey}>
                 <Sparkles size={16} aria-hidden />
-                Générer les 10 affaires
+                Générer les 10 affaires (1 par 1)
+              </button>
+              <button
+                className="ghost"
+                type="button"
+                onClick={async () => {
+                  if (!confirm("Purger toutes les affaires générées ?")) return;
+                  setBusy(true);
+                  try {
+                    const res = await fetch("/admin/generate/tribunal/purge", { method: "POST", credentials: "same-origin" });
+                    const p = await res.json().catch(() => ({}));
+                    if (!res.ok || p.success === false) throw new Error(p.error || "Purge failed");
+                    alert(p.message || "Affaires purgées.");
+                  } catch (e: any) {
+                    alert("Erreur purge: " + (e.message || e));
+                  } finally {
+                    setBusy(false);
+                    reload();
+                  }
+                }}
+                disabled={busy}
+              >
+                Purger les affaires
               </button>
               <button className="ghost" type="button" onClick={reload} disabled={busy}>
                 <RefreshCw size={16} aria-hidden /> Rafraîchir
@@ -235,7 +259,7 @@ export default function TribunalAIPage() {
                     {filtered.map((c) => (
                       <tr
                         key={c.id}
-                        className={selected?.id === c.id ? "selected" : ""}
+                        className={`cursor-pointer hover:bg-white/5 ${selected?.id === c.id ? "selected" : ""}`}
                         onClick={() => setSelectedId(c.id)}
                       >
                         <td>#{c.id}</td>
@@ -268,89 +292,87 @@ export default function TribunalAIPage() {
 
 function TribunalCaseDetail({ cas }: { cas: TribunalGeneratedCaseAdmin | null }) {
   if (!cas) {
-    return <aside className="panel rp-detail empty">Sélectionnez une affaire générée pour voir tous les paramètres et l'histoire complète.</aside>;
+    return <aside className="panel rp-detail empty">Sélectionnez une affaire générée (cliquez une ligne du tableau) pour voir la structure narrative complète (1-by-1).</aside>;
   }
 
+  const anyCas = cas as any;
+
+  const cast = anyCas.cast || anyCas.Cast || anyCas.characterCast || [];
+  const acts = anyCas.acts || anyCas.Acts || [];
+  const scenes = anyCas.scenes || anyCas.Scenes || [];
+  const progRules = anyCas.progressionRules || anyCas.ProgressionRules || [];
+  const failRules = anyCas.failureRules || anyCas.FailureRules || [];
+  const crisis = anyCas.crisisMoment || anyCas.CrisisMoment;
+  const verdicts = anyCas.possibleVerdicts || anyCas.PossibleVerdicts || [];
+  const epilogue = anyCas.epilogue || anyCas.Epilogue || anyCas.finalReveal || "";
+  const nexus = anyCas.nexusBridgeHints || anyCas.NexusBridgeHints || [];
+  const realTruth = anyCas.realTruth || anyCas.RealTruth || "";
+  const publicTruth = anyCas.publicTruth || anyCas.PublicTruth || "";
+
   return (
-    <aside className="panel rp-detail">
+    <aside className="panel rp-detail" style={{ maxHeight: '82vh', overflowY: 'auto', fontSize: '0.82em' }}>
       <header>
         <span className={`status ${cas.status}`}>{cas.status}</span>
-        <h2>#{cas.id} — Niveau {cas.level} ({cas.difficulty}) — {cas.title}</h2>
-        <p>{cas.summary}</p>
+        <h2>#{cas.id} — Niv.{cas.level} ({cas.difficulty}) — {cas.title}</h2>
+        <p style={{ margin: '4px 0' }}>{cas.summary || anyCas.synopsis || anyCas.Synopsis}</p>
       </header>
 
-      <div className="rp-edit-strip" style={{ fontSize: '0.9em' }}>
+      <div className="rp-edit-strip" style={{ fontSize: '0.78em', gap: '4px 12px' }}>
         <div><strong>Mode:</strong> {cas.mode}</div>
-        <div><strong>Rôle suggéré:</strong> {cas.playerRoleSuggestion}</div>
-        <div><strong>Provider:</strong> {cas.providerType} / {cas.providerModel}</div>
-        <div><strong>Durée estimée:</strong> {cas.estimatedDurationMinutes} min</div>
+        <div><strong>Provider:</strong> {cas.providerType}/{cas.providerModel}</div>
+        <div><strong>Durée:</strong> {cas.estimatedDurationMinutes}min</div>
         <div><strong>Batch:</strong> {cas.generationBatchID || '-'}</div>
-        <div><strong>Générée par cron:</strong> {cas.generatedByCron ? "oui" : "non (manuel)"}</div>
+        <div><strong>Cron:</strong> {cas.generatedByCron ? 'oui' : 'manuel'}</div>
       </div>
 
-      <dl className="rp-facts">
-        <dt>Accusation</dt>
-        <dd className="prewrap">{cas.accusationPosition}</dd>
-        <dt>Défense</dt>
-        <dd className="prewrap">{cas.defensePosition}</dd>
-        <dt>Type / Ton</dt>
-        <dd>{cas.caseType} / {cas.tone}</dd>
-        <dt>Créée</dt>
-        <dd>{formatDate(cas.createdAt)}</dd>
-      </dl>
+      {realTruth && <div style={{ marginTop: 6 }}><strong>Vérité réelle:</strong> <span style={{ opacity: .85 }}>{realTruth}</span></div>}
+      {publicTruth && <div><strong>Vérité publique:</strong> <span style={{ opacity: .85 }}>{publicTruth}</span></div>}
 
-      <section className="rp-read-block">
-        <h3>Témoins ({Array.isArray(cas.witnesses) ? cas.witnesses.length : 0})</h3>
-        <div className="rp-arc-list">
-          {(Array.isArray(cas.witnesses) ? cas.witnesses : []).map((w: any, idx: number) => (
-            <article key={idx} className="rp-arc">
-              <h4>{w.name || w.Name || "Témoin"} — {w.role || w.Role}</h4>
-              <small>Crédibilité: {w.credibility || w.Credibility || "?"} | Biais: {w.bias || w.Bias}</small>
-              <p>{w.knowledge || w.Knowledge || w.personality}</p>
-            </article>
-          ))}
-          {!Array.isArray(cas.witnesses) || cas.witnesses.length === 0 ? <p>Aucun témoin.</p> : null}
+      {/* Cast */}
+      {cast.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <strong>Cast ({cast.length})</strong>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+            {cast.map((a: any, i: number) => (
+              <span key={i} style={{ background: '#222', padding: '1px 6px', borderRadius: 3, fontSize: '0.75em' }}>
+                {a.actorType}: <strong>{a.name}</strong>
+              </span>
+            ))}
+          </div>
         </div>
-      </section>
+      )}
 
-      <section className="rp-read-block">
-        <h3>Preuves ({Array.isArray(cas.evidence) ? cas.evidence.length : 0})</h3>
-        <ul>
-          {(Array.isArray(cas.evidence) ? cas.evidence : []).map((e: any, idx: number) => (
-            <li key={idx}>
-              <strong>{e.title || e.Title}</strong> — {e.evidenceType || e.EvidenceType} (force {e.strength || e.Strength}, fiabilité {e.reliability || e.Reliability})<br />
-              <small>Supporte: {e.supportsSide || e.SupportsSide} | {e.description || e.Description}</small>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {/* Acts & Scenes summary */}
+      {(acts.length > 0 || scenes.length > 0) && (
+        <div style={{ marginTop: 6 }}>
+          <strong>Structure</strong> — {acts.length} acte(s), {scenes.length} scène(s)
+          <div style={{ fontSize: '0.72em', marginTop: 2, maxHeight: 90, overflow: 'auto', background: '#111', padding: 4, borderRadius: 2 }}>
+            {scenes.slice(0, 6).map((s: any, i: number) => (
+              <div key={i}>{s.sceneId} [{s.sceneType}] {s.title}</div>
+            ))}
+            {scenes.length > 6 && <div>... +{scenes.length - 6}</div>}
+          </div>
+        </div>
+      )}
 
-      <section className="rp-read-block">
-        <h3>Déclarations du témoignage ({Array.isArray(cas.testimonyStatements) ? cas.testimonyStatements.length : 0})</h3>
-        <ol>
-          {(Array.isArray(cas.testimonyStatements) ? cas.testimonyStatements : []).map((s: any, idx: number) => (
-            <li key={idx}>
-              {s.content || s.Content || s.witnessName} {s.isAttackable ? "(attaquable)" : ""}
-              <small> — {Array.isArray(s.tags) ? s.tags.join(", ") : s.tags}</small>
-            </li>
-          ))}
-        </ol>
-      </section>
+      {/* Rules */}
+      <div style={{ marginTop: 6, fontSize: '0.78em' }}>
+        <strong>Règles</strong>: {progRules.length} progression (dont {progRules.filter((r: any) => r.isCritical).length} critiques) / {failRules.length} échecs
+      </div>
 
-      <section className="rp-read-block">
-        <h3>Contradictions attendues</h3>
-        <ul>
-          {(Array.isArray(cas.expectedContradictions) ? cas.expectedContradictions : []).map((k: any, idx: number) => (
-            <li key={idx}>{k.statementContent || k.StatementContent} ↔ {k.evidenceTitle || k.EvidenceTitle} ({k.contradictionType})</li>
-          ))}
-          {(!Array.isArray(cas.expectedContradictions) || cas.expectedContradictions.length === 0) && <li>Aucune listée.</li>}
-        </ul>
-      </section>
+      {crisis && <div style={{ marginTop: 4 }}><strong>Crisis:</strong> {crisis.sceneId} — {crisis.trigger}</div>}
+      {verdicts.length > 0 && <div><strong>Verdicts:</strong> {verdicts.join(', ')}</div>}
+      {epilogue && <div style={{ marginTop: 4, fontSize: '0.78em' }}><strong>Épilogue:</strong> {epilogue}</div>}
 
-      <section className="rp-read-block">
-        <h3>Tags</h3>
-        <div>{(Array.isArray(cas.tags) ? cas.tags : []).join(", ") || "-"}</div>
-      </section>
+      {nexus.length > 0 && (
+        <div style={{ marginTop: 4, fontSize: '0.75em' }}>
+          <strong>Nexus hints:</strong> {nexus.map((h: any) => `${h.type}→${h.targetId || h.delta}`).join(' ; ')}
+        </div>
+      )}
+
+      <div style={{ marginTop: 10, fontSize: '0.7em', opacity: 0.6, borderTop: '1px solid #333', paddingTop: 4 }}>
+        Données complètes (1-by-1 generation). Sélectionnez dans le tableau pour rafraîchir.
+      </div>
     </aside>
   );
 }

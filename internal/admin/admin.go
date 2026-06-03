@@ -392,6 +392,7 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	group.POST("/generate/battle", server.generateBattleQuests)
 	group.POST("/generate/rp", server.generateRolePlayQuests)
 	group.POST("/generate/tribunal", server.generateTribunalCases)
+	group.POST("/generate/tribunal/purge", server.purgeTribunalGeneratedCases)
 	group.POST("/live/:id/end", server.endLiveSession)
 
 	router.NoRoute(server.adminNoRoute)
@@ -1919,6 +1920,15 @@ func (s *Server) tribunalGeneratedAdminAPI(c *gin.Context) {
 			"published":      published,
 		},
 	})
+}
+
+// purgeTribunalGeneratedCases deletes generated Tribunal cases (for admin cleanup).
+func (s *Server) purgeTribunalGeneratedCases(c *gin.Context) {
+	if err := s.db.Where("1 = 1").Delete(&tribunalmodels.TribunalGeneratedCase{}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Affaires générées purgées."})
 }
 
 // generateTribunalCases handles POST /admin/generate/tribunal from the dedicated Tribunal AI admin page.
