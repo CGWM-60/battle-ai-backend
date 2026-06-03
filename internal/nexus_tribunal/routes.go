@@ -1346,6 +1346,27 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 		return
 	}
 
+	batchID, generated, err := ManualGenerateTribunalCases(m.db, providerType, model, apiKey, count)
+	if err != nil {
+		respondErr(c, http.StatusBadGateway, "GENERATE_FAILED", err.Error(), nil)
+		return
+	}
+
+	respondOK(c, gin.H{
+		"success":   true,
+		"batchId":   batchID,
+		"generated": generated,
+		"message":   fmt.Sprintf("%d affaires Tribunal générées manuellement.", generated),
+	})
+}
+
+// ManualGenerateTribunalCases is the shared implementation for manual generation
+// (used by the Tribunal admin page via /admin/generate/tribunal and by the internal trigger).
+func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string, count int) (batchID uint, generated int, err error) {
+	if count <= 0 || count > 20 {
+		count = 10
+	}
+
 	batch := tribunalmodels.TribunalCaseGenerationBatch{
 		StartedAt:      time.Now(),
 		Source:         "admin_manual",
@@ -1355,14 +1376,13 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 		ProviderType:   providerType,
 		ProviderModel:  model,
 	}
-	if err := m.db.Create(&batch).Error; err != nil {
-		respondErr(c, http.StatusInternalServerError, "BATCH_CREATE_FAILED", "Impossible de créer le batch de génération.", nil)
-		return
+	if err := db.Create(&batch).Error; err != nil {
+		return 0, 0, fmt.Errorf("batch create: %w", err)
 	}
 
 	sys, userPrompt := tribunalprompts.BuildGeneratedCasesPrompt()
-	adapter := tribunaladapters.NewAIProviderAdapter(providerEnvKey)
-	resp, aerr := adapter.Generate(c.Request.Context(), tribunaladapters.GenerateRequest{
+	adapter := tribunaladapters.NewAIProviderAdapter(func(pt string) string { return "" }) // we pass explicit key
+	resp, aerr := adapter.Generate(context.Background(), tribunaladapters.GenerateRequest{
 		ProviderType: providerType,
 		Model:        model,
 		APIKey:       apiKey,
@@ -1372,9 +1392,8 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 	if aerr != nil {
 		batch.Status = "failed"
 		batch.ErrorMessage = aerr.Error()
-		_ = m.db.Save(&batch).Error
-		respondErr(c, http.StatusBadGateway, "PROVIDER_ERROR", aerr.Error(), nil)
-		return
+		db.Save(&batch)
+		return batch.ID, 0, aerr
 	}
 
 	cleaned := cleanJSONLocal(resp.Text)
@@ -1388,7 +1407,7 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 		}
 	}
 
-	generated := 0
+	generated = 0
 	for i, raw := range wrapper.Cases {
 		if i >= count {
 			break
@@ -1428,7 +1447,7 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 			ProviderType:               providerType,
 			ProviderModel:              model,
 		}
-		if cerr := m.db.Create(&rec).Error; cerr == nil {
+		if cerr := db.Create(&rec).Error; cerr == nil {
 			generated++
 		}
 	}
@@ -1444,14 +1463,9 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 	} else {
 		batch.Status = "success"
 	}
-	_ = m.db.Save(&batch).Error
+	db.Save(&batch)
 
-	respondOK(c, gin.H{
-		"success":   true,
-		"batchId":   batch.ID,
-		"generated": generated,
-		"message":   fmt.Sprintf("%d affaires Tribunal générées manuellement.", generated),
-	})
+	return batch.ID, generated, nil
 }
 
 // cleanJSONLocal is a local copy of the scheduler's cleanJSON for parsing LLM JSON output.

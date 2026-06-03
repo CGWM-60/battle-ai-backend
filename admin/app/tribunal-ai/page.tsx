@@ -88,16 +88,16 @@ export default function TribunalAIPage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/nexus-tribunal/admin/generated-cases/generate-now", {
+      const res = await fetch("/admin/generate/tribunal", {
         method: "POST",
         credentials: "same-origin",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
           provider: genProvider,
           model: genModel,
-          apiKey: genKey,
-          count: genCount,
-        }),
+          api_key: genKey,
+          count: String(genCount),
+        }).toString(),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -106,7 +106,7 @@ export default function TribunalAIPage() {
       // success
       setGenKey(""); // clear key
       reload();
-      alert(payload.message || "Génération lancée. Rafraîchissement de la liste.");
+      alert(payload.message || `Génération terminée : ${payload.generated || 0} affaires.`);
     } catch (e: any) {
       setError(e.message || "Génération manuelle échouée");
     } finally {

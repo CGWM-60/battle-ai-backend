@@ -27,6 +27,7 @@ import (
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
+	nexustribunal "cgwm/battle/internal/nexus_tribunal"
 	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
 
 	"github.com/gin-gonic/gin"
@@ -1920,14 +1921,31 @@ func (s *Server) tribunalGeneratedAdminAPI(c *gin.Context) {
 	})
 }
 
-// generateTribunalCases handles the manual "Générer 10 affaires" from the dedicated page or form.
-// The real work is in the tribunal module's /.../generate-now which supports the same form fields.
+// generateTribunalCases handles POST /admin/generate/tribunal from the dedicated Tribunal AI admin page.
 func (s *Server) generateTribunalCases(c *gin.Context) {
-	// Delegate to the tribunal package handler by re-using its form-capable trigger.
-	// For the registered /admin/generate/tribunal we can forward the request or just message.
-	// The Tribunal AI dedicated page uses fetch to the direct nexus-tribunal admin generate-now for full control.
+	provider := strings.ToLower(strings.TrimSpace(c.PostForm("provider")))
+	model := strings.TrimSpace(c.PostForm("model"))
+	apiKey := strings.TrimSpace(c.PostForm("api_key"))
+	count := formInt(c, "count")
+	if count <= 0 || count > 20 {
+		count = 10
+	}
+
+	if apiKey == "" || model == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "provider, model and api_key are required"})
+		return
+	}
+
+	batchID, generated, err := nexustribunal.ManualGenerateTribunalCases(s.db, provider, model, apiKey, count)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Pour générer manuellement des affaires Tribunal, utilisez le bouton sur la page dédiée 'Tribunal AI' (elle appelle l'endpoint avec provider/model/clé).",
+		"success":   true,
+		"batchId":   batchID,
+		"generated": generated,
+		"message":   fmt.Sprintf("%d affaires Tribunal générées.", generated),
 	})
 }
