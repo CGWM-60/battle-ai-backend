@@ -2359,6 +2359,70 @@ func normalizeTribunalCastAny(v any) any {
 	}
 }
 
+func evidenceStringID(e map[string]any) string {
+	for _, key := range []string{"evidenceId", "id", "sourceId", "title"} {
+		value := strings.TrimSpace(fmt.Sprint(e[key]))
+		if value != "" && value != "<nil>" {
+			return value
+		}
+	}
+	return "preuve"
+}
+
+func buildNarrativeEvidenceObjects(raw []map[string]any, ids []string) []gin.H {
+	allowed := map[string]bool{}
+	for _, id := range ids {
+		clean := strings.TrimSpace(id)
+		if clean != "" {
+			allowed[clean] = true
+		}
+	}
+	out := []gin.H{}
+	seen := map[string]bool{}
+	for _, e := range raw {
+		id := evidenceStringID(e)
+		if len(allowed) > 0 && !allowed[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, gin.H{
+			"id":           id,
+			"title":        defaultText(fmt.Sprint(e["title"]), strings.ReplaceAll(id, "_", " ")),
+			"description":  defaultText(fmt.Sprint(e["description"]), "Piece a conviction disponible pour comparaison."),
+			"evidenceType": defaultText(fmt.Sprint(e["evidenceType"]), "document"),
+			"assetId":      defaultText(fmt.Sprint(e["assetId"]), "tribunal.evidence.document"),
+			"strength":     intFromAny(e["strength"], 60),
+			"reliability":  intFromAny(e["reliability"], 70),
+			"supportsSide": defaultText(fmt.Sprint(e["supportsSide"]), "neutral"),
+		})
+	}
+	for _, id := range ids {
+		if id != "" && !seen[id] {
+			out = append(out, gin.H{
+				"id":           id,
+				"title":        strings.ReplaceAll(id, "_", " "),
+				"description":  "Piece a conviction referencee par la scene.",
+				"evidenceType": "document",
+				"assetId":      "tribunal.evidence.document",
+				"strength":     55,
+				"reliability":  60,
+				"supportsSide": "neutral",
+			})
+		}
+	}
+	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		clean := strings.TrimSpace(v)
+		if clean != "" && clean != "<nil>" {
+			return clean
+		}
+	}
+	return ""
+}
+
 // ==================== STORY / NARRATIVE HANDLERS (correctif Phoenix-like) ====================
 
 func (m *module) storyCurrent(c *gin.Context) {
@@ -2411,6 +2475,7 @@ func (m *module) storyCurrent(c *gin.Context) {
 	// Load full cast from generated actors or original generated case
 	var fullCast []gin.H
 	var genCase tribunalmodels.TribunalGeneratedCase
+	var generatedEvidence []map[string]any
 	if nc.GeneratedCaseID != nil {
 		if err := m.db.First(&genCase, *nc.GeneratedCaseID).Error; err == nil {
 			var castArr []map[string]any
@@ -2421,10 +2486,14 @@ func (m *module) storyCurrent(c *gin.Context) {
 			for _, c := range castArr {
 				fullCast = append(fullCast, gin.H{
 					"actorType":     c["actorType"],
+					"actorId":       firstNonEmpty(fmt.Sprint(c["actorId"]), fmt.Sprint(c["id"]), fmt.Sprint(c["name"])),
 					"name":          c["name"],
 					"personality":   c["personality"],
 					"avatarAssetId": normalizeTribunalAvatarAsset(fmt.Sprint(c["avatarAssetId"]), fmt.Sprint(c["actorType"])),
 				})
+			}
+			if len(genCase.EvidenceJSON) > 0 {
+				_ = json.Unmarshal(genCase.EvidenceJSON, &generatedEvidence)
 			}
 		}
 	}
@@ -2440,37 +2509,83 @@ func (m *module) storyCurrent(c *gin.Context) {
 	_ = m.db.Where("case_id = ?", item.ID).Limit(5).Find(&witnesses).Error
 	var evidences []TribunalEvidence
 	_ = m.db.Where("case_id = ?", item.ID).Limit(6).Find(&evidences).Error
+	availableEvidence := buildNarrativeEvidenceObjects(generatedEvidence, evs)
+	if len(availableEvidence) == 0 {
+		for _, ev := range evidences {
+			availableEvidence = append(availableEvidence, gin.H{
+				"id":           fmt.Sprint(ev.ID),
+				"title":        ev.Title,
+				"description":  ev.Description,
+				"evidenceType": ev.EvidenceType,
+				"assetId":      defaultText(ev.AssetID, "tribunal.evidence.document"),
+				"strength":     ev.Strength,
+				"reliability":  ev.Reliability,
+				"supportsSide": ev.SupportsSide,
+			})
+		}
+	}
 
 	// Build visible statements — use narrative text for meaningful content
 	visibleStmts := []gin.H{}
+	var sceneMeta map[string]any
+	_ = json.Unmarshal(sc.MetadataJSON, &sceneMeta)
+	statementTexts := map[string]gin.H{}
+	if rawStatements, ok := sceneMeta["visibleStatements"].([]any); ok {
+		for _, raw := range rawStatements {
+			if row, ok := raw.(map[string]any); ok {
+				sid := firstNonEmpty(fmt.Sprint(row["statementId"]), fmt.Sprint(row["id"]))
+				if sid != "" {
+					statementTexts[sid] = gin.H{
+						"id":             sid,
+						"content":        firstNonEmpty(fmt.Sprint(row["text"]), fmt.Sprint(row["content"])),
+						"speakerActorId": firstNonEmpty(fmt.Sprint(row["speakerActorId"]), fmt.Sprint(row["actorId"])),
+					}
+				}
+			}
+		}
+	}
 	if len(stmts) > 0 {
 		for i, sid := range stmts {
-			content := sc.NarrativeText
-			if content == "" {
-				content = fmt.Sprintf("Déclaration %s", sid)
+			content := fmt.Sprintf("Déclaration %d à examiner", i+1)
+			speakerActorID := ""
+			if statementTexts[sid] != nil {
+				if txt := strings.TrimSpace(fmt.Sprint(statementTexts[sid]["content"])); txt != "" && txt != "<nil>" {
+					content = txt
+				}
+				speakerActorID = firstNonEmpty(fmt.Sprint(statementTexts[sid]["speakerActorId"]))
 			}
-			visibleStmts = append(visibleStmts, gin.H{"id": sid, "content": content, "isAttackable": true, "index": i})
+			if len(stmts) == 1 && sc.NarrativeText != "" {
+				content = sc.NarrativeText
+			}
+			visibleStmts = append(visibleStmts, gin.H{"id": sid, "content": content, "speakerActorId": speakerActorID, "isAttackable": true, "index": i})
 		}
 	} else if sc.NarrativeText != "" {
 		visibleStmts = append(visibleStmts, gin.H{"id": sc.SceneID, "content": sc.NarrativeText, "isAttackable": false, "index": 0})
 	}
+	if len(actors) == 0 && len(visibleStmts) > 0 {
+		if speaker := strings.TrimSpace(fmt.Sprint(visibleStmts[0]["speakerActorId"])); speaker != "" && speaker != "<nil>" {
+			actors = []string{speaker}
+		}
+	}
 
 	respondOK(c, gin.H{
-		"caseId":            item.ID,
-		"narrativeCaseId":   nc.ID,
-		"title":             item.Title,
-		"currentPhase":      item.CurrentPhase,
-		"sceneId":           sc.SceneID,
-		"actTitle":          fmt.Sprintf("Acte %d", sc.ActIndex),
-		"sceneTitle":        sc.Title,
-		"objective":         sc.Objective,
-		"sceneType":         sc.SceneType,
-		"narrativeText":     sc.NarrativeText,
-		"activeWitness":     gin.H{"name": "Témoin en cours", "assetId": "tribunal.character.witness_default"},
-		"actors":            fullCast, // full objects now
-		"visibleStatements": visibleStmts,
-		"availableEvidence": evidences,
-		"allowedActions":    allowed,
+		"caseId":               item.ID,
+		"narrativeCaseId":      nc.ID,
+		"title":                item.Title,
+		"currentPhase":         item.CurrentPhase,
+		"sceneId":              sc.SceneID,
+		"actTitle":             fmt.Sprintf("Acte %d", sc.ActIndex),
+		"sceneTitle":           sc.Title,
+		"objective":            sc.Objective,
+		"sceneType":            sc.SceneType,
+		"narrativeText":        sc.NarrativeText,
+		"activeActorIds":       actors,
+		"activeWitness":        gin.H{"name": firstNonEmpty(strings.Join(actors, ", "), "Témoin en cours"), "assetId": "tribunal.character.witness_default"},
+		"actors":               fullCast, // full objects now
+		"visibleStatements":    visibleStmts,
+		"availableEvidence":    availableEvidence,
+		"availableEvidenceIds": evs,
+		"allowedActions":       allowed,
 		"scores": gin.H{
 			"defense": item.DefenseScore, "accusation": item.AccusationScore,
 			"pressure": item.Pressure, "witnessCredibility": 72,
@@ -2480,10 +2595,12 @@ func (m *module) storyCurrent(c *gin.Context) {
 		"narrativeMode": true,
 		"nextSceneId":   sc.NextSceneID,
 		"fullScene": gin.H{ // extra for rich UI
-			"cast":           fullCast,
-			"objective":      sc.Objective,
-			"narrativeText":  sc.NarrativeText,
-			"allowedActions": allowed,
+			"cast":                 fullCast,
+			"objective":            sc.Objective,
+			"narrativeText":        sc.NarrativeText,
+			"allowedActions":       allowed,
+			"activeActorIds":       actors,
+			"availableEvidenceIds": evs,
 		},
 	})
 }
@@ -2563,6 +2680,15 @@ func (m *module) storyAction(c *gin.Context) {
 			_ = m.db.Save(&nc).Error
 		}
 	}
+	var sceneEvidenceIDs, sceneStatementIDs []string
+	_ = json.Unmarshal(sc.AvailableEvidenceIDsJSON, &sceneEvidenceIDs)
+	_ = json.Unmarshal(sc.VisibleStatementIDsJSON, &sceneStatementIDs)
+	if payload.StatementId == "" && len(sceneStatementIDs) > 0 {
+		payload.StatementId = sceneStatementIDs[0]
+	}
+	if payload.EvidenceId == "" && len(sceneEvidenceIDs) > 0 {
+		payload.EvidenceId = sceneEvidenceIDs[0]
+	}
 
 	// Try to find matching ProgressionRule (precise workflow)
 	var rule tribunalmodels.TribunalProgressionRule
@@ -2640,7 +2766,9 @@ func (m *module) storyAction(c *gin.Context) {
 		case "ai_analysis", "ask_hint":
 			success = true
 			resultType = "guided_hint"
-			narrativeResult = "L'analyse IA isole les points à comparer: déclaration ciblée, preuve disponible, puis objection si le lien est solide."
+			targetStatement := firstNonEmpty(payload.StatementId, "la déclaration sélectionnée")
+			targetEvidence := firstNonEmpty(payload.EvidenceId, "la preuve sélectionnée")
+			narrativeResult = fmt.Sprintf("Analyse IA - %s: comparez %s avec %s. Si le lien contredit directement le temoignage, utilisez Objecter; sinon utilisez Presenter pour l'ajouter au dossier.", sc.Title, strings.ReplaceAll(targetStatement, "_", " "), strings.ReplaceAll(targetEvidence, "_", " "))
 			defenseDelta = 0
 			pressureDelta = 0
 		case "inspect", "inspect_evidence", "compare_evidence":
@@ -2653,6 +2781,24 @@ func (m *module) storyAction(c *gin.Context) {
 			}
 			defenseDelta = 1
 			pressureDelta = 0
+		case "present_evidence":
+			success = true
+			resultType = "evidence_presented"
+			narrativeResult = fmt.Sprintf("La piece %s est presentee au tribunal. Elle est ajoutee au raisonnement mais ne declenche pas encore de contradiction critique.", strings.ReplaceAll(firstNonEmpty(payload.EvidenceId, "selectionnee"), "_", " "))
+			defenseDelta = 2
+			pressureDelta = 1
+		case "objection":
+			success = true
+			resultType = "objection_review"
+			narrativeResult = fmt.Sprintf("Objection examinee sur %s avec %s. Le tribunal demande un lien plus direct pour une contradiction decisive.", strings.ReplaceAll(firstNonEmpty(payload.StatementId, "la declaration"), "_", " "), strings.ReplaceAll(firstNonEmpty(payload.EvidenceId, "la preuve"), "_", " "))
+			defenseDelta = 1
+			pressureDelta = 2
+		case "expose_lie":
+			success = true
+			resultType = "lie_pressure"
+			narrativeResult = fmt.Sprintf("La contradiction potentielle est mise en avant. Il faut encore confirmer le lien entre %s et %s.", strings.ReplaceAll(firstNonEmpty(payload.StatementId, "la declaration"), "_", " "), strings.ReplaceAll(firstNonEmpty(payload.EvidenceId, "la preuve"), "_", " "))
+			defenseDelta = 3
+			pressureDelta = 3
 		case "continue_story":
 			success = true
 			resultType = "scene_hold"
@@ -2903,6 +3049,12 @@ func (m *module) loadNarrativeCase(c *gin.Context) {
 		}
 		if b, e := json.Marshal(s["allowedActions"]); e == nil {
 			sc.AllowedActionsJSON = datatypes.JSON(b)
+		}
+		if b, e := json.Marshal(gin.H{
+			"visibleStatements": s["visibleStatements"],
+			"speakerActorId":    s["speakerActorId"],
+		}); e == nil {
+			sc.MetadataJSON = datatypes.JSON(b)
 		}
 		_ = m.db.Create(&sc).Error
 	}

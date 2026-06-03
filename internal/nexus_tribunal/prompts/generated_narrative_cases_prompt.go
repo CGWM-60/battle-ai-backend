@@ -35,7 +35,10 @@ Structure EXACTE de l'affaire (objet JSON racine, pas de "cases"):
   "publicTruth": "ce que l'opinion publique croit",
   "finalReveal": "la révélation finale",
   "cast": [
-    {"actorType":"judge|prosecutor|defense_attorney|witness|expert_witness|assistant|clerk|jury_logic|jury_emotional|jury_expert|...", "name":"...", "personality":"...", "avatarAssetId":"ID_MANIFEST_AUTORISE_UNIQUEMENT"}
+    {"actorId":"acteur_slug_unique", "actorType":"judge|prosecutor|defense_attorney|witness|expert_witness|assistant|clerk|jury_logic|jury_emotional|jury_expert|...", "name":"...", "personality":"...", "avatarAssetId":"ID_MANIFEST_AUTORISE_UNIQUEMENT"}
+  ],
+  "evidence": [
+    {"evidenceId":"preuve_slug_unique", "title":"titre français", "description":"description claire en français", "evidenceType":"document|log|image|audio|video|biometric_log", "strength":70, "reliability":80, "supportsSide":"defense|accusation|neutral", "assetId":"tribunal.evidence.document"}
   ],
   "acts": [{"actIndex":1,"title":"...","objective":"...","summary":"..."}],
   "scenes": [
@@ -46,11 +49,14 @@ Structure EXACTE de l'affaire (objet JSON racine, pas de "cases"):
       "sceneType": "intro|briefing|witness_testimony|cross_examination|crisis|reveal|final_plea|verdict",
       "title": "...",
       "objective": "...",
-      "narrativeText": "...",
-      "activeWitnessId": "nom du témoin ou null",
-      "activeActorIds": ["..."],
-      "availableEvidenceIds": ["..."],
-      "visibleStatementIds": ["..."],
+      "narrativeText": "texte de dialogue/narration en français, jamais en anglais",
+      "activeWitnessId": "actorId du témoin actif ou null",
+      "activeActorIds": ["actorId exact depuis cast"],
+      "availableEvidenceIds": ["evidenceId exact depuis evidence"],
+      "visibleStatementIds": ["stmt_..."],
+      "visibleStatements": [
+        {"statementId":"stmt_...", "speakerActorId":"actorId exact depuis cast", "text":"déclaration complète en français"}
+      ],
       "allowedActions": ["press","present_evidence","objection","ai_analysis","ask_hint","expose_lie","continue_story"],
       "nextSceneId": "..." ou null
     }
@@ -118,6 +124,17 @@ VERROU ASSETS PERSONNAGES:
   jury_emotional -> tribunal.character.jury_emotional
   jury_expert -> tribunal.character.jury_expert
   witness -> un witness_* adapté; si doute -> tribunal.character.witness_default
+
+VERROU INTERLOCUTEUR / DIALOGUE:
+- Chaque entree de cast doit avoir "actorId" stable, court, unique, sans espace.
+- Chaque scene doit avoir "activeActorIds" avec au moins un "actorId" exact du cast.
+- "activeWitnessId" doit etre un "actorId", pas un nom libre.
+- "narrativeText" doit correspondre a ce que dit ou presente l'interlocuteur actif de la scene.
+- Tous les textes visibles par le joueur doivent etre en francais. Pas d'anglais dans titres, declarations, preuves, objectifs, resultats.
+- Chaque "availableEvidenceIds[]" doit exister dans "evidence[].evidenceId".
+- Chaque "visibleStatementIds[]" doit exister dans "visibleStatements[].statementId".
+- Chaque "visibleStatements[].speakerActorId" doit etre un "actorId" exact du cast.
+- Chaque "visibleStatements[].text" doit etre une declaration jouable en francais, pas un identifiant technique.
 
 Génère l'objet JSON complet pour le niveau %d. JSON strict uniquement, rien d'autre.`, level, level, level, level)
 
