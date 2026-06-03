@@ -580,14 +580,26 @@ func (m *module) aiAnalysis(c *gin.Context) {
 		return
 	}
 	evidence, witnesses := m.caseEvidenceWitnesses(item.ID, item.OwnerID)
+
+	// Try real AI advisory via adapter for richer analysis
+	adapter := tribunaladapters.NewAIProviderAdapter(providerEnvKey)
+	aiText := ""
+	if resp, aerr := adapter.Generate(c.Request.Context(), tribunaladapters.GenerateRequest{
+		ProviderType: item.ProviderType,
+		Model:        item.ProviderModel,
+		LocalEndpoint: item.LocalEndpoint,
+		SystemPrompt: "Tu es un analyste de tribunal IA cyberpunk. Donne 2-3 suggestions courtes et precises pour le joueur en fonction du contexte de l'affaire, des scores et des preuves.",
+		Prompt: fmt.Sprintf("Affaire: %s. Defense:%d Accusation:%d Pression:%d. %d preuves, %d temoins. Sujets: %s vs %s. Reponds en 2 bullets max.", item.Title, item.DefenseScore, item.AccusationScore, item.Pressure, len(evidence), len(witnesses), item.DefensePosition, item.AccusationPosition),
+	}); aerr == nil {
+		aiText = strings.TrimSpace(resp.Text)
+	}
+	if aiText == "" {
+		aiText = fmt.Sprintf("Analyse consultative : %d preuve(s), %d temoin(s), pression %d. La defense doit cibler les phrases attaquables et l'accusation doit proteger les preuves fortes.", len(evidence), len(witnesses), item.Pressure)
+	}
+
 	respondOK(c, gin.H{
 		"caseId": item.ID,
-		"analysis": fmt.Sprintf(
-			"Analyse consultative : %d preuve(s), %d temoin(s), pression %d. La defense doit cibler les phrases attaquables et l'accusation doit proteger les preuves fortes.",
-			len(evidence),
-			len(witnesses),
-			item.Pressure,
-		),
+		"analysis": aiText,
 		"advisoryOnly": true,
 	})
 }
@@ -739,12 +751,34 @@ func (m *module) seedStatements(item TribunalCase, witness TribunalWitness) erro
 	if count > 0 {
 		return nil
 	}
+
+	// Attempt real AI generation via adapter for dynamic, case-specific testimony
+	adapter := tribunaladapters.NewAIProviderAdapter(providerEnvKey)
+	aiPrompt := fmt.Sprintf("Genere 4 phrases de temoignage courtes (1 ligne chacune), attackables, pour un temoin '%s' (%s) dans l'affaire '%s'. Contexte: accusation '%s', defense '%s'. Retourne uniquement les 4 lignes separees par | sans numerotation ni explication.", witness.Name, witness.Role, item.Title, item.AccusationPosition, item.DefensePosition)
 	lines := []string{
 		"J'ai consulte les journaux avant que le protocole ne verrouille le dossier.",
 		"L'horodatage principal indiquait une sequence stable, sans anomalie apparente.",
 		"Je n'ai vu aucun acces externe pendant la fenetre critique.",
 		"Si contradiction il y a, elle vient probablement d'un journal secondaire.",
 	}
+	if resp, aerr := adapter.Generate(context.Background(), tribunaladapters.GenerateRequest{
+		ProviderType:  item.ProviderType,
+		Model:         item.ProviderModel,
+		LocalEndpoint: item.LocalEndpoint,
+		SystemPrompt:  "Tu es un greffier IA qui produit des declarations de temoin coherentes et contradictoires potentielles pour un tribunal cyberpunk. Reponds strictement au format demande.",
+		Prompt:        aiPrompt,
+	}); aerr == nil && strings.TrimSpace(resp.Text) != "" {
+		parts := strings.Split(strings.TrimSpace(resp.Text), "|")
+		if len(parts) >= 3 {
+			lines = []string{}
+			for _, p := range parts {
+				if t := strings.TrimSpace(p); t != "" {
+					lines = append(lines, t)
+				}
+			}
+		}
+	}
+
 	for index, line := range lines {
 		statement := TribunalStatement{
 			CaseID: item.ID, OwnerID: item.OwnerID, WitnessID: witness.ID, Content: line,
