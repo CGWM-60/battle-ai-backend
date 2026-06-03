@@ -1525,6 +1525,7 @@ func (m *module) getGeneratedCase(c *gin.Context) {
 		"id":                       g.ID,
 		"title":                    g.Title,
 		"summary":                  g.Summary,
+		"synopsis":                 g.Summary, // for clients expecting the AI field name
 		"caseType":                 g.CaseType,
 		"level":                    g.Level,
 		"difficulty":               g.Difficulty,
@@ -1978,7 +1979,12 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		rec := tribunalmodels.TribunalGeneratedCase{
 			GenerationBatchID:          batch.ID,
 			Title:                      title,
-			Summary:                    fmt.Sprint(raw["summary"]),
+			Summary:                    func() string {
+			if s := fmt.Sprint(raw["synopsis"]); s != "" && s != "<nil>" && s != "map[]" {
+				return s
+			}
+			return fmt.Sprint(raw["summary"])
+		}(),
 			CaseType:                   defaultText(fmt.Sprint(raw["caseType"]), "custom"),
 			Level:                      clampInt(intFromAny(raw["level"], 1), 1, 10),
 			Difficulty:                 defaultText(fmt.Sprint(raw["difficulty"]), "standard"),
@@ -2021,6 +2027,10 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 			ProgressionRulesCount:  prCount,
 			HasPossibleVerdicts:    hasVerdicts,
 			HasNexusBridge:         hasNexus,
+		}
+		// Persist the COMPLETE original AI JSON so nothing is lost (synopsis, full evidence if any, extra hints, etc.)
+		if full, merr := json.Marshal(raw); merr == nil && len(full) > 2 {
+			rec.StoryScriptJSON = datatypes.JSON(full)
 		}
 		if cerr := db.Create(&rec).Error; cerr == nil {
 			generated++

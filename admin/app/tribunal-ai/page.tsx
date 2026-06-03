@@ -36,39 +36,49 @@ export default function TribunalAIPage() {
     // Use the tribunal public list (auth protected) + batches via admin api if available, fallback to direct
     Promise.all([
       fetch("/api/nexus-tribunal/generated-cases?limit=100", { credentials: "same-origin" }).then(r => r.json()),
+      fetch("/api/nexus-tribunal/generated-cases/narrative?limit=100", { credentials: "same-origin" }).then(r => r.json().catch(() => null)), // full narrative data (scenes, cast, rules, synopsis etc)
       fetch("/admin/api/tribunal-generated", { credentials: "same-origin" }).then(r => r.json().catch(() => null)),
       fetch("/api/nexus-tribunal/admin/generated-cases/narrative-stats", { credentials: "same-origin" }).then(r => r.json().catch(() => null)),
-    ]).then(([listPayload, adminPayload, narrStats]) => {
+    ]).then(([listPayload, narrListPayload, adminPayload, narrStats]) => {
       if (narrStats) setNarrativeStats(narrStats);
-      const cases: TribunalGeneratedCaseAdmin[] = (adminPayload?.cases || listPayload?.data || []).map((c: any) => ({
-        id: c.id,
-        createdAt: c.createdAt || c.CreatedAt,
-        title: c.title,
-        summary: c.summary,
-        caseType: c.caseType,
-        level: c.level,
-        difficulty: c.difficulty,
-        estimatedDurationMinutes: c.estimatedDurationMinutes,
-        mode: c.mode,
-        tone: c.tone,
-        playerRoleSuggestion: c.playerRoleSuggestion,
-        accusationPosition: c.accusationPosition,
-        defensePosition: c.defensePosition,
-        tags: c.tags || [],
-        witnesses: c.witnesses || [],
-        evidence: c.evidence || [],
-        testimonyStatements: c.testimonyStatements || c["testimonyStatements"] || [],
-        expectedContradictions: c.expectedContradictions || c["expectedContradictions"] || [],
-        status: c.status,
-        isPlayable: c.isPlayable,
-        isPublished: c.isPublished,
-        generatedByCron: c.generatedByCron,
-        providerType: c.providerType,
-        providerModel: c.model || c.providerModel,
-        generationBatchID: c.generationBatchID || c.GenerationBatchID,
-        // Preserve full narrative data for the detail view
-        ...c, // cast, acts, scenes, progressionRules, failureRules, realTruth, etc. will be available
-      }));
+      const baseCases = (adminPayload?.cases || listPayload?.data || []);
+      const narrCases = (narrListPayload?.cases || narrListPayload?.data || []);
+      const narrById = new Map<number, any>();
+      for (const nc of narrCases) { if (nc && (nc.id != null)) narrById.set(Number(nc.id), nc); }
+      const cases: TribunalGeneratedCaseAdmin[] = baseCases.map((c: any) => {
+        const id = Number(c.id);
+        const rich = narrById.get(id) || {};
+        return {
+          id: id,
+          createdAt: c.createdAt || c.CreatedAt || rich.createdAt,
+          title: c.title || rich.title || rich.Title,
+          summary: c.summary || rich.summary || rich.Summary || rich.synopsis,
+          caseType: c.caseType || rich.caseType,
+          level: c.level || rich.level,
+          difficulty: c.difficulty || rich.difficulty,
+          estimatedDurationMinutes: c.estimatedDurationMinutes || rich.estimatedDurationMinutes,
+          mode: c.mode || rich.mode,
+          tone: c.tone || rich.tone,
+          playerRoleSuggestion: c.playerRoleSuggestion || rich.playerRoleSuggestion,
+          accusationPosition: c.accusationPosition || rich.accusationPosition,
+          defensePosition: c.defensePosition || rich.defensePosition,
+          tags: c.tags || rich.tags || [],
+          witnesses: c.witnesses || rich.witnesses || [],
+          evidence: c.evidence || rich.evidence || [],
+          testimonyStatements: c.testimonyStatements || c["testimonyStatements"] || rich.testimonyStatements || [],
+          expectedContradictions: c.expectedContradictions || c["expectedContradictions"] || rich.expectedContradictions || [],
+          status: c.status || rich.status,
+          isPlayable: c.isPlayable ?? rich.isPlayable ?? true,
+          isPublished: c.isPublished ?? rich.isPublished ?? true,
+          generatedByCron: c.generatedByCron ?? rich.generatedByCron,
+          providerType: c.providerType || rich.providerType,
+          providerModel: c.model || c.providerModel || rich.model || rich.providerModel,
+          generationBatchID: c.generationBatchID || c.GenerationBatchID || rich.generationBatchID,
+          // Full rich narrative from dedicated narrative list (cast, acts, scenes, rules, truths, synopsis, counts, etc.)
+          ...rich,
+          ...c,
+        };
+      });
       const batches = adminPayload?.batches || [];
       const stats = adminPayload?.stats || { totalGenerated: cases.length, published: cases.filter(c => c.isPublished).length };
       setData({ cases, batches, stats });
@@ -297,81 +307,143 @@ function TribunalCaseDetail({ cas }: { cas: TribunalGeneratedCaseAdmin | null })
 
   const anyCas = cas as any;
 
-  const cast = anyCas.cast || anyCas.Cast || anyCas.characterCast || [];
-  const acts = anyCas.acts || anyCas.Acts || [];
-  const scenes = anyCas.scenes || anyCas.Scenes || [];
-  const progRules = anyCas.progressionRules || anyCas.ProgressionRules || [];
-  const failRules = anyCas.failureRules || anyCas.FailureRules || [];
-  const crisis = anyCas.crisisMoment || anyCas.CrisisMoment;
+  const cast = anyCas.cast || anyCas.Cast || anyCas.characterCast || anyCas.CharacterCast || [];
+  const acts = anyCas.acts || anyCas.Acts || anyCas.actsJson || [];
+  const scenes = anyCas.scenes || anyCas.Scenes || anyCas.scenesJson || [];
+  const progRules = anyCas.progressionRules || anyCas.ProgressionRules || anyCas.progressionRulesJson || [];
+  const failRules = anyCas.failureRules || anyCas.FailureRules || anyCas.failureRulesJson || [];
+  const crisis = anyCas.crisisMoment || anyCas.CrisisMoment || anyCas.crisis || null;
   const verdicts = anyCas.possibleVerdicts || anyCas.PossibleVerdicts || [];
-  const epilogue = anyCas.epilogue || anyCas.Epilogue || anyCas.finalReveal || "";
-  const nexus = anyCas.nexusBridgeHints || anyCas.NexusBridgeHints || [];
-  const realTruth = anyCas.realTruth || anyCas.RealTruth || "";
-  const publicTruth = anyCas.publicTruth || anyCas.PublicTruth || "";
+  const epilogue = anyCas.epilogue || anyCas.Epilogue || anyCas.finalReveal || anyCas.FinalReveal || "";
+  const nexus = anyCas.nexusBridgeHints || anyCas.NexusBridgeHints || anyCas.nexus || [];
+  const realTruth = anyCas.realTruth || anyCas.RealTruth || anyCas.realtruth || "";
+  const publicTruth = anyCas.publicTruth || anyCas.PublicTruth || anyCas.publictruth || "";
+  const synopsis = anyCas.synopsis || anyCas.Synopsis || anyCas.summary || anyCas.Summary || cas.summary || "";
+
+  // Full raw for verification (if storyScript or full object was stored)
+  const fullRaw = anyCas.storyScript || anyCas.StoryScript || anyCas.full || null;
 
   return (
-    <aside className="panel rp-detail" style={{ maxHeight: '82vh', overflowY: 'auto', fontSize: '0.82em' }}>
+    <aside className="panel rp-detail" style={{ maxHeight: '82vh', overflowY: 'auto', fontSize: '0.82em', color: '#e2e8f0' }}>
       <header>
         <span className={`status ${cas.status}`}>{cas.status}</span>
-        <h2>#{cas.id} — Niv.{cas.level} ({cas.difficulty}) — {cas.title}</h2>
-        <p style={{ margin: '4px 0' }}>{cas.summary || anyCas.synopsis || anyCas.Synopsis}</p>
+        <h2 style={{ color: '#67e8f9' }}>#{cas.id} — Niv.{cas.level} ({cas.difficulty || 'standard'}) — {cas.title || anyCas.Title}</h2>
+        <p style={{ margin: '4px 0', color: '#cbd5e1' }}>{synopsis}</p>
       </header>
 
-      <div className="rp-edit-strip" style={{ fontSize: '0.78em', gap: '4px 12px' }}>
-        <div><strong>Mode:</strong> {cas.mode}</div>
-        <div><strong>Provider:</strong> {cas.providerType}/{cas.providerModel}</div>
-        <div><strong>Durée:</strong> {cas.estimatedDurationMinutes}min</div>
-        <div><strong>Batch:</strong> {cas.generationBatchID || '-'}</div>
-        <div><strong>Cron:</strong> {cas.generatedByCron ? 'oui' : 'manuel'}</div>
+      <div className="rp-edit-strip" style={{ fontSize: '0.78em', gap: '4px 12px', background: 'rgba(15,23,42,0.6)', padding: '4px 8px', borderRadius: 4 }}>
+        <div><strong>Mode:</strong> {cas.mode || anyCas.mode}</div>
+        <div><strong>Provider:</strong> {cas.providerType || anyCas.providerType}/{cas.providerModel || anyCas.model || anyCas.providerModel}</div>
+        <div><strong>Durée:</strong> {(cas.estimatedDurationMinutes || anyCas.estimatedDurationMinutes || 0)}min</div>
+        <div><strong>Batch:</strong> {cas.generationBatchID || anyCas.generationBatchID || anyCas.GenerationBatchID || '-'}</div>
+        <div><strong>Cron:</strong> {(cas.generatedByCron || anyCas.generatedByCron) ? 'oui' : 'manuel'}</div>
       </div>
 
-      {realTruth && <div style={{ marginTop: 6 }}><strong>Vérité réelle:</strong> <span style={{ opacity: .85 }}>{realTruth}</span></div>}
-      {publicTruth && <div><strong>Vérité publique:</strong> <span style={{ opacity: .85 }}>{publicTruth}</span></div>}
+      {realTruth && <div style={{ marginTop: 6 }}><strong>Vérité réelle:</strong> <span style={{ opacity: .9, color: '#f1f5f9' }}>{realTruth}</span></div>}
+      {publicTruth && <div><strong>Vérité publique:</strong> <span style={{ opacity: .9, color: '#f1f5f9' }}>{publicTruth}</span></div>}
 
-      {/* Cast */}
+      {/* Full Cast with personality + avatar */}
       {cast.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <strong>Cast ({cast.length})</strong>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 4, marginTop: 2 }}>
             {cast.map((a: any, i: number) => (
-              <span key={i} style={{ background: '#222', padding: '1px 6px', borderRadius: 3, fontSize: '0.75em' }}>
-                {a.actorType}: <strong>{a.name}</strong>
-              </span>
+              <div key={i} style={{ background: '#1e2937', padding: '4px 6px', borderRadius: 3, fontSize: '0.72em', border: '1px solid #334155' }}>
+                <div><span style={{ color: '#67e8f9' }}>{a.actorType || a.ActorType}</span>: <strong>{a.name || a.Name}</strong></div>
+                {a.personality && <div style={{ opacity: .8, fontSize: '0.95em' }}>perso: {a.personality}</div>}
+                {a.avatarAssetId && <div style={{ opacity: .6, fontSize: '0.9em' }}>asset: {a.avatarAssetId}</div>}
+              </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* Acts & Scenes summary */}
-      {(acts.length > 0 || scenes.length > 0) && (
+      {/* Acts full */}
+      {acts.length > 0 && (
+        <div style={{ marginTop: 8 }}>
+          <strong>Actes ({acts.length})</strong>
+          <div style={{ fontSize: '0.72em', marginTop: 2 }}>
+            {acts.map((a: any, i: number) => (
+              <div key={i} style={{ background: '#1e2937', padding: '3px 6px', borderRadius: 2, marginBottom: 2 }}>
+                Act {a.actIndex || a.ActIndex}: <strong>{a.title || a.Title}</strong><br />
+                <span style={{ opacity: .85 }}>Obj: {a.objective || a.Objective || a.summary || ''}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Full Scenes list (no truncation) */}
+      {scenes.length > 0 && (
         <div style={{ marginTop: 6 }}>
-          <strong>Structure</strong> — {acts.length} acte(s), {scenes.length} scène(s)
-          <div style={{ fontSize: '0.72em', marginTop: 2, maxHeight: 90, overflow: 'auto', background: '#111', padding: 4, borderRadius: 2 }}>
-            {scenes.slice(0, 6).map((s: any, i: number) => (
-              <div key={i}>{s.sceneId} [{s.sceneType}] {s.title}</div>
+          <strong>Scènes ({scenes.length})</strong>
+          <div style={{ fontSize: '0.68em', marginTop: 2, maxHeight: 160, overflow: 'auto', background: '#0f172a', color: '#e0f2fe', padding: 4, borderRadius: 3, border: '1px solid #1e3a5f' }}>
+            {scenes.map((s: any, i: number) => (
+              <div key={i} style={{ marginBottom: 3, borderBottom: '1px dashed #334155', paddingBottom: 2 }}>
+                <strong>{s.sceneId || s.SceneID}</strong> [{s.sceneType || s.SceneType}] {s.title || s.Title}<br />
+                <span style={{ opacity: .9 }}>obj: {s.objective || s.Objective}</span>
+                {s.narrativeText && <div style={{ opacity: .75, fontSize: '0.95em', marginTop: 1 }}>narr: {(s.narrativeText || '').substring(0, 120)}{(s.narrativeText || '').length > 120 ? '…' : ''}</div>}
+              </div>
             ))}
-            {scenes.length > 6 && <div>... +{scenes.length - 6}</div>}
           </div>
         </div>
       )}
 
-      {/* Rules */}
-      <div style={{ marginTop: 6, fontSize: '0.78em' }}>
-        <strong>Règles</strong>: {progRules.length} progression (dont {progRules.filter((r: any) => r.isCritical).length} critiques) / {failRules.length} échecs
-      </div>
+      {/* Full Progression Rules with details */}
+      {progRules.length > 0 && (
+        <div style={{ marginTop: 6, fontSize: '0.72em' }}>
+          <strong>ProgressionRules ({progRules.length})</strong>
+          <div style={{ background: '#0f172a', padding: 4, borderRadius: 3, maxHeight: 140, overflow: 'auto', border: '1px solid #1e3a5f' }}>
+            {progRules.map((r: any, i: number) => (
+              <div key={i} style={{ marginBottom: 4, paddingBottom: 3, borderBottom: '1px dashed #475569' }}>
+                {r.sceneId || r.SceneID} — {r.triggerAction || r.TriggerAction} {r.requiredEvidenceId ? `+ev:${r.requiredEvidenceId}` : ''}{r.requiredStatementId ? `+stmt:${r.requiredStatementId}` : ''} {r.isCritical ? '(critique)' : ''}<br />
+                <span style={{ color: '#67e8f9' }}>{r.narrativeResult || r.NarrativeResult}</span><br />
+                <span style={{ opacity: .7 }}>effects: {JSON.stringify(r.scoreEffects || r.ScoreEffects || {})}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
-      {crisis && <div style={{ marginTop: 4 }}><strong>Crisis:</strong> {crisis.sceneId} — {crisis.trigger}</div>}
-      {verdicts.length > 0 && <div><strong>Verdicts:</strong> {verdicts.join(', ')}</div>}
-      {epilogue && <div style={{ marginTop: 4, fontSize: '0.78em' }}><strong>Épilogue:</strong> {epilogue}</div>}
+      {/* Failure Rules */}
+      {failRules.length > 0 && (
+        <div style={{ marginTop: 4, fontSize: '0.72em' }}>
+          <strong>FailureRules ({failRules.length})</strong>
+          <div style={{ background: '#1e2937', padding: 3, borderRadius: 2 }}>
+            {failRules.map((f: any, i: number) => (
+              <div key={i}>{f.sceneId || f.SceneID} — {f.triggerAction || f.TriggerAction} : {f.hintText || f.HintText || f.penaltyType}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Crisis full */}
+      {crisis && (
+        <div style={{ marginTop: 4, fontSize: '0.72em', background: '#3f2a1e', padding: 4, borderRadius: 3 }}>
+          <strong>Crisis:</strong> {crisis.sceneId || crisis.SceneID} — trigger: {crisis.trigger || crisis.Trigger}<br />
+          effect: {crisis.effect || crisis.Effect}
+        </div>
+      )}
+
+      {verdicts.length > 0 && <div style={{ marginTop: 4 }}><strong>Possible verdicts:</strong> {verdicts.join(', ')}</div>}
+      {epilogue && <div style={{ marginTop: 4, fontSize: '0.72em' }}><strong>Épilogue:</strong> {epilogue}</div>}
 
       {nexus.length > 0 && (
-        <div style={{ marginTop: 4, fontSize: '0.75em' }}>
-          <strong>Nexus hints:</strong> {nexus.map((h: any) => `${h.type}→${h.targetId || h.delta}`).join(' ; ')}
+        <div style={{ marginTop: 4, fontSize: '0.7em' }}>
+          <strong>Nexus hints:</strong> {nexus.map((h: any) => `${h.type || h.Type}→${h.targetId || h.TargetId || h.delta}`).join(' ; ')}
         </div>
       )}
 
-      <div style={{ marginTop: 10, fontSize: '0.7em', opacity: 0.6, borderTop: '1px solid #333', paddingTop: 4 }}>
-        Données complètes (1-by-1 generation). Sélectionnez dans le tableau pour rafraîchir.
+      {/* Raw full JSON for verification that everything was inserted */}
+      {fullRaw && (
+        <details style={{ marginTop: 8, fontSize: '0.65em' }}>
+          <summary style={{ cursor: 'pointer', color: '#67e8f9' }}>JSON brut complet (vérification insertion)</summary>
+          <pre style={{ background: '#0b0f1a', color: '#94a3b8', padding: 6, borderRadius: 3, maxHeight: 200, overflow: 'auto', whiteSpace: 'pre-wrap' }}>{typeof fullRaw === 'string' ? fullRaw : JSON.stringify(fullRaw, null, 2)}</pre>
+        </details>
+      )}
+
+      <div style={{ marginTop: 10, fontSize: '0.65em', opacity: 0.6, borderTop: '1px solid #334155', paddingTop: 4, color: '#64748b' }}>
+        Données complètes 1-by-1 (cast complet + scènes + règles + crisis + épilogue + vérités). Tout est inséré depuis le JSON IA.
       </div>
     </aside>
   );
