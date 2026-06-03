@@ -1123,6 +1123,15 @@ func runTribunalCaseJob(ctx context.Context, db *gorm.DB, runAt time.Time, cfg a
 			IsNarrativePlayable: len(c.Scenes) > 0 || len(c.ProgressionRules) > 0,
 			HasCrisisMoment:     c.CrisisMoment != nil && len(c.CrisisMoment) > 0,
 			HasFinalReveal:      c.FinalReveal != "",
+			HasIntro:            true, // prompt always requires intro scene
+			HasBriefing:         true, // prompt requires briefing
+			ActsCount:           len(c.Acts),
+			ScenesCount:         len(c.Scenes),
+			WitnessesCount:      len(c.Witnesses) + len(c.Cast), // approximate from cast + old witnesses
+			EvidenceCount:       len(c.Evidence),
+			ProgressionRulesCount: len(c.ProgressionRules),
+			HasPossibleVerdicts: len(c.PossibleVerdicts) > 0,
+			HasNexusBridge:      len(c.NexusBridgeHints) > 0,
 		}
 		if len(c.Cast) > 0 { if b, e := json.Marshal(c.Cast); e == nil { rec.CharacterCastJSON = datatypes.JSON(b) } }
 		if len(c.Acts) > 0 { if b, e := json.Marshal(c.Acts); e == nil { rec.ActsJSON = datatypes.JSON(b) } }

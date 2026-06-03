@@ -51,6 +51,17 @@ type TribunalGeneratedCase struct {
 	HasCrisisMoment      bool           `json:"hasCrisisMoment"`
 	HasFinalReveal       bool           `json:"hasFinalReveal"`
 
+	// Quality narrative flags (precise workflow spec)
+	HasIntro               bool `json:"hasIntro"`
+	HasBriefing            bool `json:"hasBriefing"`
+	ActsCount              int  `json:"actsCount"`
+	ScenesCount            int  `json:"scenesCount"`
+	WitnessesCount         int  `json:"witnessesCount"`
+	EvidenceCount          int  `json:"evidenceCount"`
+	ProgressionRulesCount  int  `json:"progressionRulesCount"`
+	HasPossibleVerdicts    bool `json:"hasPossibleVerdicts"`
+	HasNexusBridge         bool `json:"hasNexusBridge"`
+
 	// Direct fields for narrative truth (populated from AI JSON)
 	RealTruth   string `gorm:"type:text" json:"realTruth"`
 	PublicTruth string `gorm:"type:text" json:"publicTruth"`
