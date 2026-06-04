@@ -2518,6 +2518,30 @@ func containsString(values []string, wanted string) bool {
 	return false
 }
 
+func containsAnyString(value string, allowed []string) bool {
+	for _, item := range allowed {
+		if value == item {
+			return true
+		}
+	}
+	return false
+}
+
+func envBoolDefault(name string, fallback bool) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
+	if value == "" {
+		return fallback
+	}
+	return value == "1" || value == "true" || value == "yes" || value == "on"
+}
+
+func envIntDefault(name string, fallback int) int {
+	if parsed, err := strconv.Atoi(strings.TrimSpace(os.Getenv(name))); err == nil && parsed >= 0 {
+		return parsed
+	}
+	return fallback
+}
+
 func tribunalActorRef(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	return strings.Map(func(r rune) rune {
@@ -2696,6 +2720,113 @@ func (m *module) narrativeSceneCriticalResolved(narrativeCaseID uint, sceneID st
 		}
 	}
 	return false
+}
+
+func storyAIActionEligible(action string) bool {
+	return containsAnyString(action, []string{"press", "present_evidence", "objection", "expose_lie", "ai_analysis"})
+}
+
+func storyAISanitizeResponse(text string, fallback string) string {
+	text = strings.TrimSpace(text)
+	text = strings.Trim(text, "`\"' ")
+	if text == "" {
+		return fallback
+	}
+	lines := []string{}
+	for _, raw := range strings.Split(text, "\n") {
+		line := strings.TrimSpace(strings.Trim(raw, "-* "))
+		if line != "" {
+			lines = append(lines, line)
+		}
+		if len(lines) >= 5 {
+			break
+		}
+	}
+	if len(lines) == 0 {
+		return fallback
+	}
+	out := strings.Join(lines, "\n")
+	if len(out) > 720 {
+		out = strings.TrimSpace(out[:720]) + "..."
+	}
+	return out
+}
+
+func (m *module) storyAIWithinBudget(narrativeCaseID uint, sceneID string) bool {
+	maxCase := envIntDefault("TRIBUNAL_STORY_AI_MAX_CALLS_PER_CASE", 30)
+	maxScene := envIntDefault("TRIBUNAL_STORY_AI_MAX_CALLS_PER_SCENE", 4)
+	if maxCase == 0 || maxScene == 0 {
+		return false
+	}
+	var caseCount int64
+	m.db.Model(&tribunalmodels.TribunalStoryEvent{}).
+		Where("narrative_case_id = ? AND player_action IN ?", narrativeCaseID, []string{"press", "present_evidence", "objection", "expose_lie", "ai_analysis"}).
+		Count(&caseCount)
+	if int(caseCount) >= maxCase {
+		return false
+	}
+	var sceneCount int64
+	m.db.Model(&tribunalmodels.TribunalStoryEvent{}).
+		Where("narrative_case_id = ? AND scene_id = ? AND player_action IN ?", narrativeCaseID, sceneID, []string{"press", "present_evidence", "objection", "expose_lie", "ai_analysis"}).
+		Count(&sceneCount)
+	return int(sceneCount) < maxScene
+}
+
+func (m *module) cachedStoryActionResponse(narrativeCaseID uint, sceneID string, action string, statementID string, evidenceID string) string {
+	if action == "" {
+		return ""
+	}
+	var ev tribunalmodels.TribunalStoryEvent
+	q := m.db.Where("narrative_case_id = ? AND scene_id = ? AND player_action = ?", narrativeCaseID, sceneID, action)
+	if statementID != "" {
+		q = q.Where("statement_id = ?", statementID)
+	} else {
+		q = q.Where("statement_id IS NULL")
+	}
+	if evidenceID != "" {
+		q = q.Where("evidence_id = ?", evidenceID)
+	} else {
+		q = q.Where("evidence_id IS NULL")
+	}
+	if err := q.Order("created_at desc").First(&ev).Error; err == nil {
+		return strings.TrimSpace(ev.NarrativeText)
+	}
+	return ""
+}
+
+func (m *module) refineStoryActionWithAI(ctx context.Context, item TribunalCase, nc tribunalmodels.TribunalNarrativeCase, sc tribunalmodels.TribunalScene, action string, statementText string, evidenceTitle string, evidenceDescription string, playerArgument string, baseResult string) (string, bool) {
+	if !envBoolDefault("TRIBUNAL_STORY_AI_ENABLED", true) || !storyAIActionEligible(action) || !m.storyAIWithinBudget(nc.ID, sc.SceneID) {
+		return baseResult, false
+	}
+	providerType := normalizeProvider(defaultText(item.ProviderType, os.Getenv("TRIBUNAL_AI_PROVIDER")))
+	if providerType == "" {
+		providerType = normalizeProvider(defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "openai"))
+	}
+	model := defaultText(item.ProviderModel, defaultText(os.Getenv("TRIBUNAL_AI_MODEL"), tribunaladapters.DefaultModelForProvider(providerType)))
+	timeout := time.Duration(envIntDefault("TRIBUNAL_STORY_AI_TIMEOUT_SECONDS", 4)) * time.Second
+	adapter := tribunaladapters.NewAIProviderAdapter(providerEnvKey).WithTimeout(timeout)
+	prompt := fmt.Sprintf(`Action joueur: %s
+Scene: %s
+Objectif: %s
+Declaration cible: %s
+Preuve cible: %s - %s
+Argument joueur: %s
+Resultat moteur: %s
+
+Ecris une reponse immersive en francais, 3 a 5 lignes maximum, ton tribunal cyberpunk.
+Adapte-toi au choix du joueur. Ne donne pas de JSON. Ne depasse pas 90 mots.`, action, sc.Title, sc.Objective, statementText, evidenceTitle, evidenceDescription, playerArgument, baseResult)
+	resp, err := adapter.Generate(ctx, tribunaladapters.GenerateRequest{
+		ProviderType:  providerType,
+		Model:         model,
+		LocalEndpoint: item.LocalEndpoint,
+		SystemPrompt:  "Tu es le moteur narratif d'un tribunal cyberpunk interactif. Reponds court, concret, en francais, sans explication technique.",
+		Prompt:        prompt,
+	})
+	if err != nil {
+		log.Printf("[tribunal-story-ai] fallback deterministic case=%d scene=%s action=%s err=%v", item.ID, sc.SceneID, action, err)
+		return baseResult, false
+	}
+	return storyAISanitizeResponse(resp.Text, baseResult), true
 }
 
 // ==================== STORY / NARRATIVE HANDLERS (correctif Phoenix-like) ====================
@@ -3146,6 +3277,14 @@ func (m *module) storyAction(c *gin.Context) {
 		success = true
 		resultType = "scene_advance"
 	}
+	responseSource := "deterministic"
+	if cached := m.cachedStoryActionResponse(nc.ID, payload.SceneId, payload.ActionType, payload.StatementId, payload.EvidenceId); cached != "" && storyAIActionEligible(payload.ActionType) {
+		narrativeResult = cached
+		responseSource = "cache"
+	} else if refined, usedAI := m.refineStoryActionWithAI(c.Request.Context(), item, nc, sc, payload.ActionType, statementText, evidenceTitle, evidenceDescription, payload.Argument, narrativeResult); usedAI {
+		narrativeResult = refined
+		responseSource = "ai_short"
+	}
 
 	item.DefenseScore = clamp(item.DefenseScore+defenseDelta, 0, 100)
 	item.Pressure = clamp(item.Pressure+pressureDelta, 0, 100)
@@ -3164,9 +3303,14 @@ func (m *module) storyAction(c *gin.Context) {
 		CaseID:          &item.ID,
 		SceneID:         payload.SceneId,
 		EventType:       eventType,
+		StatementID:     ptrStringOrNil(payload.StatementId),
+		EvidenceID:      ptrStringOrNil(payload.EvidenceId),
 		PlayerAction:    payload.ActionType,
 		IsSuccess:       success,
 		NarrativeText:   narrativeResult,
+	}
+	if b, e := json.Marshal(gin.H{"responseSource": responseSource}); e == nil {
+		ev.UnlockedJSON = datatypes.JSON(b)
 	}
 	_ = m.db.Create(&ev).Error
 
@@ -3179,6 +3323,7 @@ func (m *module) storyAction(c *gin.Context) {
 		"resultType":      resultType,
 		"isCritical":      rule.IsCritical,
 		"narrativeResult": narrativeResult,
+		"responseSource":  responseSource,
 		"effects":         gin.H{"defenseScoreDelta": defenseDelta, "tribunalPressureDelta": pressureDelta},
 		"unlocked":        unlocked,
 		"nextScene":       nil,
@@ -3280,6 +3425,8 @@ func (m *module) loadNarrativeCase(c *gin.Context) {
 		PlayerRole:          defaultText(g.PlayerRoleSuggestion, "defense"),
 		Mode:                "full_narrative",
 		Tone:                defaultText(g.Tone, "cyberpunk_serious"),
+		ProviderType:        normalizeProvider(defaultText(g.ProviderType, os.Getenv("TRIBUNAL_AI_PROVIDER"))),
+		ProviderModel:       defaultText(g.ProviderModel, defaultText(os.Getenv("TRIBUNAL_AI_MODEL"), tribunaladapters.DefaultModelForProvider(defaultText(g.ProviderType, os.Getenv("TRIBUNAL_AI_PROVIDER"))))),
 		Status:              statusOpen,
 		CurrentPhase:        phaseInvestigation,
 		DefenseScore:        50,

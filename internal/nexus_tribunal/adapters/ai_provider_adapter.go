@@ -36,6 +36,13 @@ func NewAIProviderAdapter(envAPIKey func(providerType string) string) AIProvider
 	}
 }
 
+func (a AIProviderAdapter) WithTimeout(timeout time.Duration) AIProviderAdapter {
+	if timeout > 0 {
+		a.timeout = timeout
+	}
+	return a
+}
+
 func (a AIProviderAdapter) Generate(ctx context.Context, req GenerateRequest) (GenerateResponse, error) {
 	cfg, err := a.resolve(req)
 	if err != nil {
