@@ -204,6 +204,10 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, authMiddleware gin.HandlerF
 	module := newModule(db)
 	for _, prefix := range []string{"/api/nexus-tribunal", "/api/v1/nexus-tribunal"} {
 		group := router.Group(prefix)
+		// Public aggregate stats used by catalogue/admin dashboards.
+		// This exposes only counts, while all generated-case mutations stay protected below.
+		group.GET("/admin/generated-cases/narrative-stats", module.generatedNarrativeStats)
+		group.GET("/generated-cases/narrative-stats", module.generatedNarrativeStats)
 		group.Use(authMiddleware)
 		module.mount(group)
 		admin := group.Group("/admin")
@@ -216,7 +220,6 @@ func RegisterRoutes(router *gin.Engine, db *gorm.DB, authMiddleware gin.HandlerF
 		admin.POST("/generated-cases/:genId/archive", module.archiveGeneratedCase)
 		admin.POST("/generated-cases/:genId/reject", module.rejectGeneratedCase)
 		admin.GET("/generated-cases/stats", module.generatedCasesStats)
-		admin.GET("/generated-cases/narrative-stats", module.generatedNarrativeStats)
 	}
 }
 
