@@ -577,10 +577,13 @@ func callProvider(ctx context.Context, cfg aiProviderConfig, prompt string, trac
 	}
 	trace.log("provider_url", "completed", "url=%s", url)
 
+	callCtx, cancel := context.WithTimeout(ctx, questProviderCallTimeout())
+	defer cancel()
+
 	startedAt := time.Now()
-	trace.log("provider_call", "started", "prompt_chars=%d key_len=%d", len(prompt), len(cfg.APIKey))
+	trace.log("provider_call", "started", "prompt_chars=%d key_len=%d timeout=%s", len(prompt), len(cfg.APIKey), questProviderCallTimeout())
 	ai := provider.NewsProvider(cfg.APIKey, url, cfg.Model)
-	response, err := ai.Chat(ctx, []provider.ProviderMessage{{Role: "system", Content: prompt}})
+	response, err := ai.Chat(callCtx, []provider.ProviderMessage{{Role: "system", Content: prompt}})
 	if err != nil {
 		trace.log("provider_call", "failed", "duration_ms=%d err=%v", time.Since(startedAt).Milliseconds(), err)
 		return "", err
@@ -589,8 +592,36 @@ func callProvider(ctx context.Context, cfg aiProviderConfig, prompt string, trac
 	return response, nil
 }
 
+func callProviderWithFallbacks(ctx context.Context, primary aiProviderConfig, prompt string, trace cronTrace) (string, aiProviderConfig, error) {
+	attempts := providerAttempts(primary)
+	var lastErr error
+	for index, cfg := range attempts {
+		attemptTrace := trace
+		attemptTrace.Provider = cfg.Name
+		attemptTrace.Model = cfg.Model
+		if index > 0 {
+			attemptTrace.log("provider_fallback", "started", "from=%s attempt=%d", primary.Name, index+1)
+		}
+		response, err := callProvider(ctx, cfg, prompt, attemptTrace)
+		if err == nil {
+			if index > 0 {
+				attemptTrace.log("provider_fallback", "completed", "from=%s attempt=%d", primary.Name, index+1)
+			}
+			return response, cfg, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no configured provider available")
+	}
+	return "", aiProviderConfig{}, lastErr
+}
+
 func providerForHour(now time.Time) (aiProviderConfig, bool) {
-	return providerConfig(providerNameForHour(now), providerKeyEnvForHour(now), providerModelEnvForHour(now))
+	return providerConfigForName(providerNameForHour(now))
 }
 
 func providerNameForHour(now time.Time) string {
@@ -619,7 +650,15 @@ func scheduledCronSlotIndex(hour int) (int, bool) {
 }
 
 func providerKeyEnvForHour(now time.Time) string {
-	switch providerNameForHour(now) {
+	return providerKeyEnvForName(providerNameForHour(now))
+}
+
+func providerModelEnvForHour(now time.Time) string {
+	return providerModelEnvForName(providerNameForHour(now))
+}
+
+func providerKeyEnvForName(name string) string {
+	switch name {
 	case "mistral":
 		return "MISTRAL_AI_KEY"
 	case "claude", "anthropic":
@@ -631,8 +670,8 @@ func providerKeyEnvForHour(now time.Time) string {
 	}
 }
 
-func providerModelEnvForHour(now time.Time) string {
-	switch providerNameForHour(now) {
+func providerModelEnvForName(name string) string {
+	switch name {
 	case "mistral":
 		return "MISTRAL_AI_MODEL"
 	case "claude", "anthropic":
@@ -667,10 +706,39 @@ func cronProviderRotation() []string {
 	return rotation
 }
 
+func providerConfigForName(name string) (aiProviderConfig, bool) {
+	return providerConfig(name, providerKeyEnvForName(name), providerModelEnvForName(name))
+}
+
+func providerAttempts(primary aiProviderConfig) []aiProviderConfig {
+	attempts := []aiProviderConfig{primary}
+	seen := map[string]bool{strings.ToLower(strings.TrimSpace(primary.Name)): true}
+	for _, name := range cronProviderRotation() {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		cfg, ok := providerConfigForName(name)
+		if ok {
+			attempts = append(attempts, cfg)
+		}
+	}
+	return attempts
+}
+
 func questCronTimeout() time.Duration {
 	seconds, err := strconv.Atoi(strings.TrimSpace(env("AI_QUEST_CRON_TIMEOUT_SECONDS", "900")))
 	if err != nil || seconds <= 0 {
 		seconds = 900
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func questProviderCallTimeout() time.Duration {
+	seconds, err := strconv.Atoi(strings.TrimSpace(env("AI_QUEST_PROVIDER_CALL_TIMEOUT_SECONDS", "60")))
+	if err != nil || seconds <= 0 {
+		seconds = 60
 	}
 	return time.Duration(seconds) * time.Second
 }
@@ -1291,10 +1359,13 @@ func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cron
 
 		// callProvider puts the prompt as system message
 		fullPrompt := sys + "\n\n" + user
-		response, err := callProvider(ctx, cfg, fullPrompt, trace)
+		response, usedProvider, err := callProviderWithFallbacks(ctx, cfg, fullPrompt, trace)
 		if err != nil {
 			trace.log("single_case", "failed", "level=%d err=%v", lvl, err)
 			continue // don't fail the whole batch
+		}
+		if usedProvider.Name != cfg.Name || usedProvider.Model != cfg.Model {
+			trace.log("single_case", "provider_fallback_used", "level=%d provider=%s model=%s", lvl, usedProvider.Name, usedProvider.Model)
 		}
 		cleaned := cleanJSON(response)
 		trace.log("json_clean", "completed", "level=%d", lvl)
