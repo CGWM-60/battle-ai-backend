@@ -396,6 +396,7 @@ func (m *module) createCase(c *gin.Context) {
 	if mode == "quick_trial" || !req.EnableInvestigation {
 		nextPhase = phaseLive
 	}
+	providerType := normalizeProvider(defaultText(req.Provider.ProviderType, defaultTribunalProvider()))
 	item := TribunalCase{
 		OwnerID:             currentOwnerID(c),
 		Title:               title,
@@ -407,8 +408,8 @@ func (m *module) createCase(c *gin.Context) {
 		Mode:                mode,
 		Tone:                defaultText(req.Tone, "cyberpunk_serious"),
 		Visibility:          defaultText(req.Visibility, "private"),
-		ProviderType:        normalizeProvider(defaultText(req.Provider.ProviderType, "openai")),
-		ProviderModel:       defaultText(req.Provider.Model, defaultModel(req.Provider.ProviderType, "")),
+		ProviderType:        providerType,
+		ProviderModel:       defaultText(req.Provider.Model, defaultModel(providerType, "")),
 		ProviderIsLocal:     req.Provider.IsLocal,
 		LocalEndpoint:       strings.TrimSpace(req.Provider.LocalEndpoint),
 		ProviderStream:      req.Provider.Stream,
@@ -450,8 +451,8 @@ func (m *module) createCaseFromNexusEvent(c *gin.Context) {
 		Mode:                defaultText(draft.Mode, "nexus_integrated"),
 		Tone:                "cyberpunk_serious",
 		Visibility:          defaultText(draft.Visibility, "private"),
-		ProviderType:        normalizeProvider(defaultText(os.Getenv("TRIBUNAL_AI_PROVIDER"), "openai")),
-		ProviderModel:       defaultModel(os.Getenv("TRIBUNAL_AI_PROVIDER"), os.Getenv("TRIBUNAL_AI_MODEL")),
+		ProviderType:        defaultTribunalProvider(),
+		ProviderModel:       defaultModel(defaultTribunalProvider(), os.Getenv("TRIBUNAL_AI_MODEL")),
 		Status:              statusCreated,
 		CurrentPhase:        phaseInvestigation,
 		DefenseScore:        50,
@@ -1355,7 +1356,7 @@ func currentOwnerID(c *gin.Context) uint {
 }
 
 func activeProviderSummary() gin.H {
-	providerType := defaultText(os.Getenv("TRIBUNAL_AI_PROVIDER"), defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "openai"))
+	providerType := defaultTribunalProvider()
 	return gin.H{
 		"providerType": providerType,
 		"providerName": displayProvider(providerType),
@@ -1364,6 +1365,10 @@ func activeProviderSummary() gin.H {
 		"status":       configuredStatus(providerType),
 		"apiKeyMode":   "local_client_key",
 	}
+}
+
+func defaultTribunalProvider() string {
+	return normalizeProvider(defaultText(os.Getenv("TRIBUNAL_AI_PROVIDER"), defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "mistral")))
 }
 
 func providerEnvKey(providerType string) string {
@@ -2800,7 +2805,7 @@ func (m *module) refineStoryActionWithAI(ctx context.Context, item TribunalCase,
 	}
 	providerType := normalizeProvider(defaultText(item.ProviderType, os.Getenv("TRIBUNAL_AI_PROVIDER")))
 	if providerType == "" {
-		providerType = normalizeProvider(defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "openai"))
+		providerType = defaultTribunalProvider()
 	}
 	model := defaultText(item.ProviderModel, defaultText(os.Getenv("TRIBUNAL_AI_MODEL"), tribunaladapters.DefaultModelForProvider(providerType)))
 	timeout := time.Duration(envIntDefault("TRIBUNAL_STORY_AI_TIMEOUT_SECONDS", 4)) * time.Second
@@ -3425,8 +3430,8 @@ func (m *module) loadNarrativeCase(c *gin.Context) {
 		PlayerRole:          defaultText(g.PlayerRoleSuggestion, "defense"),
 		Mode:                "full_narrative",
 		Tone:                defaultText(g.Tone, "cyberpunk_serious"),
-		ProviderType:        normalizeProvider(defaultText(g.ProviderType, os.Getenv("TRIBUNAL_AI_PROVIDER"))),
-		ProviderModel:       defaultText(g.ProviderModel, defaultText(os.Getenv("TRIBUNAL_AI_MODEL"), tribunaladapters.DefaultModelForProvider(defaultText(g.ProviderType, os.Getenv("TRIBUNAL_AI_PROVIDER"))))),
+		ProviderType:        normalizeProvider(defaultText(g.ProviderType, defaultTribunalProvider())),
+		ProviderModel:       defaultText(g.ProviderModel, defaultText(os.Getenv("TRIBUNAL_AI_MODEL"), tribunaladapters.DefaultModelForProvider(defaultText(g.ProviderType, defaultTribunalProvider())))),
 		Status:              statusOpen,
 		CurrentPhase:        phaseInvestigation,
 		DefenseScore:        50,

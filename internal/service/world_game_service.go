@@ -3450,19 +3450,11 @@ func profileEconomicState(profile string, current string) string {
 }
 
 func (s *WorldGameService) AIProviderStatuses() []AIProviderStatus {
-	primary := strings.TrimSpace(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"))
-	if primary == "" {
-		primary = strings.TrimSpace(os.Getenv("AI_WORLD_PRIMARY_PROVIDER"))
-	}
-	if primary == "" {
-		primary = "mistral"
-	}
-	fallback := strings.TrimSpace(os.Getenv("WORLD_AI_FALLBACK_PROVIDER"))
-	if fallback == "" {
-		fallback = strings.TrimSpace(os.Getenv("AI_WORLD_FALLBACK_PROVIDER"))
-	}
-	if fallback == "" {
-		fallback = "openai"
+	providers := worldAIProviderOrder()
+	primary := providers[0]
+	fallback := ""
+	if len(providers) > 1 {
+		fallback = providers[1]
 	}
 	out := make([]AIProviderStatus, 0)
 	for _, item := range SupportedAIProviders() {
@@ -3482,6 +3474,35 @@ func (s *WorldGameService) AIProviderStatuses() []AIProviderStatus {
 		})
 	}
 	return out
+}
+
+func worldAIProviderOrder() []string {
+	primary := strings.TrimSpace(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"))
+	if primary == "" {
+		primary = strings.TrimSpace(os.Getenv("AI_WORLD_PRIMARY_PROVIDER"))
+	}
+	primary = defaultText(primary, "mistral")
+
+	fallback := strings.TrimSpace(os.Getenv("WORLD_AI_FALLBACK_PROVIDER"))
+	if fallback == "" {
+		fallback = strings.TrimSpace(os.Getenv("AI_WORLD_FALLBACK_PROVIDER"))
+	}
+	fallback = defaultText(fallback, "openai")
+
+	order := make([]string, 0, 2)
+	seen := map[string]bool{}
+	for _, name := range []string{primary, fallback} {
+		normalized := normalizeProviderName(name)
+		if normalized == "" || seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		order = append(order, normalized)
+	}
+	if len(order) == 0 {
+		return []string{"mistral", "openai"}
+	}
+	return order
 }
 
 func (s *WorldGameService) CreateBuildingAssetHash(imageURL string, level int, version int) string {
@@ -3661,7 +3682,7 @@ func (s *WorldGameService) ensureAIWorldFactionTx(ctx context.Context, tx *gorm.
 }
 
 func (s *WorldGameService) callNEXUS(ctx context.Context, world models.World) (nexusDecision, string, string, string, error) {
-	providers := []string{defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "mistral"), defaultText(os.Getenv("WORLD_AI_FALLBACK_PROVIDER"), "openai")}
+	providers := worldAIProviderOrder()
 	var lastErr error
 	for index, name := range providers {
 		cfg, ok := worldProviderConfig(name)
@@ -3701,7 +3722,7 @@ func (s *WorldGameService) callNEXUS(ctx context.Context, world models.World) (n
 }
 
 func (s *WorldGameService) callNEXUSRoutine(ctx context.Context, world models.World, snapshot map[string]any) (map[string]any, string, string, string, error) {
-	providers := []string{defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "mistral"), defaultText(os.Getenv("WORLD_AI_FALLBACK_PROVIDER"), "openai")}
+	providers := worldAIProviderOrder()
 	payload, _ := json.Marshal(snapshot)
 	var lastErr error
 	for index, name := range providers {
@@ -4050,54 +4071,58 @@ Exemple de ton :
 
 Génère des tâches variées et immersives.`
 
-	cfg, ok := worldProviderConfig(defaultText(os.Getenv("WORLD_AI_PRIMARY_PROVIDER"), "mistral"))
-	if !ok {
-		return nil
-	}
-	url, err := ProviderURL(cfg.Name)
-	if err != nil {
-		return nil
-	}
-
-	callCtx, cancel := context.WithTimeout(ctx, 18*time.Second)
-	defer cancel()
-
-	client := provider.NewsProvider(cfg.APIKey, url, cfg.Model)
-	resp, err := client.Chat(callCtx, []provider.ProviderMessage{
-		{Role: "system", Content: "Tu es l'IA Méchante, cynique et narrative."},
-		{Role: "user", Content: prompt},
-	})
-	if err != nil {
-		return nil
-	}
-
-	var rawTasks []map[string]any
-	if err := json.Unmarshal([]byte(extractJSONObject(resp)), &rawTasks); err != nil || len(rawTasks) == 0 {
-		return nil
-	}
-
-	var result []models.DailyTask
-	for _, rt := range rawTasks {
-		task := models.DailyTask{
-			PlayerID:        playerID,
-			WorldID:         worldID,
-			Title:           getString(rt, "title"),
-			Description:     getString(rt, "description"),
-			TaskType:        getString(rt, "taskType"),
-			TargetValue:     getInt(rt, "targetValue"),
-			CurrentValue:    0,
-			RewardType:      getString(rt, "rewardType"),
-			RewardAmount:    int64(getInt(rt, "rewardAmount")),
-			DurationMinutes: getInt(rt, "durationMinutes"),
-			Progress:        0,
-			Status:          "available",
-			ExpiresAt:       &expires,
+	for _, providerName := range worldAIProviderOrder() {
+		cfg, ok := worldProviderConfig(providerName)
+		if !ok {
+			continue
 		}
-		if task.Title != "" && task.TargetValue > 0 {
-			result = append(result, task)
+		url, err := ProviderURL(cfg.Name)
+		if err != nil {
+			continue
+		}
+
+		callCtx, cancel := context.WithTimeout(ctx, 18*time.Second)
+		client := provider.NewsProvider(cfg.APIKey, url, cfg.Model)
+		resp, err := client.Chat(callCtx, []provider.ProviderMessage{
+			{Role: "system", Content: "Tu es l'IA Méchante, cynique et narrative."},
+			{Role: "user", Content: prompt},
+		})
+		cancel()
+		if err != nil {
+			continue
+		}
+
+		var rawTasks []map[string]any
+		if err := json.Unmarshal([]byte(extractJSONObject(resp)), &rawTasks); err != nil || len(rawTasks) == 0 {
+			continue
+		}
+
+		var result []models.DailyTask
+		for _, rt := range rawTasks {
+			task := models.DailyTask{
+				PlayerID:        playerID,
+				WorldID:         worldID,
+				Title:           getString(rt, "title"),
+				Description:     getString(rt, "description"),
+				TaskType:        getString(rt, "taskType"),
+				TargetValue:     getInt(rt, "targetValue"),
+				CurrentValue:    0,
+				RewardType:      getString(rt, "rewardType"),
+				RewardAmount:    int64(getInt(rt, "rewardAmount")),
+				DurationMinutes: getInt(rt, "durationMinutes"),
+				Progress:        0,
+				Status:          "available",
+				ExpiresAt:       &expires,
+			}
+			if task.Title != "" && task.TargetValue > 0 {
+				result = append(result, task)
+			}
+		}
+		if len(result) > 0 {
+			return result
 		}
 	}
-	return result
+	return nil
 }
 
 func (s *WorldGameService) generateDeterministicDailyTasks(playerID uint, worldID uint, now, expires time.Time) []models.DailyTask {

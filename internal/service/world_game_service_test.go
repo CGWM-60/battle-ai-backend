@@ -40,6 +40,28 @@ func TestWorldAIProviderStatusesExposePrimaryAndFallbackWithoutSecrets(t *testin
 	}
 }
 
+func TestWorldAIProviderOrderDefaultsToMistralThenOpenAI(t *testing.T) {
+	t.Setenv("WORLD_AI_PRIMARY_PROVIDER", "")
+	t.Setenv("AI_WORLD_PRIMARY_PROVIDER", "")
+	t.Setenv("WORLD_AI_FALLBACK_PROVIDER", "")
+	t.Setenv("AI_WORLD_FALLBACK_PROVIDER", "")
+
+	order := worldAIProviderOrder()
+	if len(order) != 2 || order[0] != "mistral" || order[1] != "openai" {
+		t.Fatalf("expected default provider order mistral then openai, got %#v", order)
+	}
+}
+
+func TestWorldAIProviderOrderDeduplicatesFallback(t *testing.T) {
+	t.Setenv("WORLD_AI_PRIMARY_PROVIDER", "mistral")
+	t.Setenv("WORLD_AI_FALLBACK_PROVIDER", "mistral")
+
+	order := worldAIProviderOrder()
+	if len(order) != 1 || order[0] != "mistral" {
+		t.Fatalf("expected duplicate fallback to be removed, got %#v", order)
+	}
+}
+
 func TestBuildingAssetHashChangesWithVersion(t *testing.T) {
 	service := NewWorldGameService(nil)
 	first := service.CreateBuildingAssetHash("https://cdn/building.png", 1, 1)
