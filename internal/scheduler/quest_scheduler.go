@@ -359,9 +359,12 @@ Ne commence pas plus de 2 questions par "Est-ce que".
 Format:
 [{"title":"...","content":"question debat complete","level":"facile|moyen|difficile","theme":"...","point":10,"xp":25,"coin":5,"metadata":{"angle":"...","humour":true}}]`, cronQuestLimit)
 
-	response, err := callProvider(ctx, cfg, prompt, trace)
+	response, usedProvider, err := callProviderWithFallbacks(ctx, cfg, prompt, trace)
 	if err != nil {
 		return nil, fmt.Errorf("call provider: %w", err)
+	}
+	if usedProvider.Name != cfg.Name || usedProvider.Model != cfg.Model {
+		trace.log("generate", "provider_fallback_used", "provider=%s model=%s", usedProvider.Name, usedProvider.Model)
 	}
 
 	cleaned := cleanJSON(response)
@@ -421,9 +424,12 @@ Les arcs et chapitres doivent etre clairement identifies et ordonnes par leur po
 Format:
 [{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"metadata":{"ton":"..."},"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, count)
 
-	response, err := callProvider(ctx, cfg, prompt, trace)
+	response, usedProvider, err := callProviderWithFallbacks(ctx, cfg, prompt, trace)
 	if err != nil {
 		return nil, fmt.Errorf("call provider: %w", err)
+	}
+	if usedProvider.Name != cfg.Name || usedProvider.Model != cfg.Model {
+		trace.log("generate_batch", "provider_fallback_used", "provider=%s model=%s", usedProvider.Name, usedProvider.Model)
 	}
 
 	cleaned := cleanJSON(response)
