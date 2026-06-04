@@ -37,9 +37,9 @@ Structure EXACTE de l'affaire (objet JSON racine, pas de "cases"):
   "cast": [
     {"actorId":"acteur_slug_unique", "actorType":"judge|prosecutor|defense_attorney|witness|expert_witness|assistant|clerk|jury_logic|jury_emotional|jury_expert|...", "name":"...", "personality":"...", "avatarAssetId":"ID_MANIFEST_AUTORISE_UNIQUEMENT"}
   ],
-  "evidence": [
-    {"evidenceId":"preuve_slug_unique", "title":"titre français", "description":"description claire en français", "evidenceType":"document|log|image|audio|video|biometric_log", "strength":70, "reliability":80, "supportsSide":"defense|accusation|neutral", "assetId":"tribunal.evidence.document"}
-  ],
+	  "evidence": [
+	    {"evidenceId":"preuve_slug_unique", "title":"titre français", "description":"description claire en français", "details":"analyse exploitable en 2-4 phrases", "origin":"origine précise dans l'enquête", "contradictionHint":"quelle déclaration cette preuve peut contredire", "chainOfCustody":"traçabilité courte", "evidenceType":"document|log|image|audio|video|biometric_log", "strength":70, "reliability":80, "supportsSide":"defense|accusation|neutral", "assetId":"tribunal.evidence.document"}
+	  ],
   "acts": [{"actIndex":1,"title":"...","objective":"...","summary":"..."}],
   "scenes": [
     {
@@ -54,9 +54,9 @@ Structure EXACTE de l'affaire (objet JSON racine, pas de "cases"):
       "activeActorIds": ["actorId exact depuis cast"],
       "availableEvidenceIds": ["evidenceId exact depuis evidence"],
       "visibleStatementIds": ["stmt_..."],
-      "visibleStatements": [
-        {"statementId":"stmt_...", "speakerActorId":"actorId exact depuis cast", "text":"déclaration complète en français"}
-      ],
+	      "visibleStatements": [
+	        {"statementId":"stmt_...", "speakerActorId":"actorId exact depuis cast", "text":"déclaration complète en français, unique, différente de narrativeText et différente des autres déclarations"}
+	      ],
       "allowedActions": ["press","present_evidence","objection","ai_analysis","ask_hint","expose_lie","continue_story"],
       "nextSceneId": "..." ou null
     }
@@ -88,9 +88,10 @@ Structure EXACTE de l'affaire (objet JSON racine, pas de "cases"):
   ],
   "crisisMoment": {"sceneId":"...","trigger":"...","effect":"..."} ou null,
   "possibleVerdicts": ["defense_win","partial_defense","partial_guilty","guilty","hidden_truth"],
-  "epilogue": "...",
-  "nexusBridgeHints": [{"type":"...","targetId":"...","delta":-5}]
-}
+	  "epilogue": "...",
+	  "verdictSummary": "résumé final détaillé: verdict, preuve clé, contradiction majeure, conséquence morale",
+	  "nexusBridgeHints": [{"type":"...","targetId":"...","delta":-5}]
+	}
 
 VERROU ASSETS PERSONNAGES:
 - Interdiction absolue d'inventer un avatarAssetId depuis le nom du personnage.
@@ -135,6 +136,10 @@ VERROU INTERLOCUTEUR / DIALOGUE:
 - Chaque "visibleStatementIds[]" doit exister dans "visibleStatements[].statementId".
 - Chaque "visibleStatements[].speakerActorId" doit etre un "actorId" exact du cast.
 - Chaque "visibleStatements[].text" doit etre une declaration jouable en francais, pas un identifiant technique.
+- Interdiction de recopier "narrativeText" dans les declarations. Si une scene a 3 declarations, les 3 textes doivent contenir 3 informations differentes.
+- Chaque preuve doit contenir "details", "origin", "contradictionHint" et "chainOfCustody" pour affichage en popin.
+- Les progressionRules doivent couvrir au minimum: press sur une declaration importante, present_evidence avec preuve cible, objection avec preuve cible, expose_lie pour la contradiction majeure, continue_story seulement apres contradiction critique.
+- Les scenes finales doivent fournir un "narrativeText" conclusif et l'affaire doit fournir "epilogue" et "verdictSummary" utilisables sans renvoyer directement aux archives.
 
 Génère l'objet JSON complet pour le niveau %d. JSON strict uniquement, rien d'autre.`, level, level, level, level)
 

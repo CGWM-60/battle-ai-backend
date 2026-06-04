@@ -996,7 +996,7 @@ func (m *module) verdict(c *gin.Context) {
 	} else {
 		item.Verdict = "neutral"
 	}
-	item.VerdictSummary = fmt.Sprintf("Verdict %s. Score defense %d, accusation %d, pression %d.", item.Verdict, item.DefenseScore, item.AccusationScore, item.Pressure)
+	item.VerdictSummary = m.buildNarrativeVerdictSummary(item, item.Verdict)
 	item.CurrentPhase = phaseVerdict
 	item.Status = statusClosed
 	if err := m.db.Save(&item).Error; err != nil {
@@ -1016,11 +1016,23 @@ func (m *module) getVerdict(c *gin.Context) {
 
 func (m *module) verdictPayload(item TribunalCase) gin.H {
 	keyContradictions := m.keyContradictions(item.ID, item.OwnerID)
+	summary := item.VerdictSummary
+	if strings.TrimSpace(summary) == "" {
+		summary = m.buildNarrativeVerdictSummary(item, defaultText(item.Verdict, "neutral"))
+	}
+	var nc tribunalmodels.TribunalNarrativeCase
+	_ = m.db.Where("case_id = ?", item.ID).First(&nc).Error
+	recentEvents := []gin.H{}
+	var events []tribunalmodels.TribunalStoryEvent
+	_ = m.db.Where("case_id = ? AND is_success = ?", item.ID, true).Order("created_at desc").Limit(5).Find(&events).Error
+	for _, ev := range events {
+		recentEvents = append(recentEvents, gin.H{"action": ev.PlayerAction, "sceneId": ev.SceneID, "text": ev.NarrativeText})
+	}
 	proposedConsequences := tribunaladapters.ProposeWorldConsequences(tribunaladapters.VerdictProposal{
 		CaseID:            item.ID,
 		Source:            "nexus_tribunal",
 		Verdict:           item.Verdict,
-		Summary:           item.VerdictSummary,
+		Summary:           summary,
 		KeyContradictions: keyContradictions,
 	})
 	return gin.H{
@@ -1029,8 +1041,12 @@ func (m *module) verdictPayload(item TribunalCase) gin.H {
 		"verdict":              item.Verdict,
 		"scoreAccusation":      item.AccusationScore,
 		"scoreDefense":         item.DefenseScore,
-		"officialSummary":      item.VerdictSummary,
-		"bestArguments":        []string{},
+		"officialSummary":      summary,
+		"finalReveal":          nc.FinalReveal,
+		"realTruth":            nc.RealTruth,
+		"publicTruth":          nc.PublicTruth,
+		"epilogue":             m.buildNarrativeEpilogue(item, nc, summary),
+		"bestArguments":        recentEvents,
 		"keyContradictions":    keyContradictions,
 		"weaknesses":           []string{},
 		"approvedConsequences": []tribunaladapters.WorldConsequence{},
@@ -1038,6 +1054,32 @@ func (m *module) verdictPayload(item TribunalCase) gin.H {
 		"archiveId":            item.ID,
 		"case":                 item,
 	}
+}
+
+func (m *module) buildNarrativeVerdictSummary(item TribunalCase, verdict string) string {
+	var nc tribunalmodels.TribunalNarrativeCase
+	_ = m.db.Where("case_id = ?", item.ID).First(&nc).Error
+	var events []tribunalmodels.TribunalStoryEvent
+	_ = m.db.Where("case_id = ? AND is_success = ?", item.ID, true).Order("created_at desc").Limit(3).Find(&events).Error
+	actions := []string{}
+	for _, ev := range events {
+		txt := strings.TrimSpace(ev.NarrativeText)
+		if txt != "" {
+			actions = append(actions, txt)
+		}
+	}
+	actionSummary := "Aucune contradiction decisive n'a ete enregistree."
+	if len(actions) > 0 {
+		actionSummary = actions[0]
+	}
+	return fmt.Sprintf("Verdict: %s.\n\nPosition finale: defense %d, accusation %d, pression %d.\n\nVerite publique: %s\n\nVerite cachee: %s\n\nRevelation finale: %s\n\nAction cle retenue: %s", defaultText(verdict, "neutral"), item.DefenseScore, item.AccusationScore, item.Pressure, defaultText(nc.PublicTruth, item.AccusationPosition), defaultText(nc.RealTruth, item.DefensePosition), defaultText(nc.FinalReveal, "Le tribunal n'a pas encore obtenu de revelation finale explicite."), actionSummary)
+}
+
+func (m *module) buildNarrativeEpilogue(item TribunalCase, nc tribunalmodels.TribunalNarrativeCase, summary string) string {
+	if strings.TrimSpace(nc.FinalReveal) != "" {
+		return fmt.Sprintf("Le tribunal clot l'affaire %s apres avoir expose la faille centrale du dossier. %s", item.Title, nc.FinalReveal)
+	}
+	return fmt.Sprintf("Le tribunal clot l'affaire %s. Le resume officiel reste disponible pour relecture sans quitter le verdict.", item.Title)
 }
 
 func (m *module) proposeNexusConsequences(c *gin.Context) {
@@ -2422,27 +2464,35 @@ func buildNarrativeEvidenceObjects(raw []map[string]any, ids []string) []gin.H {
 		}
 		seen[id] = true
 		out = append(out, gin.H{
-			"id":           id,
-			"title":        defaultText(fmt.Sprint(e["title"]), strings.ReplaceAll(id, "_", " ")),
-			"description":  defaultText(fmt.Sprint(e["description"]), "Piece a conviction disponible pour comparaison."),
-			"evidenceType": defaultText(fmt.Sprint(e["evidenceType"]), "document"),
-			"assetId":      defaultText(fmt.Sprint(e["assetId"]), "tribunal.evidence.document"),
-			"strength":     intFromAny(e["strength"], 60),
-			"reliability":  intFromAny(e["reliability"], 70),
-			"supportsSide": defaultText(fmt.Sprint(e["supportsSide"]), "neutral"),
+			"id":                id,
+			"title":             defaultText(fmt.Sprint(e["title"]), strings.ReplaceAll(id, "_", " ")),
+			"description":       defaultText(fmt.Sprint(e["description"]), "Piece a conviction disponible pour comparaison."),
+			"details":           defaultText(fmt.Sprint(e["details"]), defaultText(fmt.Sprint(e["analysis"]), "Aucun detail technique supplementaire fourni par l'affaire generee.")),
+			"origin":            defaultText(fmt.Sprint(e["origin"]), defaultText(fmt.Sprint(e["source"]), "Origine non precisee")),
+			"contradictionHint": defaultText(fmt.Sprint(e["contradictionHint"]), "A confronter avec les declarations visibles avant objection."),
+			"chainOfCustody":    defaultText(fmt.Sprint(e["chainOfCustody"]), "Trace de conservation non detaillee."),
+			"evidenceType":      defaultText(fmt.Sprint(e["evidenceType"]), "document"),
+			"assetId":           defaultText(fmt.Sprint(e["assetId"]), "tribunal.evidence.document"),
+			"strength":          intFromAny(e["strength"], 60),
+			"reliability":       intFromAny(e["reliability"], 70),
+			"supportsSide":      defaultText(fmt.Sprint(e["supportsSide"]), "neutral"),
 		})
 	}
 	for _, id := range ids {
 		if id != "" && !seen[id] {
 			out = append(out, gin.H{
-				"id":           id,
-				"title":        strings.ReplaceAll(id, "_", " "),
-				"description":  "Piece a conviction referencee par la scene.",
-				"evidenceType": "document",
-				"assetId":      "tribunal.evidence.document",
-				"strength":     55,
-				"reliability":  60,
-				"supportsSide": "neutral",
+				"id":                id,
+				"title":             strings.ReplaceAll(id, "_", " "),
+				"description":       "Piece a conviction referencee par la scene.",
+				"details":           "Le generateur n'a pas fourni de fiche detaillee pour cette piece. Elle reste utilisable comme reference scenaristique.",
+				"origin":            "Dossier narratif genere",
+				"contradictionHint": "Comparer cette piece avec la declaration selectionnee.",
+				"chainOfCustody":    "Non renseignee",
+				"evidenceType":      "document",
+				"assetId":           "tribunal.evidence.document",
+				"strength":          55,
+				"reliability":       60,
+				"supportsSide":      "neutral",
 			})
 		}
 	}
@@ -2457,6 +2507,15 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func tribunalActorRef(value string) string {
@@ -2514,6 +2573,129 @@ func selectNarrativeActiveActor(cast []gin.H, refs []string, sceneType string) g
 		return cast[0]
 	}
 	return nil
+}
+
+func narrativeActorName(cast []gin.H, actorID string) string {
+	for _, actor := range cast {
+		if actorMatchesRef(actor, actorID) {
+			return firstNonEmpty(fmt.Sprint(actor["name"]), actorID)
+		}
+	}
+	return actorID
+}
+
+func narrativeTextLooksInvalid(text string, sceneText string) bool {
+	clean := strings.TrimSpace(text)
+	if clean == "" || clean == "<nil>" || clean == "null" {
+		return true
+	}
+	lower := strings.ToLower(clean)
+	if clean == strings.TrimSpace(sceneText) {
+		return true
+	}
+	return strings.Contains(lower, "statement") ||
+		strings.Contains(lower, "testimony") ||
+		strings.Contains(lower, "witness") ||
+		strings.Contains(lower, "evidence") ||
+		(strings.Contains(clean, "_") && len(clean) < 80)
+}
+
+func narrativeFallbackStatement(sc tribunalmodels.TribunalScene, sid string, index int, speaker string, cast []gin.H) string {
+	name := narrativeActorName(cast, speaker)
+	if name == "" || name == "<nil>" {
+		name = "L'interlocuteur"
+	}
+	subject := firstNonEmpty(sc.Objective, sc.Title, strings.ReplaceAll(sid, "_", " "))
+	return fmt.Sprintf("%s precise le point %d du dossier: %s", name, index+1, subject)
+}
+
+func buildNarrativeVisibleStatements(sc tribunalmodels.TribunalScene, ids []string, cast []gin.H) []gin.H {
+	var sceneMeta map[string]any
+	_ = json.Unmarshal(sc.MetadataJSON, &sceneMeta)
+	statementTexts := map[string]gin.H{}
+	if rawStatements, ok := sceneMeta["visibleStatements"].([]any); ok {
+		for _, raw := range rawStatements {
+			if row, ok := raw.(map[string]any); ok {
+				sid := firstNonEmpty(fmt.Sprint(row["statementId"]), fmt.Sprint(row["id"]))
+				if sid == "" {
+					continue
+				}
+				statementTexts[sid] = gin.H{
+					"id":             sid,
+					"content":        firstNonEmpty(fmt.Sprint(row["text"]), fmt.Sprint(row["content"])),
+					"speakerActorId": firstNonEmpty(fmt.Sprint(row["speakerActorId"]), fmt.Sprint(row["actorId"])),
+				}
+			}
+		}
+	}
+	if len(ids) == 0 {
+		for sid := range statementTexts {
+			ids = append(ids, sid)
+		}
+	}
+	out := []gin.H{}
+	for i, sid := range ids {
+		speakerActorID := ""
+		content := ""
+		if statementTexts[sid] != nil {
+			content = strings.TrimSpace(fmt.Sprint(statementTexts[sid]["content"]))
+			speakerActorID = firstNonEmpty(fmt.Sprint(statementTexts[sid]["speakerActorId"]))
+		}
+		if speakerActorID == "" {
+			active := []string{}
+			_ = json.Unmarshal(sc.ActiveActorIDsJSON, &active)
+			if len(active) > 0 {
+				speakerActorID = active[0]
+			}
+		}
+		if narrativeTextLooksInvalid(content, sc.NarrativeText) {
+			content = narrativeFallbackStatement(sc, sid, i, speakerActorID, cast)
+		}
+		out = append(out, gin.H{"id": sid, "content": content, "speakerActorId": speakerActorID, "speakerName": narrativeActorName(cast, speakerActorID), "isAttackable": true, "index": i})
+	}
+	if len(out) == 0 && sc.NarrativeText != "" {
+		out = append(out, gin.H{"id": sc.SceneID, "content": sc.NarrativeText, "speakerActorId": firstNonEmpty(fmt.Sprint(sceneMeta["speakerActorId"])), "speakerName": narrativeActorName(cast, firstNonEmpty(fmt.Sprint(sceneMeta["speakerActorId"]))), "isAttackable": false, "index": 0})
+	}
+	return out
+}
+
+func findNarrativeStatement(statements []gin.H, statementID string) gin.H {
+	for _, st := range statements {
+		if firstNonEmpty(fmt.Sprint(st["id"]), fmt.Sprint(st["statementId"])) == statementID {
+			return st
+		}
+	}
+	if len(statements) > 0 {
+		return statements[0]
+	}
+	return gin.H{}
+}
+
+func findNarrativeEvidence(evidences []gin.H, evidenceID string) gin.H {
+	for _, ev := range evidences {
+		if firstNonEmpty(fmt.Sprint(ev["id"]), fmt.Sprint(ev["evidenceId"]), fmt.Sprint(ev["title"])) == evidenceID {
+			return ev
+		}
+	}
+	if len(evidences) > 0 {
+		return evidences[0]
+	}
+	return gin.H{}
+}
+
+func (m *module) narrativeSceneCriticalResolved(narrativeCaseID uint, sceneID string) bool {
+	var rules []tribunalmodels.TribunalProgressionRule
+	if err := m.db.Where("narrative_case_id = ? AND scene_id = ? AND is_critical = ?", narrativeCaseID, sceneID, true).Find(&rules).Error; err != nil || len(rules) == 0 {
+		return true
+	}
+	for _, rule := range rules {
+		var count int64
+		m.db.Model(&tribunalmodels.TribunalStoryEvent{}).Where("narrative_case_id = ? AND scene_id = ? AND player_action = ? AND is_success = ?", narrativeCaseID, sceneID, rule.TriggerAction, true).Count(&count)
+		if count > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // ==================== STORY / NARRATIVE HANDLERS (correctif Phoenix-like) ====================
@@ -2618,43 +2800,7 @@ func (m *module) storyCurrent(c *gin.Context) {
 		}
 	}
 
-	// Build visible statements — use narrative text for meaningful content
-	visibleStmts := []gin.H{}
-	var sceneMeta map[string]any
-	_ = json.Unmarshal(sc.MetadataJSON, &sceneMeta)
-	statementTexts := map[string]gin.H{}
-	if rawStatements, ok := sceneMeta["visibleStatements"].([]any); ok {
-		for _, raw := range rawStatements {
-			if row, ok := raw.(map[string]any); ok {
-				sid := firstNonEmpty(fmt.Sprint(row["statementId"]), fmt.Sprint(row["id"]))
-				if sid != "" {
-					statementTexts[sid] = gin.H{
-						"id":             sid,
-						"content":        firstNonEmpty(fmt.Sprint(row["text"]), fmt.Sprint(row["content"])),
-						"speakerActorId": firstNonEmpty(fmt.Sprint(row["speakerActorId"]), fmt.Sprint(row["actorId"])),
-					}
-				}
-			}
-		}
-	}
-	if len(stmts) > 0 {
-		for i, sid := range stmts {
-			content := fmt.Sprintf("Déclaration %d à examiner", i+1)
-			speakerActorID := ""
-			if statementTexts[sid] != nil {
-				if txt := strings.TrimSpace(fmt.Sprint(statementTexts[sid]["content"])); txt != "" && txt != "<nil>" {
-					content = txt
-				}
-				speakerActorID = firstNonEmpty(fmt.Sprint(statementTexts[sid]["speakerActorId"]))
-			}
-			if len(stmts) == 1 && sc.NarrativeText != "" {
-				content = sc.NarrativeText
-			}
-			visibleStmts = append(visibleStmts, gin.H{"id": sid, "content": content, "speakerActorId": speakerActorID, "isAttackable": true, "index": i})
-		}
-	} else if sc.NarrativeText != "" {
-		visibleStmts = append(visibleStmts, gin.H{"id": sc.SceneID, "content": sc.NarrativeText, "isAttackable": false, "index": 0})
-	}
+	visibleStmts := buildNarrativeVisibleStatements(sc, stmts, fullCast)
 	if len(actors) == 0 && len(visibleStmts) > 0 {
 		if speaker := strings.TrimSpace(fmt.Sprint(visibleStmts[0]["speakerActorId"])); speaker != "" && speaker != "<nil>" {
 			actors = []string{speaker}
@@ -2674,26 +2820,40 @@ func (m *module) storyCurrent(c *gin.Context) {
 			"assetId": normalizeTribunalAvatarAsset(fmt.Sprint(activeActor["avatarAssetId"]), fmt.Sprint(activeActor["actorType"])),
 		}
 	}
+	criticalResolved := m.narrativeSceneCriticalResolved(nc.ID, sc.SceneID)
+	hasNext := sc.NextSceneID != nil && strings.TrimSpace(*sc.NextSceneID) != ""
+	sceneTypeLower := strings.ToLower(sc.SceneType)
+	canContinue := hasNext && criticalResolved && containsString(allowed, "continue_story")
+	canVerdict := criticalResolved && (!hasNext || strings.Contains(sceneTypeLower, "verdict") || strings.Contains(sceneTypeLower, "final_plea"))
+	progressReason := ""
+	if hasNext && !criticalResolved {
+		progressReason = "Une contradiction critique doit etre traitee avant de continuer."
+	} else if !hasNext {
+		progressReason = "Fin de l'arc narratif atteinte."
+	}
 
 	respondOK(c, gin.H{
-		"caseId":               item.ID,
-		"narrativeCaseId":      nc.ID,
-		"title":                item.Title,
-		"currentPhase":         item.CurrentPhase,
-		"sceneId":              sc.SceneID,
-		"actTitle":             fmt.Sprintf("Acte %d", sc.ActIndex),
-		"sceneTitle":           sc.Title,
-		"objective":            sc.Objective,
-		"sceneType":            sc.SceneType,
-		"narrativeText":        sc.NarrativeText,
-		"activeActorIds":       actors,
-		"activeActor":          activeActor,
-		"activeWitness":        activeWitness,
-		"actors":               fullCast, // full objects now
-		"visibleStatements":    visibleStmts,
-		"availableEvidence":    availableEvidence,
-		"availableEvidenceIds": evs,
-		"allowedActions":       allowed,
+		"caseId":                item.ID,
+		"narrativeCaseId":       nc.ID,
+		"title":                 item.Title,
+		"currentPhase":          item.CurrentPhase,
+		"sceneId":               sc.SceneID,
+		"actTitle":              fmt.Sprintf("Acte %d", sc.ActIndex),
+		"sceneTitle":            sc.Title,
+		"objective":             sc.Objective,
+		"sceneType":             sc.SceneType,
+		"narrativeText":         sc.NarrativeText,
+		"activeActorIds":        actors,
+		"activeActor":           activeActor,
+		"activeWitness":         activeWitness,
+		"actors":                fullCast, // full objects now
+		"visibleStatements":     visibleStmts,
+		"availableEvidence":     availableEvidence,
+		"availableEvidenceIds":  evs,
+		"allowedActions":        allowed,
+		"canContinue":           canContinue,
+		"canVerdict":            canVerdict,
+		"progressBlockedReason": progressReason,
 		"scores": gin.H{
 			"defense": item.DefenseScore, "accusation": item.AccusationScore,
 			"pressure": item.Pressure, "witnessCredibility": 72,
@@ -2797,11 +2957,41 @@ func (m *module) storyAction(c *gin.Context) {
 	if payload.EvidenceId == "" && len(sceneEvidenceIDs) > 0 {
 		payload.EvidenceId = sceneEvidenceIDs[0]
 	}
+	var generatedEvidence []map[string]any
+	var fullCast []gin.H
+	if nc.GeneratedCaseID != nil {
+		var genCase tribunalmodels.TribunalGeneratedCase
+		if err := m.db.First(&genCase, *nc.GeneratedCaseID).Error; err == nil {
+			var castArr []map[string]any
+			_ = json.Unmarshal(genCase.CharacterCastJSON, &castArr)
+			castArr = normalizeTribunalCastAssets(castArr)
+			for _, c := range castArr {
+				fullCast = append(fullCast, gin.H{
+					"actorType":     c["actorType"],
+					"actorId":       firstNonEmpty(fmt.Sprint(c["actorId"]), fmt.Sprint(c["id"]), fmt.Sprint(c["name"])),
+					"name":          c["name"],
+					"personality":   c["personality"],
+					"avatarAssetId": normalizeTribunalAvatarAsset(fmt.Sprint(c["avatarAssetId"]), fmt.Sprint(c["actorType"])),
+				})
+			}
+			_ = json.Unmarshal(genCase.EvidenceJSON, &generatedEvidence)
+		}
+	}
+	statements := buildNarrativeVisibleStatements(sc, sceneStatementIDs, fullCast)
+	availableEvidence := buildNarrativeEvidenceObjects(generatedEvidence, sceneEvidenceIDs)
+	selectedStatement := findNarrativeStatement(statements, payload.StatementId)
+	selectedEvidence := findNarrativeEvidence(availableEvidence, payload.EvidenceId)
+	statementText := firstNonEmpty(fmt.Sprint(selectedStatement["content"]), strings.ReplaceAll(payload.StatementId, "_", " "))
+	statementSpeaker := firstNonEmpty(fmt.Sprint(selectedStatement["speakerName"]), fmt.Sprint(selectedStatement["speakerActorId"]), "Interlocuteur")
+	evidenceTitle := firstNonEmpty(fmt.Sprint(selectedEvidence["title"]), strings.ReplaceAll(payload.EvidenceId, "_", " "))
+	evidenceDescription := firstNonEmpty(fmt.Sprint(selectedEvidence["description"]), fmt.Sprint(selectedEvidence["details"]), "Piece a conviction selectionnee.")
+	criticalResolvedBefore := m.narrativeSceneCriticalResolved(nc.ID, sc.SceneID)
+	progressBlocked := payload.ActionType == "continue_story" && !criticalResolvedBefore
 
 	// Try to find matching ProgressionRule (precise workflow)
 	var rule tribunalmodels.TribunalProgressionRule
 	ruleFound := false
-	if nc.ID > 0 {
+	if nc.ID > 0 && !progressBlocked {
 		findRule := func() error {
 			q := m.db.Where("narrative_case_id = ? AND scene_id = ? AND trigger_action = ?", nc.ID, payload.SceneId, payload.ActionType)
 			if payload.StatementId != "" {
@@ -2868,22 +3058,20 @@ func (m *module) storyAction(c *gin.Context) {
 		case "press":
 			success = true
 			resultType = "press_success"
-			narrativeResult = "La pression fait ressortir une précision utile, sans contradiction décisive pour l'instant."
+			narrativeResult = fmt.Sprintf("Interrogatoire de %s: « %s »\nLa pression oblige l'interlocuteur a preciser sa version. Cherchez maintenant une piece qui contredit ce point.", statementSpeaker, statementText)
 			defenseDelta = 2
 			pressureDelta = 3
 		case "ai_analysis", "ask_hint":
 			success = true
 			resultType = "guided_hint"
-			targetStatement := firstNonEmpty(payload.StatementId, "la déclaration sélectionnée")
-			targetEvidence := firstNonEmpty(payload.EvidenceId, "la preuve sélectionnée")
-			narrativeResult = fmt.Sprintf("Analyse IA - %s: comparez %s avec %s. Si le lien contredit directement le temoignage, utilisez Objecter; sinon utilisez Presenter pour l'ajouter au dossier.", sc.Title, strings.ReplaceAll(targetStatement, "_", " "), strings.ReplaceAll(targetEvidence, "_", " "))
+			narrativeResult = fmt.Sprintf("Analyse IA - %s\nDeclaration cible: « %s »\nPiece cible: %s.\nAngle conseille: %s", sc.Title, statementText, evidenceTitle, firstNonEmpty(fmt.Sprint(selectedEvidence["contradictionHint"]), "verifier si la piece contredit directement le temoignage."))
 			defenseDelta = 0
 			pressureDelta = 0
 		case "inspect", "inspect_evidence", "compare_evidence":
 			success = true
 			resultType = "evidence_review"
 			if payload.EvidenceId != "" {
-				narrativeResult = fmt.Sprintf("La preuve %s est examinée. Elle peut servir si elle contredit une déclaration visible.", payload.EvidenceId)
+				narrativeResult = fmt.Sprintf("Piece inspectee: %s\n%s\nOrigine: %s\nFiabilite: %d/100\nPiste: %s", evidenceTitle, evidenceDescription, firstNonEmpty(fmt.Sprint(selectedEvidence["origin"]), "non precisee"), intFromAny(selectedEvidence["reliability"], 0), firstNonEmpty(fmt.Sprint(selectedEvidence["contradictionHint"]), "a confronter avec la declaration selectionnee."))
 			} else {
 				narrativeResult = "Les preuves disponibles sont passées en revue. Sélectionnez une preuve avant de présenter une contradiction."
 			}
@@ -2892,25 +3080,31 @@ func (m *module) storyAction(c *gin.Context) {
 		case "present_evidence":
 			success = true
 			resultType = "evidence_presented"
-			narrativeResult = fmt.Sprintf("La piece %s est presentee au tribunal. Elle est ajoutee au raisonnement mais ne declenche pas encore de contradiction critique.", strings.ReplaceAll(firstNonEmpty(payload.EvidenceId, "selectionnee"), "_", " "))
+			narrativeResult = fmt.Sprintf("Piece presentee: %s\nFace a la declaration: « %s »\nLe tribunal ajoute cette piece au raisonnement. Si le lien est frontal, tentez Objecter ou Reveler.", evidenceTitle, statementText)
 			defenseDelta = 2
 			pressureDelta = 1
 		case "objection":
 			success = true
 			resultType = "objection_review"
-			narrativeResult = fmt.Sprintf("Objection examinee sur %s avec %s. Le tribunal demande un lien plus direct pour une contradiction decisive.", strings.ReplaceAll(firstNonEmpty(payload.StatementId, "la declaration"), "_", " "), strings.ReplaceAll(firstNonEmpty(payload.EvidenceId, "la preuve"), "_", " "))
+			narrativeResult = fmt.Sprintf("Objection!\nDeclaration attaquee: « %s »\nPiece invoquee: %s.\nLe juge examine le lien logique: %s", statementText, evidenceTitle, firstNonEmpty(fmt.Sprint(selectedEvidence["contradictionHint"]), "la contradiction doit etre explicite pour devenir decisive."))
 			defenseDelta = 1
 			pressureDelta = 2
 		case "expose_lie":
 			success = true
 			resultType = "lie_pressure"
-			narrativeResult = fmt.Sprintf("La contradiction potentielle est mise en avant. Il faut encore confirmer le lien entre %s et %s.", strings.ReplaceAll(firstNonEmpty(payload.StatementId, "la declaration"), "_", " "), strings.ReplaceAll(firstNonEmpty(payload.EvidenceId, "la preuve"), "_", " "))
+			narrativeResult = fmt.Sprintf("Revelation tentee.\n%s est confronte a la piece « %s ».\nLe tribunal retient la faille si elle explique pourquoi la declaration ne peut pas etre vraie.", statementSpeaker, evidenceTitle)
 			defenseDelta = 3
 			pressureDelta = 3
 		case "continue_story":
-			success = true
-			resultType = "scene_hold"
-			narrativeResult = "Le briefing de la scène est confirmé. Aucun embranchement supplémentaire n'est défini pour cette étape."
+			if progressBlocked {
+				success = false
+				resultType = "progress_blocked"
+				narrativeResult = "Impossible de continuer: cette scene attend encore une contradiction critique. Interrogez une declaration, presentez une preuve, puis objectez ou revelez la faille."
+			} else {
+				success = true
+				resultType = "scene_hold"
+				narrativeResult = "La scene est stabilisee. Le tribunal accepte de passer a l'etape suivante."
+			}
 			defenseDelta = 0
 			pressureDelta = 0
 		default:
@@ -2942,7 +3136,7 @@ func (m *module) storyAction(c *gin.Context) {
 	}
 
 	// Default progression for "continue_story" to allow story to advance even without specific rule
-	if payload.ActionType == "continue_story" && sc.NextSceneID != nil && *sc.NextSceneID != "" {
+	if payload.ActionType == "continue_story" && !progressBlocked && sc.NextSceneID != nil && *sc.NextSceneID != "" {
 		sceneAdvanced = true
 		unlocked["sceneIds"] = []string{*sc.NextSceneID}
 		m.db.Model(&tribunalmodels.TribunalScene{}).Where("narrative_case_id = ? AND scene_id = ?", nc.ID, *sc.NextSceneID).Update("status", "active")
