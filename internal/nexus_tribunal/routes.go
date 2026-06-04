@@ -2022,22 +2022,79 @@ func (m *module) triggerGenerateNow(c *gin.Context) {
 		return
 	}
 
-	batchID, generated, err := ManualGenerateTribunalCases(m.db, providerType, model, apiKey, count)
+	batchID, err := StartManualGenerateTribunalCasesAsync(m.db, providerType, model, apiKey, count)
 	if err != nil {
 		respondErr(c, http.StatusBadGateway, "GENERATE_FAILED", err.Error(), nil)
 		return
 	}
 
-	respondOK(c, gin.H{
+	c.JSON(http.StatusAccepted, gin.H{
+		"success":   true,
 		"batchId":   batchID,
-		"generated": generated,
-		"message":   fmt.Sprintf("%d affaires Tribunal générées manuellement.", generated),
+		"generated": 0,
+		"status":    "running",
+		"message":   "Génération Tribunal lancée en arrière-plan. Suis le batch pour voir le résultat.",
 	})
+}
+
+type tribunalGenerationLogEntry struct {
+	At        time.Time `json:"at"`
+	Level     int       `json:"level,omitempty"`
+	Step      string    `json:"step"`
+	Status    string    `json:"status"`
+	Message   string    `json:"message,omitempty"`
+	Preview   string    `json:"preview,omitempty"`
+	LatencyMs int64     `json:"latencyMs,omitempty"`
+}
+
+// StartManualGenerateTribunalCasesAsync creates a batch immediately, then runs generation
+// outside the HTTP request to avoid Cloudflare/Dokploy 524 timeouts on slow providers.
+func StartManualGenerateTribunalCasesAsync(db *gorm.DB, providerType, model, apiKey string, count int) (batchID uint, err error) {
+	batch, err := createManualTribunalGenerationBatch(db, providerType, model, apiKey, count)
+	if err != nil {
+		return 0, err
+	}
+
+	go func(id uint) {
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[tribunal-generate] async panic batch=%d: %v", id, r)
+				var failedBatch tribunalmodels.TribunalCaseGenerationBatch
+				if err := db.First(&failedBatch, id).Error; err == nil {
+					now := time.Now()
+					failedBatch.FinishedAt = &now
+					failedBatch.Status = "failed"
+					failedBatch.ErrorMessage = fmt.Sprintf("panic generation async: %v", r)
+					failedBatch.DurationMs = time.Since(failedBatch.StartedAt).Milliseconds()
+					_ = db.Save(&failedBatch).Error
+				}
+			}
+		}()
+
+		var runningBatch tribunalmodels.TribunalCaseGenerationBatch
+		if err := db.First(&runningBatch, id).Error; err != nil {
+			log.Printf("[tribunal-generate] async batch reload failed id=%d: %v", id, err)
+			return
+		}
+		_, _ = runManualTribunalGenerationBatch(db, &runningBatch, providerType, model, apiKey)
+	}(batch.ID)
+
+	log.Printf("[tribunal-generate] async queued batch=%d provider=%s model=%s count=%d", batch.ID, providerType, model, count)
+	return batch.ID, nil
 }
 
 // ManualGenerateTribunalCases is the shared implementation for manual generation
 // (used by the Tribunal admin page via /admin/generate/tribunal and by the internal trigger).
 func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string, count int) (batchID uint, generated int, err error) {
+	batch, err := createManualTribunalGenerationBatch(db, providerType, model, apiKey, count)
+	if err != nil {
+		return 0, 0, err
+	}
+	generated, err = runManualTribunalGenerationBatch(db, &batch, providerType, model, apiKey)
+	return batch.ID, generated, err
+}
+
+func createManualTribunalGenerationBatch(db *gorm.DB, providerType, model, apiKey string, count int) (tribunalmodels.TribunalCaseGenerationBatch, error) {
 	log.Printf("[tribunal-generate] START manual: provider=%s model=%s count=%d apiKeyLen=%d", providerType, model, count, len(apiKey))
 
 	// Ensure new narrative columns exist (in case server wasn't fully restarted after model updates)
@@ -2058,24 +2115,35 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 	}
 	if err := db.Create(&batch).Error; err != nil {
 		log.Printf("[tribunal-generate] batch create FAILED: %v", err)
-		return 0, 0, fmt.Errorf("batch create: %w", err)
+		return tribunalmodels.TribunalCaseGenerationBatch{}, fmt.Errorf("batch create: %w", err)
 	}
 	log.Printf("[tribunal-generate] batch created id=%d", batch.ID)
+	return batch, nil
+}
 
+func runManualTribunalGenerationBatch(db *gorm.DB, batch *tribunalmodels.TribunalCaseGenerationBatch, providerType, model, apiKey string) (generated int, err error) {
 	// Generate 1 by 1 (user requirement) to avoid huge prompts + timeouts on complex narrative cases.
 	// We loop over levels 1..count and call the AI for exactly one rich case each time.
 	adapter := tribunaladapters.NewAIProviderAdapter(func(pt string) string { return "" }) // we pass explicit key
 
 	seenLevels := map[int]bool{}
 	allCases := []map[string]any{}
+	generationLogs := []tribunalGenerationLogEntry{{
+		At:      time.Now(),
+		Step:    "batch_start",
+		Status:  "running",
+		Message: fmt.Sprintf("provider=%s model=%s count=%d", providerType, model, batch.RequestedCount),
+	}}
+	failed := 0
 
-	for lvl := 1; lvl <= count; lvl++ {
+	for lvl := 1; lvl <= batch.RequestedCount; lvl++ {
 		if seenLevels[lvl] {
 			continue
 		}
 
 		sys, userPrompt := tribunalprompts.BuildSingleNarrativeCasePrompt(lvl)
 		log.Printf("[tribunal-generate] generating single case level=%d (1-by-1 mode)", lvl)
+		levelStarted := time.Now()
 
 		resp, aerr := adapter.Generate(context.Background(), tribunaladapters.GenerateRequest{
 			ProviderType: providerType,
@@ -2086,6 +2154,16 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		})
 		if aerr != nil {
 			log.Printf("[tribunal-generate] single case level=%d failed: %v", lvl, aerr)
+			failed++
+			generationLogs = append(generationLogs, tribunalGenerationLogEntry{
+				At:        time.Now(),
+				Level:     lvl,
+				Step:      "provider_call",
+				Status:    "failed",
+				Message:   aerr.Error(),
+				LatencyMs: time.Since(levelStarted).Milliseconds(),
+			})
+			saveTribunalGenerationProgress(db, batch, 0, failed, generationLogs, "")
 			// continue to next level instead of failing the whole batch
 			continue
 		}
@@ -2094,6 +2172,17 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		var singleCase map[string]any
 		if uerr := json.Unmarshal([]byte(cleaned), &singleCase); uerr != nil {
 			log.Printf("[tribunal-generate] single case level=%d json parse failed: %v preview=%s", lvl, uerr, preview(cleaned, 400))
+			failed++
+			generationLogs = append(generationLogs, tribunalGenerationLogEntry{
+				At:        time.Now(),
+				Level:     lvl,
+				Step:      "json_parse",
+				Status:    "failed",
+				Message:   uerr.Error(),
+				Preview:   preview(cleaned, 700),
+				LatencyMs: resp.LatencyMs,
+			})
+			saveTribunalGenerationProgress(db, batch, 0, failed, generationLogs, "")
 			continue
 		}
 
@@ -2106,6 +2195,15 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		}
 		seenLevels[lvlVal] = true
 		allCases = append(allCases, singleCase)
+		generationLogs = append(generationLogs, tribunalGenerationLogEntry{
+			At:        time.Now(),
+			Level:     lvl,
+			Step:      "json_parse",
+			Status:    "success",
+			Message:   fmt.Sprintf("case candidate accepted level=%d", lvlVal),
+			LatencyMs: resp.LatencyMs,
+		})
+		saveTribunalGenerationProgress(db, batch, 0, failed, generationLogs, "")
 	}
 
 	// Process the cases we collected one-by-one above
@@ -2114,6 +2212,13 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		title := strings.TrimSpace(fmt.Sprint(raw["title"]))
 		if title == "" {
 			log.Printf("[tribunal-generate] skipping single case %d: no title", i)
+			failed++
+			generationLogs = append(generationLogs, tribunalGenerationLogEntry{
+				At:      time.Now(),
+				Step:    "persist",
+				Status:  "failed",
+				Message: "case skipped: no title",
+			})
 			continue
 		}
 		log.Printf("[tribunal-generate] processing single case %d: title=%q", i, title)
@@ -2206,8 +2311,24 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 		if cerr := db.Create(&rec).Error; cerr == nil {
 			generated++
 			log.Printf("[tribunal-generate] created rec id=%d title=%q (1-by-1)", rec.ID, title)
+			generationLogs = append(generationLogs, tribunalGenerationLogEntry{
+				At:      time.Now(),
+				Level:   rec.Level,
+				Step:    "persist",
+				Status:  "success",
+				Message: fmt.Sprintf("created generated_case_id=%d title=%q", rec.ID, title),
+			})
+			saveTribunalGenerationProgress(db, batch, generated, failed, generationLogs, "")
 		} else {
 			log.Printf("[tribunal-generate] DB create failed for %q: %v", title, cerr)
+			failed++
+			generationLogs = append(generationLogs, tribunalGenerationLogEntry{
+				At:      time.Now(),
+				Step:    "persist",
+				Status:  "failed",
+				Message: cerr.Error(),
+			})
+			saveTribunalGenerationProgress(db, batch, generated, failed, generationLogs, "")
 		}
 	}
 
@@ -2215,19 +2336,76 @@ func ManualGenerateTribunalCases(db *gorm.DB, providerType, model, apiKey string
 	batch.FinishedAt = &now
 	batch.GeneratedCount = generated
 	batch.PublishedCount = generated
+	batch.FailedCount = failed
 	batch.DurationMs = time.Since(batch.StartedAt).Milliseconds()
 	log.Printf("[tribunal-generate] FINISHED: batch=%d provider=%s model=%s generated=%d duration=%dms", batch.ID, providerType, model, generated, batch.DurationMs)
 
 	if generated == 0 {
 		batch.Status = "failed"
-		batch.ErrorMessage = "aucune affaire valide générée par l'IA (même en mode 1-by-1). Vérifie ta clé, le modèle et les logs [tribunal-generate] pour les previews de réponses IA."
+		batch.ErrorMessage = latestTribunalGenerationFailure(generationLogs)
+		if batch.ErrorMessage == "" {
+			batch.ErrorMessage = "aucune affaire valide générée par l'IA (même en mode 1-by-1). Vérifie ta clé, le modèle et les logs [tribunal-generate] pour les previews de réponses IA."
+		}
+		saveTribunalGenerationProgress(db, batch, generated, failed, generationLogs, batch.ErrorMessage)
 		db.Save(&batch)
-		return batch.ID, 0, nil
+		return 0, nil
 	}
-	batch.Status = "success"
-	db.Save(&batch)
+	if failed > 0 {
+		batch.Status = "partial_success"
+		batch.ErrorMessage = latestTribunalGenerationFailure(generationLogs)
+	} else {
+		batch.Status = "success"
+	}
+	saveTribunalGenerationProgress(db, batch, generated, failed, generationLogs, batch.ErrorMessage)
+	db.Save(batch)
 
-	return batch.ID, generated, nil
+	return generated, nil
+}
+
+func saveTribunalGenerationProgress(db *gorm.DB, batch *tribunalmodels.TribunalCaseGenerationBatch, generated int, failed int, logs []tribunalGenerationLogEntry, errorMessage string) {
+	if batch == nil || batch.ID == 0 {
+		return
+	}
+	if generated >= 0 {
+		batch.GeneratedCount = generated
+		batch.PublishedCount = generated
+	}
+	if failed >= 0 {
+		batch.FailedCount = failed
+	}
+	if errorMessage != "" {
+		batch.ErrorMessage = errorMessage
+	}
+	if b, err := json.Marshal(logs); err == nil {
+		batch.LogsJSON = datatypes.JSON(b)
+	}
+	batch.DurationMs = time.Since(batch.StartedAt).Milliseconds()
+	if err := db.Save(batch).Error; err != nil {
+		log.Printf("[tribunal-generate] progress save failed batch=%d: %v", batch.ID, err)
+	}
+}
+
+func latestTribunalGenerationFailure(logs []tribunalGenerationLogEntry) string {
+	for i := len(logs) - 1; i >= 0; i-- {
+		if logs[i].Status != "failed" {
+			continue
+		}
+		parts := []string{}
+		if logs[i].Level > 0 {
+			parts = append(parts, fmt.Sprintf("niveau %d", logs[i].Level))
+		}
+		if logs[i].Step != "" {
+			parts = append(parts, logs[i].Step)
+		}
+		if logs[i].Message != "" {
+			parts = append(parts, logs[i].Message)
+		}
+		if logs[i].Preview != "" {
+			parts = append(parts, "preview="+logs[i].Preview)
+		}
+		return strings.Join(parts, " | ")
+	}
+	return ""
 }
 
 // cleanJSONLocal is a local copy of the scheduler's cleanJSON for parsing LLM JSON output.

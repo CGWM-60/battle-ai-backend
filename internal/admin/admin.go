@@ -23,12 +23,12 @@ import (
 
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
+	nexustribunal "cgwm/battle/internal/nexus_tribunal"
+	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
 	"cgwm/battle/internal/provider"
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
-	nexustribunal "cgwm/battle/internal/nexus_tribunal"
-	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -1946,22 +1946,23 @@ func (s *Server) generateTribunalCases(c *gin.Context) {
 		return
 	}
 
-	batchID, generated, err := nexustribunal.ManualGenerateTribunalCases(s.db, provider, model, apiKey, count)
+	batchID, err := nexustribunal.StartManualGenerateTribunalCasesAsync(s.db, provider, model, apiKey, count)
 	if err != nil {
 		log.Printf("[admin] tribunal generate failed: %v (batchID=%d)", err, batchID)
 		c.JSON(http.StatusOK, gin.H{
 			"success":   false,
 			"error":     err.Error(),
 			"batchId":   batchID,
-			"generated": generated,
+			"generated": 0,
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	c.JSON(http.StatusAccepted, gin.H{
 		"success":   true,
 		"batchId":   batchID,
-		"generated": generated,
-		"message":   fmt.Sprintf("%d affaires Tribunal générées.", generated),
+		"generated": 0,
+		"status":    "running",
+		"message":   "Génération Tribunal lancée en arrière-plan. Rafraîchis le batch pour suivre le résultat.",
 	})
 }
