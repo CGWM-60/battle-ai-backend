@@ -4,6 +4,7 @@ import (
 	"cgwm/battle/internal/admin"
 	"cgwm/battle/internal/models"
 	nexustribunal "cgwm/battle/internal/nexus_tribunal"
+	translations "cgwm/battle/internal/nexus_game/translations"
 	"cgwm/battle/internal/repository"
 	"errors"
 	"net/http"
@@ -77,6 +78,7 @@ func RouterApp(database *gorm.DB) {
 	private.POST("/ai/providers/test", testAIProvider())
 	private.POST("/ai/providers/generate", generateAIProviderText())
 	nexustribunal.RegisterRoutes(router, database, jwtAuth(), adminAPIAuth())
+	translations.RegisterRoutes(router, database)
 
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())
@@ -86,6 +88,7 @@ func RouterApp(database *gorm.DB) {
 
 	strictAdminAPI := router.Group("/api/admin")
 	strictAdminAPI.Use(jwtAuth(), adminAPIAuth(), queue.Middleware())
+	translations.RegisterAdminRoutes(strictAdminAPI, database)
 	// Monde IA desactive: routes strictes /api/admin/game non enregistrees.
 	// registerStrictAdminWorldGameRoutes(strictAdminAPI, database)
 
