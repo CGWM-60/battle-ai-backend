@@ -55,6 +55,46 @@ func (h *BootstrapHandler) Load(c *gin.Context) {
 		}
 	}
 
+	// Factions and IA companions (same principle)
+	factionsInfo := []gin.H{}
+	if h.db != nil {
+		var factions []models.Faction
+		h.db.Find(&factions)
+		for _, f := range factions {
+			factionsInfo = append(factionsInfo, gin.H{
+				"id":   f.ID,
+				"name": f.Name,
+				"rep":  45, // fake rep for demo player
+			})
+		}
+	}
+	if len(factionsInfo) == 0 {
+		factionsInfo = []gin.H{
+			{"id": 1, "name": "Nexus Collective", "rep": 62},
+			{"id": 2, "name": "Shadow Enclave", "rep": 31},
+		}
+	}
+
+	companionsInfo := []gin.H{}
+	if h.db != nil {
+		var comps []models.IACompanion
+		h.db.Where("player_id = ?", 1).Find(&comps)
+		for _, c := range comps {
+			companionsInfo = append(companionsInfo, gin.H{
+				"id":    c.ID,
+				"name":  c.Name,
+				"role":  c.Role,
+				"level": c.Level,
+			})
+		}
+	}
+	if len(companionsInfo) == 0 {
+		companionsInfo = []gin.H{
+			{"id": 1, "name": "Vesper", "role": "Gouverneur", "level": 4},
+			{"id": 2, "name": "Kael", "role": "Stratège", "level": 3},
+		}
+	}
+
 	// Simulated response structure (will be enriched later)
 	c.JSON(http.StatusOK, gin.H{
 		"status":  "ok",
@@ -84,6 +124,8 @@ func (h *BootstrapHandler) Load(c *gin.Context) {
 			"current_tick":  12847,
 			"active_events": 2,
 		},
+		"factions":      factionsInfo,
+		"ia_companions": companionsInfo,
 		// TODO: add agents, lore summary, faction rep, etc.
 	})
 }

@@ -13,9 +13,11 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	health := handlers.NewHealthHandler(database, redis)
 	bootstrap := handlers.NewBootstrapHandler(database)
 	avatar := handlers.NewAvatarHandler(database)
+	factionH := handlers.NewFactionHandler(database)
+	companionH := handlers.NewIACompanionHandler(database)
 
-	// Auto migrate avatar model (inside nexus_game only)
-	database.AutoMigrate(&models.Avatar{})
+	// Auto migrate models (inside nexus_game only)
+	database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{})
 
 	// Serve persistent assets (avatars etc.) - mounted via volume in compose.prod.yml
 	// Path chosen to match user request: /nexus_game/assets
@@ -35,4 +37,16 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/assets/avatars", avatar.List)
 	group.PUT("/assets/avatars/:id", avatar.Update)
 	group.DELETE("/assets/avatars/:id", avatar.Delete)
+
+	// Factions (same principle as avatars)
+	group.GET("/factions", factionH.List)
+	group.POST("/factions", factionH.Create)
+	group.PUT("/factions/:id", factionH.Update)
+	group.DELETE("/factions/:id", factionH.Delete)
+
+	// IA Companions (player's AI agents/companions)
+	group.GET("/ia-companions", companionH.List)
+	group.POST("/ia-companions", companionH.Create)
+	group.PUT("/ia-companions/:id", companionH.Update)
+	group.DELETE("/ia-companions/:id", companionH.Delete)
 }
