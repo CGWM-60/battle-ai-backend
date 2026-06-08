@@ -8,24 +8,21 @@ RUN npm ci
 COPY admin ./
 RUN npm run build
 
-FROM golang:1.25-bookworm AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /src
 
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Install libwebp-dev + pkg-config so that github.com/chai2010/webp (used for mandatory WebP avatar conversion)
-# can build with CGO. This package uses the C libwebp under the hood.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libwebp-dev \
-    pkg-config \
- && rm -rf /var/lib/apt/lists/*
+# For CGO (needed by github.com/chai2010/webp for WebP conversion) on Alpine final image:
+# Use alpine builder + musl-dev so the binary is musl-linked and runs in alpine.
+# Install build tools + libwebp-dev (provides headers for the webp package).
+RUN apk add --no-cache gcc musl-dev libwebp-dev pkgconfig
 
 COPY . .
 
-# CGO_ENABLED=1 is required for the webp package (pure CGO=0 build fails with undefined symbols).
-# The resulting binary will be dynamically linked against libwebp, which we provide in the final alpine image.
+# CGO_ENABLED=1 required for webp package.
 RUN CGO_ENABLED=1 GOOS=linux go build -o /out/go-battle-ia .
 
 FROM alpine:3.22
