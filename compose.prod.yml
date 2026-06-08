@@ -68,6 +68,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    volumes:
+      # Persistent volume for all Nexus Game assets (avatars, factions, IA companions images, etc.)
+      # Declared in the top-level `volumes:` section below so Compose creates `nexus-assets` (or `cgwm-battleia-k0ryy3_nexus-assets` in Dokploy).
+      # Mounted on the **app** service (not mariadb!).
+      # Images written under /nexus_game/assets/* (subdirs avatar/faction/companion) will survive every rebuild/recreate.
+      - nexus-assets:/nexus_game/assets
     restart: unless-stopped
 
   redis:
@@ -91,9 +97,6 @@ services:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?MARIADB_ROOT_PASSWORD is required}
     volumes:
       - mariadb-data:/var/lib/mysql
-      # Persistent volume for Nexus Game assets (avatars, etc.) to survive rebuilds
-      # Mounted at /nexus_game/assets as requested (see Etape 2)
-      - nexus-assets:/nexus_game/assets
     healthcheck:
       test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MARIADB_ROOT_PASSWORD || exit 1"]
       interval: 10s
