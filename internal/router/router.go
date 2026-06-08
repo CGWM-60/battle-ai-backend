@@ -5,6 +5,7 @@ import (
 	"cgwm/battle/internal/models"
 	nexuscache "cgwm/battle/internal/nexus_game/cache"
 	nexusdev "cgwm/battle/internal/nexus_game/dev"
+	nexusroutes "cgwm/battle/internal/nexus_game/routes"
 	translations "cgwm/battle/internal/nexus_game/translations"
 	nexustribunal "cgwm/battle/internal/nexus_tribunal"
 	"cgwm/battle/internal/repository"
@@ -83,6 +84,7 @@ func RouterApp(database *gorm.DB) {
 	translations.RegisterRoutes(router, database)
 	nexusdev.RegisterRoutes(router)
 	nexuscache.RegisterRoutes(router)
+	nexusroutes.RegisterRoutes(router, database)
 
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())
