@@ -10,10 +10,12 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/models"
+
 	"github.com/chai2010/webp"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -28,10 +30,13 @@ func NewIACompanionHandler(db *gorm.DB) *IACompanionHandler {
 	return &IACompanionHandler{db: db}
 }
 
-var (
-	companionBaseDir   = assetsBaseDir + "/companion"
-	companionBaseURL   = assetsBaseURL + "/companion"
-)
+func companionBaseDir() string {
+	return filepath.Join(assetsBaseDir(), "companion")
+}
+
+func companionBaseURL() string {
+	return path.Join(assetsBaseURL(), "companion")
+}
 
 // List all companions (for admin, or filter by player later)
 func (h *IACompanionHandler) List(c *gin.Context) {
@@ -45,7 +50,9 @@ func (h *IACompanionHandler) List(c *gin.Context) {
 
 // Create a new IA companion for a player (admin or in-game) - name + image WebP
 func (h *IACompanionHandler) Create(c *gin.Context) {
-	if err := os.MkdirAll(companionBaseDir, 0755); err != nil {
+	baseDir := companionBaseDir()
+	baseURL := companionBaseURL()
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create directory"})
 		return
 	}
@@ -82,7 +89,7 @@ func (h *IACompanionHandler) Create(c *gin.Context) {
 	}
 
 	filename := uuid.New().String() + ".webp"
-	fullPath := filepath.Join(companionBaseDir, filename)
+	fullPath := filepath.Join(baseDir, filename)
 	if err := os.WriteFile(fullPath, webpBuf.Bytes(), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save"})
 		return
@@ -92,15 +99,15 @@ func (h *IACompanionHandler) Create(c *gin.Context) {
 	if c.Request.TLS == nil {
 		scheme = "http"
 	}
-	fullURL := fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, companionBaseURL, filename)
+	fullURL := fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, baseURL, filename)
 
 	cpn := models.IACompanion{
-		PlayerID: 1, // demo
-		Name:     name,
-		Role:     c.PostForm("role"),
-		Level:    1,
-		Filename: filename,
-		URL:      fullURL,
+		PlayerID:  1, // demo
+		Name:      name,
+		Role:      c.PostForm("role"),
+		Level:     1,
+		Filename:  filename,
+		URL:       fullURL,
 		CreatedAt: time.Now(),
 	}
 
@@ -114,6 +121,8 @@ func (h *IACompanionHandler) Create(c *gin.Context) {
 
 // Update
 func (h *IACompanionHandler) Update(c *gin.Context) {
+	baseDir := companionBaseDir()
+	baseURL := companionBaseURL()
 	id := c.Param("id")
 	var cpn models.IACompanion
 	if err := h.db.First(&cpn, id).Error; err != nil {
@@ -138,13 +147,15 @@ func (h *IACompanionHandler) Update(c *gin.Context) {
 		var webpBuf bytes.Buffer
 		webp.Encode(&webpBuf, img, &webp.Options{Quality: 80})
 		filename := uuid.New().String() + ".webp"
-		fullPath := filepath.Join(companionBaseDir, filename)
+		fullPath := filepath.Join(baseDir, filename)
 		os.WriteFile(fullPath, webpBuf.Bytes(), 0644)
-		os.Remove(filepath.Join(companionBaseDir, cpn.Filename))
+		os.Remove(filepath.Join(baseDir, cpn.Filename))
 		scheme := "https"
-		if c.Request.TLS == nil { scheme = "http" }
+		if c.Request.TLS == nil {
+			scheme = "http"
+		}
 		cpn.Filename = filename
-		cpn.URL = fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, companionBaseURL, filename)
+		cpn.URL = fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, baseURL, filename)
 	}
 
 	if err := h.db.Save(&cpn).Error; err != nil {
@@ -156,13 +167,14 @@ func (h *IACompanionHandler) Update(c *gin.Context) {
 
 // Delete
 func (h *IACompanionHandler) Delete(c *gin.Context) {
+	baseDir := companionBaseDir()
 	id := c.Param("id")
 	var cpn models.IACompanion
 	if err := h.db.First(&cpn, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "companion not found"})
 		return
 	}
-	os.Remove(filepath.Join(companionBaseDir, cpn.Filename))
+	os.Remove(filepath.Join(baseDir, cpn.Filename))
 	h.db.Delete(&cpn)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }

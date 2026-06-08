@@ -10,9 +10,11 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 
 	"cgwm/battle/internal/nexus_game/models"
+
 	"github.com/chai2010/webp"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -27,10 +29,13 @@ func NewFactionHandler(db *gorm.DB) *FactionHandler {
 	return &FactionHandler{db: db}
 }
 
-var (
-	factionBaseDir   = assetsBaseDir + "/faction"
-	factionBaseURL   = assetsBaseURL + "/faction"
-)
+func factionBaseDir() string {
+	return filepath.Join(assetsBaseDir(), "faction")
+}
+
+func factionBaseURL() string {
+	return path.Join(assetsBaseURL(), "faction")
+}
 
 // List all factions
 func (h *FactionHandler) List(c *gin.Context) {
@@ -44,7 +49,9 @@ func (h *FactionHandler) List(c *gin.Context) {
 
 // Create a new faction (admin) - name + image (WebP like avatar)
 func (h *FactionHandler) Create(c *gin.Context) {
-	if err := os.MkdirAll(factionBaseDir, 0755); err != nil {
+	baseDir := factionBaseDir()
+	baseURL := factionBaseURL()
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create directory"})
 		return
 	}
@@ -81,7 +88,7 @@ func (h *FactionHandler) Create(c *gin.Context) {
 	}
 
 	filename := uuid.New().String() + ".webp"
-	fullPath := filepath.Join(factionBaseDir, filename)
+	fullPath := filepath.Join(baseDir, filename)
 	if err := os.WriteFile(fullPath, webpBuf.Bytes(), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save"})
 		return
@@ -91,7 +98,7 @@ func (h *FactionHandler) Create(c *gin.Context) {
 	if c.Request.TLS == nil {
 		scheme = "http"
 	}
-	fullURL := fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, factionBaseURL, filename)
+	fullURL := fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, baseURL, filename)
 
 	f := models.Faction{
 		Name:     name,
@@ -109,6 +116,8 @@ func (h *FactionHandler) Create(c *gin.Context) {
 
 // Update faction (name + optional image)
 func (h *FactionHandler) Update(c *gin.Context) {
+	baseDir := factionBaseDir()
+	baseURL := factionBaseURL()
 	id := c.Param("id")
 	var f models.Faction
 	if err := h.db.First(&f, id).Error; err != nil {
@@ -129,13 +138,15 @@ func (h *FactionHandler) Update(c *gin.Context) {
 		var webpBuf bytes.Buffer
 		webp.Encode(&webpBuf, img, &webp.Options{Quality: 80})
 		filename := uuid.New().String() + ".webp"
-		fullPath := filepath.Join(factionBaseDir, filename)
+		fullPath := filepath.Join(baseDir, filename)
 		os.WriteFile(fullPath, webpBuf.Bytes(), 0644)
-		os.Remove(filepath.Join(factionBaseDir, f.Filename))
+		os.Remove(filepath.Join(baseDir, f.Filename))
 		scheme := "https"
-		if c.Request.TLS == nil { scheme = "http" }
+		if c.Request.TLS == nil {
+			scheme = "http"
+		}
 		f.Filename = filename
-		f.URL = fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, factionBaseURL, filename)
+		f.URL = fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, baseURL, filename)
 	}
 
 	if err := h.db.Save(&f).Error; err != nil {
@@ -147,13 +158,14 @@ func (h *FactionHandler) Update(c *gin.Context) {
 
 // Delete faction
 func (h *FactionHandler) Delete(c *gin.Context) {
+	baseDir := factionBaseDir()
 	id := c.Param("id")
 	var f models.Faction
 	if err := h.db.First(&f, id).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "faction not found"})
 		return
 	}
-	os.Remove(filepath.Join(factionBaseDir, f.Filename))
+	os.Remove(filepath.Join(baseDir, f.Filename))
 	h.db.Delete(&f)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }

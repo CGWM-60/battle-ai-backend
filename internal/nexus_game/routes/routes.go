@@ -26,7 +26,9 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	companionH := handlers.NewIACompanionHandler(database)
 
 	// Auto migrate models (inside nexus_game only)
-	database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{})
+	if database != nil {
+		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{})
+	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
 	assetsBaseDir := getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets")

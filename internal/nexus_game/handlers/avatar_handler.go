@@ -10,21 +10,16 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/models"
+
 	"github.com/chai2010/webp"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
-)
-
-var (
-	assetsBaseDir    = getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets")
-	assetsBaseURL    = getEnv("NEXUS_ASSETS_BASE_URL", "/nexus_game/assets")
-	avatarBaseDir    = assetsBaseDir + "/avatar"
-	avatarBaseURL    = assetsBaseURL + "/avatar"
 )
 
 func getEnv(key, def string) string {
@@ -32,6 +27,22 @@ func getEnv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func assetsBaseDir() string {
+	return getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets")
+}
+
+func assetsBaseURL() string {
+	return getEnv("NEXUS_ASSETS_BASE_URL", "/nexus_game/assets")
+}
+
+func avatarBaseDir() string {
+	return filepath.Join(assetsBaseDir(), "avatar")
+}
+
+func avatarBaseURL() string {
+	return path.Join(assetsBaseURL(), "avatar")
 }
 
 type AvatarHandler struct {
@@ -50,7 +61,9 @@ func NewAvatarHandler(db *gorm.DB) *AvatarHandler {
 // - Returns name + full URL
 func (h *AvatarHandler) Upload(c *gin.Context) {
 	// Ensure directory exists (persistent volume)
-	if err := os.MkdirAll(avatarBaseDir, 0755); err != nil {
+	baseDir := avatarBaseDir()
+	baseURL := avatarBaseURL()
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create avatar directory"})
 		return
 	}
@@ -90,7 +103,7 @@ func (h *AvatarHandler) Upload(c *gin.Context) {
 
 	// Unique filename
 	filename := uuid.New().String() + ".webp"
-	fullPath := filepath.Join(avatarBaseDir, filename)
+	fullPath := filepath.Join(baseDir, filename)
 
 	if err := os.WriteFile(fullPath, webpBuf.Bytes(), 0644); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save avatar"})
@@ -102,7 +115,7 @@ func (h *AvatarHandler) Upload(c *gin.Context) {
 	if c.Request.TLS == nil {
 		scheme = "http"
 	}
-	fullURL := fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, avatarBaseURL, filename)
+	fullURL := fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, baseURL, filename)
 
 	avatar := models.Avatar{
 		PlayerID:  1, // TODO: get from auth context later
@@ -149,6 +162,8 @@ func (h *AvatarHandler) List(c *gin.Context) {
 
 // Update avatar name and/or image (CRUD popin)
 func (h *AvatarHandler) Update(c *gin.Context) {
+	baseDir := avatarBaseDir()
+	baseURL := avatarBaseURL()
 	id := c.Param("id")
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
@@ -181,13 +196,13 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 			return
 		}
 		filename := uuid.New().String() + ".webp"
-		fullPath := filepath.Join(avatarBaseDir, filename)
+		fullPath := filepath.Join(baseDir, filename)
 		if err := os.WriteFile(fullPath, webpBuf.Bytes(), 0644); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save avatar"})
 			return
 		}
 		// delete old
-		oldPath := filepath.Join(avatarBaseDir, avatar.Filename)
+		oldPath := filepath.Join(baseDir, avatar.Filename)
 		os.Remove(oldPath)
 
 		avatar.Filename = filename
@@ -195,7 +210,7 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 		if c.Request.TLS == nil {
 			scheme = "http"
 		}
-		avatar.URL = fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, avatarBaseURL, filename)
+		avatar.URL = fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, baseURL, filename)
 	}
 
 	if err := h.db.Save(&avatar).Error; err != nil {
@@ -207,6 +222,7 @@ func (h *AvatarHandler) Update(c *gin.Context) {
 
 // Delete avatar (and file)
 func (h *AvatarHandler) Delete(c *gin.Context) {
+	baseDir := avatarBaseDir()
 	id := c.Param("id")
 	var avatar models.Avatar
 	if err := h.db.First(&avatar, id).Error; err != nil {
@@ -214,7 +230,7 @@ func (h *AvatarHandler) Delete(c *gin.Context) {
 		return
 	}
 	// delete file
-	fullPath := filepath.Join(avatarBaseDir, avatar.Filename)
+	fullPath := filepath.Join(baseDir, avatar.Filename)
 	os.Remove(fullPath)
 
 	if err := h.db.Delete(&avatar).Error; err != nil {
