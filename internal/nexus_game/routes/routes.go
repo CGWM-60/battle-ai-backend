@@ -32,4 +32,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// Etape 2 - Avatar management
 	// POST multipart: name + image (converted to webp on server)
 	group.POST("/assets/avatar", avatar.Upload)
+	group.GET("/assets/avatars", avatar.List)
+	group.PUT("/assets/avatars/:id", avatar.Update)
+	group.DELETE("/assets/avatars/:id", avatar.Delete)
 }

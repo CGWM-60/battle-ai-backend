@@ -127,3 +127,90 @@ func (h *AvatarHandler) GetCurrent(playerID uint) (models.Avatar, error) {
 	err := h.db.Where("player_id = ?", playerID).Order("created_at desc").First(&avatar).Error
 	return avatar, err
 }
+
+// List returns all avatars (for admin)
+func (h *AvatarHandler) List(c *gin.Context) {
+	var avatars []models.Avatar
+	if err := h.db.Order("created_at desc").Find(&avatars).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"avatars": avatars})
+}
+
+// Update avatar name and/or image (CRUD popin)
+func (h *AvatarHandler) Update(c *gin.Context) {
+	id := c.Param("id")
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		return
+	}
+
+	name := c.PostForm("name")
+	if name != "" {
+		avatar.Name = name
+	}
+
+	// if new image
+	if file, err := c.FormFile("image"); err == nil {
+		f, _ := file.Open()
+		defer f.Close()
+		imgBytes, err := io.ReadAll(f)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image"})
+			return
+		}
+		img, _, err := image.Decode(bytes.NewReader(imgBytes))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid image format"})
+			return
+		}
+		var webpBuf bytes.Buffer
+		if err := webp.Encode(&webpBuf, img, &webp.Options{Quality: 80}); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to convert to webp"})
+			return
+		}
+		filename := uuid.New().String() + ".webp"
+		fullPath := filepath.Join(avatarBaseDir, filename)
+		if err := os.WriteFile(fullPath, webpBuf.Bytes(), 0644); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save avatar"})
+			return
+		}
+		// delete old
+		oldPath := filepath.Join(avatarBaseDir, avatar.Filename)
+		os.Remove(oldPath)
+
+		avatar.Filename = filename
+		scheme := "https"
+		if c.Request.TLS == nil {
+			scheme = "http"
+		}
+		avatar.URL = fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, avatarBaseURL, filename)
+	}
+
+	if err := h.db.Save(&avatar).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"avatar": avatar})
+}
+
+// Delete avatar (and file)
+func (h *AvatarHandler) Delete(c *gin.Context) {
+	id := c.Param("id")
+	var avatar models.Avatar
+	if err := h.db.First(&avatar, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "avatar not found"})
+		return
+	}
+	// delete file
+	fullPath := filepath.Join(avatarBaseDir, avatar.Filename)
+	os.Remove(fullPath)
+
+	if err := h.db.Delete(&avatar).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
