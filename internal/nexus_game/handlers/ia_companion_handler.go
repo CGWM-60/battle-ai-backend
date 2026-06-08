@@ -1,11 +1,22 @@
 package handlers
 
 import (
+	"bytes"
+	"fmt"
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/models"
+	"github.com/chai2010/webp"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -17,6 +28,11 @@ func NewIACompanionHandler(db *gorm.DB) *IACompanionHandler {
 	return &IACompanionHandler{db: db}
 }
 
+var (
+	companionBaseDir = getEnv("NEXUS_ASSET_DIR", "/nexus_game/assets/companion")
+	companionBaseURL = getEnv("NEXUS_ASSET_BASE_URL", "/nexus_game/assets/companion")
+)
+
 // List all companions (for admin, or filter by player later)
 func (h *IACompanionHandler) List(c *gin.Context) {
 	var companions []models.IACompanion
@@ -27,17 +43,70 @@ func (h *IACompanionHandler) List(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ia_companions": companions})
 }
 
-// Create a new IA companion for a player (admin or in-game)
+// Create a new IA companion for a player (admin or in-game) - name + image WebP
 func (h *IACompanionHandler) Create(c *gin.Context) {
-	var cpn models.IACompanion
-	if err := c.ShouldBindJSON(&cpn); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := os.MkdirAll(companionBaseDir, 0755); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create directory"})
 		return
 	}
-	cpn.ID = 0
-	cpn.CreatedAt = time.Now()
+
+	name := c.PostForm("name")
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+
+	file, _, err := c.Request.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
+		return
+	}
+	defer file.Close()
+
+	imgBytes, err := io.ReadAll(file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read image"})
+		return
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgBytes))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid image format"})
+		return
+	}
+
+	var webpBuf bytes.Buffer
+	if err := webp.Encode(&webpBuf, img, &webp.Options{Quality: 80}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to convert to webp"})
+		return
+	}
+
+	filename := uuid.New().String() + ".webp"
+	fullPath := filepath.Join(companionBaseDir, filename)
+	if err := os.WriteFile(fullPath, webpBuf.Bytes(), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save"})
+		return
+	}
+
+	scheme := "https"
+	if c.Request.TLS == nil {
+		scheme = "http"
+	}
+	fullURL := fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, companionBaseURL, filename)
+
+	cpn := models.IACompanion{
+		PlayerID: 1, // demo
+		Name:     name,
+		Role:     c.PostForm("role"),
+		Level:    1,
+		Filename: filename,
+		URL:      fullURL,
+		CreatedAt: time.Now(),
+	}
+
 	if err := h.db.Create(&cpn).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		os.Remove(fullPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save to database"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"ia_companion": cpn})
@@ -51,14 +120,33 @@ func (h *IACompanionHandler) Update(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "companion not found"})
 		return
 	}
-	var input models.IACompanion
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
+
+	name := c.PostForm("name")
+	if name != "" {
+		cpn.Name = name
 	}
-	cpn.Name = input.Name
-	cpn.Role = input.Role
-	cpn.Level = input.Level
+	role := c.PostForm("role")
+	if role != "" {
+		cpn.Role = role
+	}
+
+	if file, err := c.FormFile("image"); err == nil {
+		f2, _ := file.Open()
+		defer f2.Close()
+		imgBytes, _ := io.ReadAll(f2)
+		img, _, _ := image.Decode(bytes.NewReader(imgBytes))
+		var webpBuf bytes.Buffer
+		webp.Encode(&webpBuf, img, &webp.Options{Quality: 80})
+		filename := uuid.New().String() + ".webp"
+		fullPath := filepath.Join(companionBaseDir, filename)
+		os.WriteFile(fullPath, webpBuf.Bytes(), 0644)
+		os.Remove(filepath.Join(companionBaseDir, cpn.Filename))
+		scheme := "https"
+		if c.Request.TLS == nil { scheme = "http" }
+		cpn.Filename = filename
+		cpn.URL = fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, companionBaseURL, filename)
+	}
+
 	if err := h.db.Save(&cpn).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -69,9 +157,12 @@ func (h *IACompanionHandler) Update(c *gin.Context) {
 // Delete
 func (h *IACompanionHandler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.db.Delete(&models.IACompanion{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	var cpn models.IACompanion
+	if err := h.db.First(&cpn, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "companion not found"})
 		return
 	}
+	os.Remove(filepath.Join(companionBaseDir, cpn.Filename))
+	h.db.Delete(&cpn)
 	c.JSON(http.StatusOK, gin.H{"success": true})
 }

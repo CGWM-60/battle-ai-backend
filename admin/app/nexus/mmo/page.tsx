@@ -371,75 +371,100 @@ export default function NexusMmoPage() {
           <div className="panel" style={{ width: 460, maxWidth: '92%', position: 'relative', padding: 24 }}>
             <button onClick={closeModal} style={{ position: 'absolute', top: 12, right: 16, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer' }}>×</button>
 
-            {/* Avatars create/edit/delete - reuse previous logic (simplified here for space) */}
-            {modalType === 'avatars' && (
-              <div>
-                {modal === 'create' && <p>Formulaire création avatar (nom + image) - voir code complet dans la version précédente si besoin.</p>}
-                {/* For brevity, the full avatar modals from previous version are assumed kept; in practice copy the avatar specific modals here */}
-              </div>
-            )}
-
-            {/* Factions simple CRUD popin */}
-            {modalType === 'factions' && (
+            {/* Full avatar create/edit with name + image (WebP) */}
+            {modalType === 'avatars' && (modal === 'create' || modal === 'edit') && (
               <>
-                <h3>{modal === 'create' ? 'Créer une faction' : modal === 'edit' ? 'Modifier la faction' : 'Supprimer la faction'}</h3>
-                {modal !== 'delete' ? (
-                  <div>
-                    <input type="text" placeholder="Nom" value={formName} onChange={e=>setFormName(e.target.value)} style={{width:'100%',padding:8,marginBottom:8}} />
-                    <input type="text" placeholder="Description" value={formDesc} onChange={e=>setFormDesc(e.target.value)} style={{width:'100%',padding:8,marginBottom:8}} />
-                    <input type="color" value={formColor} onChange={e=>setFormColor(e.target.value)} style={{marginBottom:12}} />
-                    <button onClick={async () => {
-                      setSubmitting(true);
-                      const payload = { name: formName, description: formDesc, color: formColor };
-                      const url = modal === 'create' ? '/api/nexus-game/factions' : `/api/nexus-game/factions/${currentItem.id}`;
-                      const method = modal === 'create' ? 'POST' : 'PUT';
-                      const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload), credentials:'same-origin' });
-                      if (res.ok) { closeModal(); await fetchAll(); } else setError(await res.text());
-                      setSubmitting(false);
-                    }} disabled={submitting} style={{width:'100%',padding:12,background:'#10b981',color:'white',border:'none',borderRadius:6}}>
-                      {submitting ? '...' : modal === 'create' ? 'Créer' : 'Enregistrer'}
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <p>Supprimer {currentItem?.name} ?</p>
-                    <button onClick={async () => {
-                      setSubmitting(true);
-                      await fetch(`/api/nexus-game/factions/${currentItem.id}`, {method:'DELETE', credentials:'same-origin'});
-                      closeModal(); await fetchAll(); setSubmitting(false);
-                    }} style={{background:'#dc2626',color:'white',padding:10,width:'100%'}}>Confirmer suppression</button>
-                  </div>
-                )}
+                <h3>{modal === 'create' ? 'Créer un Avatar' : 'Modifier l\'Avatar'} {currentItem ? '#' + currentItem.id : ''}</h3>
+                <p style={{ fontSize: 13, color: '#64748b' }}>Nom + image → conversion WebP obligatoire côté serveur.</p>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Nom</label>
+                  <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="Nom de l'avatar" style={{ width: '100%', padding: 10, marginBottom: 12 }} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Image (jpg/png)</label>
+                  <input type="file" accept="image/*" onChange={e => setFormFile(e.target.files?.[0] || null)} style={{ marginBottom: 16 }} />
+                  {modal === 'edit' && currentItem && currentItem.url && <img src={currentItem.url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6, marginBottom: 12 }} />}
+                  <button onClick={async () => {
+                    setSubmitting(true);
+                    const formData = new FormData();
+                    formData.append("name", formName);
+                    if (formFile) formData.append("image", formFile);
+                    const url = modal === 'create' ? '/api/nexus-game/assets/avatar' : `/api/nexus-game/assets/avatars/${currentItem?.id}`;
+                    const method = modal === 'create' ? 'POST' : 'PUT';
+                    const res = await fetch(url, { method, body: formData, credentials: 'same-origin' });
+                    if (res.ok) { closeModal(); await fetchAll(); } else setError(await res.text());
+                    setSubmitting(false);
+                  }} disabled={submitting || !formName} style={{ width: '100%', padding: 12, background: '#7C3AED', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600 }}>
+                    {submitting ? '...' : (modal === 'create' ? 'Créer Avatar (WebP)' : 'Enregistrer')}
+                  </button>
+                </div>
               </>
             )}
 
-            {/* IA Compagnons simple CRUD popin */}
-            {modalType === 'companions' && (
+            {/* Factions - now with name + image (WebP) like avatar */}
+            {modalType === 'factions' && (modal === 'create' || modal === 'edit') && (
               <>
-                <h3>{modal === 'create' ? 'Créer un IA Compagnon' : modal === 'edit' ? 'Modifier' : 'Supprimer'}</h3>
-                {modal !== 'delete' ? (
-                  <div>
-                    <input type="text" placeholder="Nom" value={formName} onChange={e=>setFormName(e.target.value)} style={{width:'100%',padding:8,marginBottom:8}} />
-                    <input type="text" placeholder="Rôle (Gouverneur, Stratège...)" value={formRole} onChange={e=>setFormRole(e.target.value)} style={{width:'100%',padding:8,marginBottom:8}} />
-                    <input type="number" value={formLevel} onChange={e=>setFormLevel(parseInt(e.target.value)||1)} style={{width:'100%',padding:8,marginBottom:12}} />
-                    <button onClick={async () => {
-                      setSubmitting(true);
-                      const payload = { name: formName, role: formRole, level: formLevel, player_id: 1 };
-                      const url = modal === 'create' ? '/api/nexus-game/ia-companions' : `/api/nexus-game/ia-companions/${currentItem.id}`;
-                      const method = modal === 'create' ? 'POST' : 'PUT';
-                      const res = await fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload), credentials:'same-origin' });
-                      if (res.ok) { closeModal(); await fetchAll(); } else setError(await res.text());
-                      setSubmitting(false);
-                    }} disabled={submitting} style={{width:'100%',padding:12,background:'#f59e0b',color:'white',border:'none',borderRadius:6}}>
-                      {submitting ? '...' : modal === 'create' ? 'Créer' : 'Enregistrer'}
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <p>Supprimer {currentItem?.name} ?</p>
-                    <button onClick={async () => { setSubmitting(true); await fetch(`/api/nexus-game/ia-companions/${currentItem.id}`, {method:'DELETE', credentials:'same-origin'}); closeModal(); await fetchAll(); setSubmitting(false); }} style={{background:'#dc2626',color:'white',padding:10,width:'100%'}}>Confirmer</button>
-                  </div>
-                )}
+                <h3>{modal === 'create' ? 'Créer une Faction' : 'Modifier la Faction'}</h3>
+                <p style={{ fontSize: 13, color: '#64748b' }}>Nom + image → WebP obligatoire.</p>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Nom</label>
+                  <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="Nom de la faction" style={{ width: '100%', padding: 10, marginBottom: 12 }} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Description</label>
+                  <input type="text" value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder="Description" style={{ width: '100%', padding: 10, marginBottom: 12 }} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Couleur</label>
+                  <input type="color" value={formColor} onChange={e => setFormColor(e.target.value)} style={{ marginBottom: 12 }} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Image (WebP)</label>
+                  <input type="file" accept="image/*" onChange={e => setFormFile(e.target.files?.[0] || null)} style={{ marginBottom: 16 }} />
+                  {modal === 'edit' && currentItem && currentItem.url && <img src={currentItem.url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6, marginBottom: 12 }} />}
+                  <button onClick={async () => {
+                    setSubmitting(true);
+                    const formData = new FormData();
+                    formData.append("name", formName);
+                    formData.append("description", formDesc);
+                    formData.append("color", formColor);
+                    if (formFile) formData.append("image", formFile);
+                    const url = modal === 'create' ? '/api/nexus-game/factions' : `/api/nexus-game/factions/${currentItem?.id}`;
+                    const method = modal === 'create' ? 'POST' : 'PUT';
+                    const res = await fetch(url, { method, body: formData, credentials: 'same-origin' });
+                    if (res.ok) { closeModal(); await fetchAll(); } else setError(await res.text());
+                    setSubmitting(false);
+                  }} disabled={submitting || !formName} style={{ width: '100%', padding: 12, background: '#10b981', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600 }}>
+                    {submitting ? '...' : (modal === 'create' ? 'Créer Faction (WebP)' : 'Enregistrer')}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* IA Compagnons - now with name + image (WebP) like avatar */}
+            {modalType === 'companions' && (modal === 'create' || modal === 'edit') && (
+              <>
+                <h3>{modal === 'create' ? 'Créer un IA Compagnon' : 'Modifier l\'IA Compagnon'}</h3>
+                <p style={{ fontSize: 13, color: '#64748b' }}>Nom + image → WebP obligatoire.</p>
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Nom</label>
+                  <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="Nom du compagnon" style={{ width: '100%', padding: 10, marginBottom: 12 }} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Rôle</label>
+                  <input type="text" value={formRole} onChange={e => setFormRole(e.target.value)} placeholder="Gouverneur / Stratège..." style={{ width: '100%', padding: 10, marginBottom: 12 }} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Niveau</label>
+                  <input type="number" value={formLevel} onChange={e => setFormLevel(parseInt(e.target.value)||1)} style={{ width: '100%', padding: 10, marginBottom: 12 }} />
+                  <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Image (WebP)</label>
+                  <input type="file" accept="image/*" onChange={e => setFormFile(e.target.files?.[0] || null)} style={{ marginBottom: 16 }} />
+                  {modal === 'edit' && currentItem && currentItem.url && <img src={currentItem.url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 6, marginBottom: 12 }} />}
+                  <button onClick={async () => {
+                    setSubmitting(true);
+                    const formData = new FormData();
+                    formData.append("name", formName);
+                    formData.append("role", formRole);
+                    formData.append("level", String(formLevel));
+                    formData.append("player_id", "1");
+                    if (formFile) formData.append("image", formFile);
+                    const url = modal === 'create' ? '/api/nexus-game/ia-companions' : `/api/nexus-game/ia-companions/${currentItem?.id}`;
+                    const method = modal === 'create' ? 'POST' : 'PUT';
+                    const res = await fetch(url, { method, body: formData, credentials: 'same-origin' });
+                    if (res.ok) { closeModal(); await fetchAll(); } else setError(await res.text());
+                    setSubmitting(false);
+                  }} disabled={submitting || !formName} style={{ width: '100%', padding: 12, background: '#f59e0b', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600 }}>
+                    {submitting ? '...' : (modal === 'create' ? 'Créer Compagnon (WebP)' : 'Enregistrer')}
+                  </button>
+                </div>
               </>
             )}
 

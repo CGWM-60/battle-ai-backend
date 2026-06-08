@@ -10,5 +10,7 @@ type IACompanion struct {
 	Name      string    `json:"name" gorm:"size:100;not null"`
 	Role      string    `json:"role" gorm:"size:50"` // e.g. "Gouverneur", "Stratège", "Commandant"
 	Level     int       `json:"level"`
+	Filename  string    `json:"filename" gorm:"size:255"`
+	URL       string    `json:"url" gorm:"size:500"`
 	CreatedAt time.Time `json:"created_at"`
 }
