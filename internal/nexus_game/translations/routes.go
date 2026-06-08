@@ -39,6 +39,18 @@ func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 		c.JSON(http.StatusOK, gin.H{"domains": domains})
 	})
 
+	r.GET("/api/translations/languages", func(c *gin.Context) {
+		languages, err := svc.GetAvailableLanguages(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		if len(languages) == 0 {
+			languages = []string{"fr"}
+		}
+		c.JSON(http.StatusOK, gin.H{"languages": languages})
+	})
+
 	// Traductions pour un domaine spécifique
 	r.GET("/api/translations/domain/:domain", func(c *gin.Context) {
 		domain := c.Param("domain")

@@ -3,6 +3,7 @@ package translations
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"cgwm/battle/internal/models"
@@ -121,6 +122,12 @@ func (s *dbTranslationService) GetTranslations(ctx context.Context, lang string,
 		}
 	}
 
+	if len(m) == 0 {
+		for key, value := range DefaultFrenchFallback {
+			m[key] = value
+		}
+	}
+
 	return m, nil
 }
 
@@ -151,6 +158,13 @@ func (s *dbTranslationService) GetDomainTranslations(ctx context.Context, domain
 	m := make(map[string]string, len(results))
 	for _, r := range results {
 		m[r.TranslationKey] = r.Value
+	}
+	if len(m) == 0 && domain == "nexus_game" {
+		for key, value := range DefaultFrenchFallback {
+			if strings.HasPrefix(key, "nexus_game.") {
+				m[key] = value
+			}
+		}
 	}
 	return m, nil
 }
