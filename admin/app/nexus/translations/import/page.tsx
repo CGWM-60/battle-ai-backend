@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { AdminShell } from "../../../components/AdminShell";
 import { ErrorState } from "../../../components/LoadState";
-import type { TranslationImportRow } from "../../../types";
+import type { TranslationImportPayload, TranslationImportRow } from "../../../types";
 
 export default function ImportPage() {
   const [jsonText, setJsonText] = useState("");
   const [preview, setPreview] = useState<TranslationImportRow[] | null>(null);
+  const [payload, setPayload] = useState<TranslationImportPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -15,9 +16,9 @@ export default function ImportPage() {
     setError(null);
     setBusy(true);
     try {
-      let rows: TranslationImportRow[];
+      let parsedPayload: TranslationImportPayload;
       try {
-        rows = JSON.parse(jsonText);
+        parsedPayload = normalizeImportPayload(JSON.parse(jsonText));
       } catch {
         throw new Error("JSON invalide");
       }
@@ -25,7 +26,7 @@ export default function ImportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify(rows),
+        body: JSON.stringify(parsedPayload),
       });
       if (!res.ok) throw new Error(await res.text());
       const text = await res.text();
@@ -37,6 +38,7 @@ export default function ImportPage() {
         throw new Error('Invalid JSON from preview endpoint. See console.');
       }
       setPreview(data.preview || data);
+      setPayload({ ...parsedPayload, rows: data.preview || parsedPayload.rows });
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -53,7 +55,11 @@ export default function ImportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ rows: preview, file_name: "admin-import.json" }),
+        body: JSON.stringify({
+          ...payload,
+          rows: preview,
+          file_name: payload?.file_name || "admin-import.json",
+        }),
       });
       if (!res.ok) throw new Error(await res.text());
       const text = await res.text();
@@ -65,6 +71,7 @@ export default function ImportPage() {
       }
       alert("Import commit OK (côté Go).");
       setPreview(null);
+      setPayload(null);
       setJsonText("");
     } catch (e: any) {
       setError(e.message);
@@ -96,7 +103,7 @@ export default function ImportPage() {
         <textarea
           value={jsonText}
           onChange={(e) => setJsonText(e.target.value)}
-          placeholder='[{"domain":"nexus_game","key":"...","locale":"fr","value":"..."}]'
+          placeholder='{"language":{"code":"fr"},"rows":[{"domain":"nexus_game","key":"...","locale":"fr","value":"..."}]}'
           rows={10}
           style={{ width: "100%", fontFamily: "monospace", marginTop: 8 }}
         />
@@ -108,6 +115,7 @@ export default function ImportPage() {
       {preview && (
         <section className="panel">
           <h2>Preview (depuis Go)</h2>
+          {payload?.language?.code ? <p>Langue: {payload.language.native_name || payload.language.name || payload.language.code}</p> : null}
           <table className="data-table">
             <thead>
               <tr>
@@ -138,4 +146,20 @@ export default function ImportPage() {
       )}
     </AdminShell>
   );
+}
+
+function normalizeImportPayload(parsed: unknown): TranslationImportPayload {
+  if (Array.isArray(parsed)) {
+    return { file_name: "admin-import.json", rows: parsed as TranslationImportRow[] };
+  }
+  if (parsed && typeof parsed === "object" && Array.isArray((parsed as { rows?: unknown }).rows)) {
+    const data = parsed as TranslationImportPayload;
+    return {
+      language: data.language,
+      locale: data.locale || data.language?.code,
+      file_name: data.file_name || "admin-import.json",
+      rows: data.rows,
+    };
+  }
+  throw new Error("JSON invalide: tableau de lignes ou objet { language, rows } attendu");
 }

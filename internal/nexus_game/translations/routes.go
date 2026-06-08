@@ -2,6 +2,7 @@ package translations
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 
 	"cgwm/battle/internal/models"
@@ -211,30 +212,31 @@ func RegisterAdminRoutes(adminGroup *gin.RouterGroup, database *gorm.DB) {
 
 	// Import
 	adminGroup.POST("/translations/import/preview", func(c *gin.Context) {
-		var rows []models.TranslationImportRow
-		if err := c.ShouldBindJSON(&rows); err != nil {
+		payload, err := bindImportPayload(c)
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		previewed, err := svc.PreviewImport(c.Request.Context(), rows)
+		previewed, err := svc.PreviewImport(c.Request.Context(), payload.Rows)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"preview": previewed})
+		c.JSON(http.StatusOK, gin.H{
+			"language":  payload.Language,
+			"locale":    payload.Locale,
+			"file_name": payload.FileName,
+			"preview":   previewed,
+		})
 	})
 	adminGroup.POST("/translations/import/commit", func(c *gin.Context) {
-		var req struct {
-			ImportID uint                          `json:"import_id"`
-			FileName string                        `json:"file_name"`
-			Rows     []models.TranslationImportRow `json:"rows"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
+		payload, err := bindImportPayload(c)
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if len(req.Rows) > 0 {
-			imp, err := svc.CommitImportRows(c.Request.Context(), req.Rows, req.FileName)
+		if len(payload.Rows) > 0 {
+			imp, err := svc.CommitImportRows(c.Request.Context(), payload.Rows, payload.FileName)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -242,11 +244,11 @@ func RegisterAdminRoutes(adminGroup *gin.RouterGroup, database *gorm.DB) {
 			c.JSON(http.StatusOK, gin.H{"status": "committed", "import": imp})
 			return
 		}
-		if req.ImportID == 0 {
+		if payload.ImportID == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "import_id or rows are required"})
 			return
 		}
-		if err := svc.CommitImport(c.Request.Context(), req.ImportID); err != nil {
+		if err := svc.CommitImport(c.Request.Context(), payload.ImportID); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
@@ -302,4 +304,12 @@ func RegisterAdminRoutes(adminGroup *gin.RouterGroup, database *gorm.DB) {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "updated"})
 	})
+}
+
+func bindImportPayload(c *gin.Context) (*ImportPayload, error) {
+	raw, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, err
+	}
+	return ParseImportPayloadBytes(raw)
 }

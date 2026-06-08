@@ -1,0 +1,817 @@
+{
+  "language": {
+    "code": "fr",
+    "name": "French",
+    "native_name": "Français",
+    "default": true
+  },
+  "locale": "fr",
+  "file_name": "NEXUS_TRANSLATIONS_INITIAL_IMPORT.fr.json",
+  "rows": [
+    {
+      "domain": "common",
+      "key": "common.app.title",
+      "locale": "fr",
+      "value": "NEXUS GAMES",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.confirm",
+      "locale": "fr",
+      "value": "CONFIRMER",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.cancel",
+      "locale": "fr",
+      "value": "ANNULER",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.refresh",
+      "locale": "fr",
+      "value": "Rafraîchir",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.back",
+      "locale": "fr",
+      "value": "Retour",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.delete",
+      "locale": "fr",
+      "value": "SUPPRIMER",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.snackbar.copied",
+      "locale": "fr",
+      "value": "Code {code} copié dans le presse-papiers.",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.snackbar.profile_synced",
+      "locale": "fr",
+      "value": "Profil synchronisé",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.snackbar.ia_profile_synced",
+      "locale": "fr",
+      "value": "Profil IA synchronisé",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest_catalog.title",
+      "locale": "fr",
+      "value": "QUÊTES DISPONIBLES",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest_catalog.tooltip.archives",
+      "locale": "fr",
+      "value": "Archives RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest_catalog.tooltip.refresh",
+      "locale": "fr",
+      "value": "Rafraîchir",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.hub_narrative.title",
+      "locale": "fr",
+      "value": "HUB NARRATIF",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.xp",
+      "locale": "fr",
+      "value": "XP {xp}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.coins",
+      "locale": "fr",
+      "value": "{coins} coins",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.provider_ready",
+      "locale": "fr",
+      "value": "Provider backend • {count} prêt{s}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.provider_not_configured",
+      "locale": "fr",
+      "value": "Provider backend non configuré",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.local_unavailable",
+      "locale": "fr",
+      "value": "Local llama indisponible",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.local_ready",
+      "locale": "fr",
+      "value": "Local mobile • {fileName}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.hub_narrative.desc.ready",
+      "locale": "fr",
+      "value": "Le RP strict est prêt : tu peux lancer la narration via le backend Go avec une clé provider stockée localement, ou basculer volontairement sur un modèle llama local.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.hub_narrative.desc.no_provider",
+      "locale": "fr",
+      "value": "Configure au moins une clé provider locale reliée à un profil narrateur, ou charge un modèle GGUF local. Sans ça, pas de RP — juste un écran qui te juge silencieusement.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.hub_narrative.desc.no_ready",
+      "locale": "fr",
+      "value": "Aucun provider prêt pour le moment : le mode local llama reste disponible si ton appareil supporte le modèle GGUF sélectionné.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filters.title",
+      "locale": "fr",
+      "value": "FILTRES QUÊTES RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filters.search.label",
+      "locale": "fr",
+      "value": "Recherche",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filters.search.hint",
+      "locale": "fr",
+      "value": "titre, résumé, prompt, thème...",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filters.search.clear_tooltip",
+      "locale": "fr",
+      "value": "Effacer",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.section.ongoing_sessions",
+      "locale": "fr",
+      "value": "SESSIONS EN COURS",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.level.all",
+      "locale": "fr",
+      "value": "Tous niveaux",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.theme.all",
+      "locale": "fr",
+      "value": "Tous thèmes",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.source.all",
+      "locale": "fr",
+      "value": "Toutes sources",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.card.join",
+      "locale": "fr",
+      "value": "Lancer la quête",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.card.resume",
+      "locale": "fr",
+      "value": "Reprendre",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.history.title",
+      "locale": "fr",
+      "value": "ARCHIVES RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.history.empty",
+      "locale": "fr",
+      "value": "Aucune session RP pour l’instant.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session_detail.title",
+      "locale": "fr",
+      "value": "SESSION RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.xp_reward",
+      "locale": "fr",
+      "value": "+{xp} XP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.status.current",
+      "locale": "fr",
+      "value": "ACTUELLE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.source.local",
+      "locale": "fr",
+      "value": "LOCAL",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.view",
+      "locale": "fr",
+      "value": "VOIR LA SESSION RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandoned",
+      "locale": "fr",
+      "value": "Quête abandonnée • progression remise à zéro.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.back_to_active",
+      "locale": "fr",
+      "value": "REVENIR À L’ÉTAPE ACTIVE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.progress",
+      "locale": "fr",
+      "value": "PROGRESSION",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandon",
+      "locale": "fr",
+      "value": "ABANDONNER LA QUÊTE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.back",
+      "locale": "fr",
+      "value": "RETOUR À LA SESSION",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.resume",
+      "locale": "fr",
+      "value": "REPRENDRE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.action.scan",
+      "locale": "fr",
+      "value": "SCANNER ZONE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.action.hack",
+      "locale": "fr",
+      "value": "EXÉCUTER HACK",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandon_confirm",
+      "locale": "fr",
+      "value": "Abandonner la quête ?",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandon_cancel",
+      "locale": "fr",
+      "value": "ANNULER",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandon_confirm_action",
+      "locale": "fr",
+      "value": "ABANDONNER",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.title",
+      "locale": "fr",
+      "value": "MISSION CO-OP LIVE",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.subtitle",
+      "locale": "fr",
+      "value": "SYNCHRO TACTIQUE",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.description",
+      "locale": "fr",
+      "value": "Crée un lobby, partage le code, puis avancez à deux dans une vraie scène commune : présence visible, choix synchronisés, confirmation en popin et chat partagé. Bref, le coop arrête enfin de faire semblant.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.title",
+      "locale": "fr",
+      "value": "CRÉER UNE MISSION",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_required.title",
+      "locale": "fr",
+      "value": "FOURNISSEUR IA REQUIS",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_required.desc",
+      "locale": "fr",
+      "value": "Ajoute une clé API fournisseur avant de lancer une mission co-op.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_required.button",
+      "locale": "fr",
+      "value": "CONFIGURER LES FOURNISSEURS",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_label",
+      "locale": "fr",
+      "value": "Fournisseur IA de mission",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_helper",
+      "locale": "fr",
+      "value": "Obligatoire: moteur IA utilisé pour la mission co-op.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.quest_label",
+      "locale": "fr",
+      "value": "Quête pour la mission",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.quest_helper",
+      "locale": "fr",
+      "value": "La quête sera jouée en coopération avec un autre joueur.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.no_quest",
+      "locale": "fr",
+      "value": "Choisis une quete avant de creer le coop.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.no_provider",
+      "locale": "fr",
+      "value": "Sélectionne un fournisseur IA (clé API) avant de créer la mission.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.button",
+      "locale": "fr",
+      "value": "CRÉER LE LOBBY CO-OP",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.creating",
+      "locale": "fr",
+      "value": "Création en cours...",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.join.title",
+      "locale": "fr",
+      "value": "REJOINDRE PAR CODE",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.join.hint",
+      "locale": "fr",
+      "value": "Ex. SYNC42",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.join.button",
+      "locale": "fr",
+      "value": "REJOINDRE LA MISSION",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.title",
+      "locale": "fr",
+      "value": "LOBBY CO-OP",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.code_label",
+      "locale": "fr",
+      "value": "CODE LOBBY",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.copy_tooltip",
+      "locale": "fr",
+      "value": "Copier le code",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.waiting",
+      "locale": "fr",
+      "value": "En attente du deuxième joueur...",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.state.hub",
+      "locale": "fr",
+      "value": "ÉTAT DU HUB",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.my_lobbies",
+      "locale": "fr",
+      "value": "TES LOBBIES",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.empty",
+      "locale": "fr",
+      "value": "Aucun lobby pour l’instant",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.resync",
+      "locale": "fr",
+      "value": "RESYNC",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.leave",
+      "locale": "fr",
+      "value": "QUITTER",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.check_connection",
+      "locale": "fr",
+      "value": "VÉRIFIER LA CONNEXION",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.verify_connection",
+      "locale": "fr",
+      "value": "Vérifier la connexion",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.connection_ok",
+      "locale": "fr",
+      "value": "Connexion co-op OK",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.connection_issue",
+      "locale": "fr",
+      "value": "Problème de connexion co-op",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.cancel",
+      "locale": "fr",
+      "value": "ANNULER",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.confirm_quit",
+      "locale": "fr",
+      "value": "CONFIRMER",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.opening_ia_unavailable",
+      "locale": "fr",
+      "value": "Ouverture IA indisponible, fallback co-op activé.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.mission.sync",
+      "locale": "fr",
+      "value": "SYNC {percent}%",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.mission.players",
+      "locale": "fr",
+      "value": "JOUEURS {current}/2",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.action.jam_signal",
+      "locale": "fr",
+      "value": "Brouiller le signal",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.action.inject_ghost",
+      "locale": "fr",
+      "value": "Injecter un ghost payload",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.action.cover_ally",
+      "locale": "fr",
+      "value": "Couvrir l’allié",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.chat.hint",
+      "locale": "fr",
+      "value": "Message rapide à l’allié...",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.xp",
+      "locale": "fr",
+      "value": "+{xp} XP",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.local_badge",
+      "locale": "fr",
+      "value": "LOCAL",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.search.hint",
+      "locale": "fr",
+      "value": "titre, contenu, thème...",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.title",
+      "locale": "fr",
+      "value": "SANDBOX NEXUS",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.new_conversation",
+      "locale": "fr",
+      "value": "NOUVELLE CONVERSATION",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.view_history",
+      "locale": "fr",
+      "value": "VOIR TOUT L’HISTORIQUE",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.start",
+      "locale": "fr",
+      "value": "COMMENCER",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.history.all",
+      "locale": "fr",
+      "value": "Tout",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty_history",
+      "locale": "fr",
+      "value": "CRÉER UNE PREMIÈRE CONVERSATION",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine_chooser",
+      "locale": "fr",
+      "value": "Choisir moteur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.topbar.back_tooltip",
+      "locale": "fr",
+      "value": "Retour",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.topbar.history_tooltip",
+      "locale": "fr",
+      "value": "Historique",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.topbar.new_chat_tooltip",
+      "locale": "fr",
+      "value": "Nouveau chat",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.error_panel",
+      "locale": "fr",
+      "value": "messages d'erreur IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.population",
+      "locale": "fr",
+      "value": "Population",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.moral",
+      "locale": "fr",
+      "value": "Moral",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.energy",
+      "locale": "fr",
+      "value": "Énergie",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.security",
+      "locale": "fr",
+      "value": "Sécurité",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.hub.title",
+      "locale": "fr",
+      "value": "HUB VILLE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.plan",
+      "locale": "fr",
+      "value": "Plan IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.ask",
+      "locale": "fr",
+      "value": "Demander à mon IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.analyse",
+      "locale": "fr",
+      "value": "Analyse IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.budget",
+      "locale": "fr",
+      "value": "Budget tokens",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.loading",
+      "locale": "fr",
+      "value": "Chargement du Nexus...",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.offline",
+      "locale": "fr",
+      "value": "Mode hors-ligne • données locales",
+      "language": "fr"
+    }
+  ]
+}

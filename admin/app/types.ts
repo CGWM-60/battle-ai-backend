@@ -386,9 +386,22 @@ export type TranslationImportRow = {
   Domain: string;
   Key: string;
   Locale: string;
+  Language?: string;
   Value: string;
   Status?: string;
   Error?: string;
+};
+
+export type TranslationImportPayload = {
+  language?: {
+    code: string;
+    name?: string;
+    native_name?: string;
+    default?: boolean;
+  };
+  locale?: string;
+  file_name?: string;
+  rows: TranslationImportRow[];
 };
 
 export type TranslationMissingLog = {
