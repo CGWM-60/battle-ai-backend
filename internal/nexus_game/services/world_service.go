@@ -200,3 +200,37 @@ func (s *WorldService) listActiveWorlds(ctx context.Context) ([]models.World, er
 	s.db.Where("is_active = ?", true).Find(&ws)
 	return ws, nil
 }
+
+// Prompt CRUD for "gestion des world" - modifiable in world management UI.
+// Prompts are versioned, optimized (cost, speed, constructive/detailed/enriching).
+// Can evolve: admin can update system_prompt based on universe state.
+func (s *WorldService) ListPrompts(ctx context.Context, domain string) ([]models.Prompt, error) {
+	var prompts []models.Prompt
+	q := s.db.Where("is_active = ?", true)
+	if domain != "" {
+		q = q.Where("domain = ?", domain)
+	}
+	if err := q.Order("updated_at desc").Find(&prompts).Error; err != nil {
+		return nil, err
+	}
+	return prompts, nil
+}
+
+func (s *WorldService) CreatePrompt(ctx context.Context, p *models.Prompt) error {
+	p.CreatedAt = time.Now().UTC()
+	p.UpdatedAt = p.CreatedAt
+	return s.db.Create(p).Error
+}
+
+func (s *WorldService) UpdatePrompt(ctx context.Context, id uint, updates map[string]interface{}) error {
+	updates["updated_at"] = time.Now().UTC()
+	return s.db.Model(&models.Prompt{}).Where("id = ?", id).Updates(updates).Error
+}
+
+func (s *WorldService) GetPrompt(ctx context.Context, promptID, version string) (*models.Prompt, error) {
+	var p models.Prompt
+	if err := s.db.Where("prompt_id = ? AND version = ? AND is_active = ?", promptID, version, true).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return &p, nil
+}

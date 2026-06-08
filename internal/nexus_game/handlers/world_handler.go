@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"cgwm/battle/internal/nexus_game/cache"
+	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/services"
 
 	"github.com/gin-gonic/gin"
@@ -77,6 +78,56 @@ func (h *WorldHandler) GenerateWorldEvent(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"world_id": worldID, "proposed_event": event, "note": "Prompt v1.1 optimized for cost/speed + enriching lore. Evolves with state."})
+}
+
+// Prompt CRUD - fully modifiable in "gestion des world" UI.
+// Allows admin to create/update prompts for IA serveur (versioned, optimized).
+func (h *WorldHandler) ListPrompts(c *gin.Context) {
+	domain := c.Query("domain")
+	prompts, err := h.svc.ListPrompts(c.Request.Context(), domain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"prompts": prompts})
+}
+
+// TriggerWorldTick - for testing/integration in world gestion. Calls the tick which uses Server AI.
+func (h *WorldHandler) TriggerWorldTick(c *gin.Context) {
+	worldID, _ := strconv.Atoi(c.Param("id"))
+	ts := services.NewWorldTickService(h.db, h.redis)
+	if err := ts.RunWorldTick(c.Request.Context(), uint(worldID)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "tick executed", "world_id": worldID})
+}
+
+func (h *WorldHandler) CreatePrompt(c *gin.Context) {
+	var p models.Prompt
+	if err := c.ShouldBindJSON(&p); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.svc.CreatePrompt(c.Request.Context(), &p); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"prompt": p})
+}
+
+func (h *WorldHandler) UpdatePrompt(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.svc.UpdatePrompt(c.Request.Context(), uint(id), updates); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "prompt updated"})
 }
 
 // Note: Assignment logic is called internally from profile/faction handlers (see updates below).

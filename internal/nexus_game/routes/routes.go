@@ -29,7 +29,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
-		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{})
+		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{})
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
@@ -90,4 +90,13 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/worlds/:id", worldH.GetWorld)
 	group.GET("/continents", worldH.ListContinents)
 	group.POST("/worlds/:id/generate-event", worldH.GenerateWorldEvent) // IA serveur trigger for gestion des world
+	group.POST("/worlds/:id/trigger-tick", worldH.TriggerWorldTick) // Integration point for World Tick with IA
+
+	// Prompt CRUD for IA serveur (modifiable in world management "gestion des world").
+	// GET /prompts?domain=... -> list versioned optimized prompts
+	// POST /prompts -> create new version
+	// PUT /prompts/:id -> update (evolve prompt)
+	group.GET("/prompts", worldH.ListPrompts)
+	group.POST("/prompts", worldH.CreatePrompt)
+	group.PUT("/prompts/:id", worldH.UpdatePrompt)
 }
