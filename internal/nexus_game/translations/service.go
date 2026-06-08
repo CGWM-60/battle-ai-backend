@@ -181,7 +181,7 @@ func (s *dbTranslationService) SetUserLocale(ctx context.Context, userID uint, l
 
 func (s *dbTranslationService) LogMissingKey(ctx context.Context, key string, locale string) error {
 	var log models.TranslationMissingLog
-	err := s.db.Where("key = ? AND locale = ?", key, locale).First(&log).Error
+	err := s.db.Where("`key` = ? AND locale = ?", key, locale).First(&log).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
