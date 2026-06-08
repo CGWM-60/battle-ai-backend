@@ -213,10 +213,25 @@ func RegisterAdminRoutes(adminGroup *gin.RouterGroup, database *gorm.DB) {
 	})
 	adminGroup.POST("/translations/import/commit", func(c *gin.Context) {
 		var req struct {
-			ImportID uint `json:"import_id"`
+			ImportID uint                          `json:"import_id"`
+			FileName string                        `json:"file_name"`
+			Rows     []models.TranslationImportRow `json:"rows"`
 		}
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(req.Rows) > 0 {
+			imp, err := svc.CommitImportRows(c.Request.Context(), req.Rows, req.FileName)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "committed", "import": imp})
+			return
+		}
+		if req.ImportID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "import_id or rows are required"})
 			return
 		}
 		if err := svc.CommitImport(c.Request.Context(), req.ImportID); err != nil {

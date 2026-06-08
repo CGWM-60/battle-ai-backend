@@ -2,6 +2,7 @@ package translations
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"cgwm/battle/internal/models"
@@ -56,6 +57,7 @@ type TranslationService interface {
 	UpdateValue(ctx context.Context, id uint, v *models.TranslationValue) error
 	PreviewImport(ctx context.Context, rows []models.TranslationImportRow) ([]models.TranslationImportRow, error)
 	CommitImport(ctx context.Context, importID uint) error
+	CommitImportRows(ctx context.Context, rows []models.TranslationImportRow, fileName string) (*models.TranslationImport, error)
 	GetImports(ctx context.Context) ([]models.TranslationImport, error)
 	GetImportByID(ctx context.Context, id uint) (*models.TranslationImport, error)
 	GetMissing(ctx context.Context) ([]models.TranslationMissingLog, error)
@@ -301,14 +303,87 @@ func (s *dbTranslationService) PreviewImport(ctx context.Context, rows []models.
 }
 
 func (s *dbTranslationService) CommitImport(ctx context.Context, importID uint) error {
-	// In a full impl, fetch rows for this import and call BatchUpdate or upsert
-	// Here we just mark as committed
-	var imp models.TranslationImport
-	if err := s.db.First(&imp, importID).Error; err != nil {
-		return err
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var imp models.TranslationImport
+		if err := tx.First(&imp, importID).Error; err != nil {
+			return err
+		}
+
+		var rows []models.TranslationImportRow
+		if err := tx.Where("import_id = ?", importID).Find(&rows).Error; err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return errors.New("import has no rows to commit")
+		}
+
+		for _, row := range rows {
+			if row.Status == "error" {
+				return errors.New("import contains invalid rows")
+			}
+			if err := upsertTranslationRow(tx, row); err != nil {
+				return err
+			}
+		}
+
+		imp.Status = "committed"
+		imp.RowCount = len(rows)
+		return tx.Save(&imp).Error
+	})
+}
+
+func (s *dbTranslationService) CommitImportRows(ctx context.Context, rows []models.TranslationImportRow, fileName string) (*models.TranslationImport, error) {
+	if len(rows) == 0 {
+		return nil, errors.New("rows are required")
 	}
-	imp.Status = "committed"
-	return s.db.Save(&imp).Error
+	if fileName == "" {
+		fileName = "admin-import.json"
+	}
+
+	var committedImport *models.TranslationImport
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		imp := models.TranslationImport{
+			FileName: fileName,
+			Status:   "committing",
+			RowCount: len(rows),
+		}
+		if err := tx.Create(&imp).Error; err != nil {
+			return err
+		}
+
+		for i := range rows {
+			rows[i].ImportID = imp.ID
+			if rows[i].Key == "" || rows[i].Value == "" || rows[i].Locale == "" || rows[i].Domain == "" {
+				rows[i].Status = "error"
+				if rows[i].Error == "" {
+					rows[i].Error = "missing required fields"
+				}
+			} else if rows[i].Status == "" {
+				rows[i].Status = "ok"
+			}
+
+			if err := tx.Create(&rows[i]).Error; err != nil {
+				return err
+			}
+			if rows[i].Status == "error" {
+				return errors.New("import contains invalid rows")
+			}
+			if err := upsertTranslationRow(tx, rows[i]); err != nil {
+				return err
+			}
+		}
+
+		imp.Status = "committed"
+		if err := tx.Save(&imp).Error; err != nil {
+			return err
+		}
+		committedImport = &imp
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return committedImport, nil
 }
 
 func (s *dbTranslationService) GetImports(ctx context.Context) ([]models.TranslationImport, error) {
@@ -341,4 +416,27 @@ func (s *dbTranslationService) ExportTranslations(ctx context.Context, lang stri
 
 func (s *dbTranslationService) BatchUpdate(ctx context.Context, entries []TranslationEntry) error {
 	return s.UpsertBatch(ctx, entries)
+}
+
+func upsertTranslationRow(tx *gorm.DB, row models.TranslationImportRow) error {
+	var domain models.TranslationDomain
+	if err := tx.Where("code = ?", row.Domain).
+		FirstOrCreate(&domain, models.TranslationDomain{Code: row.Domain, Name: row.Domain}).Error; err != nil {
+		return err
+	}
+
+	var key models.TranslationKey
+	if err := tx.Where("domain_id = ? AND `key` = ?", domain.ID, row.Key).
+		FirstOrCreate(&key, models.TranslationKey{DomainID: domain.ID, Key: row.Key}).Error; err != nil {
+		return err
+	}
+
+	value := models.TranslationValue{
+		KeyID:  key.ID,
+		Locale: row.Locale,
+		Value:  row.Value,
+	}
+	return tx.Where("key_id = ? AND locale = ?", key.ID, row.Locale).
+		Assign(value).
+		FirstOrCreate(&value).Error
 }

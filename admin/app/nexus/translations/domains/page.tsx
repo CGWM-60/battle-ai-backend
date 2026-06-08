@@ -3,19 +3,23 @@
 import { useEffect, useState } from "react";
 import { AdminShell } from "../../../components/AdminShell";
 import { ErrorState, LoadingState } from "../../../components/LoadState";
+import { loadAdminData } from "../../../components/api";
 import type { TranslationDomain } from "../../../types";
 
 export default function DomainsPage() {
   const [domains, setDomains] = useState<TranslationDomain[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [newDomain, setNewDomain] = useState({ code: "", name: "", description: "" });
   const [busy, setBusy] = useState(false);
 
   const reload = () => {
-    fetch("/admin/api/translations/domains", { credentials: "same-origin" })
-      .then((r) => r.json())
+    setLoading(true);
+    setError(null);
+    loadAdminData<any>("translations/domains")
       .then((d) => setDomains(d?.domains || d || []))
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -45,29 +49,33 @@ export default function DomainsPage() {
   return (
     <AdminShell title="Domaines de traduction" description="CRUD des domaines (ex: nexus_game, common). Appels Go uniquement.">
       {error ? <ErrorState message={error} /> : null}
-      {!domains.length && !error ? <LoadingState /> : null}
+      {loading && !error ? <LoadingState /> : null}
 
-      {domains.length > 0 && (
+      {!loading && !error && (
         <section className="panel">
           <h2>Domaines existants</h2>
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Nom</th>
-                <th>Description</th>
-              </tr>
-            </thead>
-            <tbody>
-              {domains.map((d) => (
-                <tr key={d.ID}>
-                  <td><code>{d.Code}</code></td>
-                  <td>{d.Name}</td>
-                  <td>{d.Description}</td>
+          {domains.length ? (
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Nom</th>
+                  <th>Description</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {domains.map((d) => (
+                  <tr key={d.ID}>
+                    <td><code>{d.Code}</code></td>
+                    <td>{d.Name}</td>
+                    <td>{d.Description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="muted">Aucun domaine de traduction en base.</p>
+          )}
         </section>
       )}
 

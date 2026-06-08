@@ -8,7 +8,6 @@ import type { TranslationImportRow } from "../../../types";
 export default function ImportPage() {
   const [jsonText, setJsonText] = useState("");
   const [preview, setPreview] = useState<TranslationImportRow[] | null>(null);
-  const [importId, setImportId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -38,8 +37,6 @@ export default function ImportPage() {
         throw new Error('Invalid JSON from preview endpoint. See console.');
       }
       setPreview(data.preview || data);
-      // In real, the preview may return an import ID, here we simulate
-      setImportId(1);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -48,7 +45,7 @@ export default function ImportPage() {
   };
 
   const doCommit = async () => {
-    if (!importId) return;
+    if (!preview) return;
     setBusy(true);
     setError(null);
     try {
@@ -56,7 +53,7 @@ export default function ImportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ import_id: importId }),
+        body: JSON.stringify({ rows: preview, file_name: "admin-import.json" }),
       });
       if (!res.ok) throw new Error(await res.text());
       const text = await res.text();
@@ -69,13 +66,14 @@ export default function ImportPage() {
       alert("Import commit OK (côté Go).");
       setPreview(null);
       setJsonText("");
-      setImportId(null);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setBusy(false);
     }
   };
+
+  const hasPreviewErrors = preview?.some((row) => row.Status === "error") ?? false;
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -132,7 +130,7 @@ export default function ImportPage() {
               ))}
             </tbody>
           </table>
-          <button onClick={doCommit} disabled={busy || !importId}>
+          <button onClick={doCommit} disabled={busy || hasPreviewErrors}>
             Commit import (appel Go)
           </button>
           <p style={{ fontSize: "0.8em" }}>Le commit est fait côté Go. Next.js n'écrit rien.</p>

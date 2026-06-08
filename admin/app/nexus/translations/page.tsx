@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AdminShell } from "../../components/AdminShell";
 import { ErrorState, LoadingState } from "../../components/LoadState";
-import { formatDate } from "../../components/api";
+import { loadAdminData } from "../../components/api";
 import type { TranslationDomain, TranslationKey, TranslationValue, TranslationMissingLog } from "../../types";
 
 export default function TranslationsPage() {
@@ -12,29 +12,17 @@ export default function TranslationsPage() {
   const [values, setValues] = useState<TranslationValue[]>([]);
   const [missing, setMissing] = useState<TranslationMissingLog[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   const reload = () => {
-    const safeJson = async (url: string) => {
-      const r = await fetch(url, { credentials: "same-origin" });
-      const text = await r.text();
-      if (!r.ok) {
-        console.error(`[admin translations] HTTP ${r.status} for ${url}. Body:`, text.substring(0, 300));
-        throw new Error(`HTTP ${r.status}`);
-      }
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        console.error(`[admin translations] Bad JSON from ${url} status=${r.status}. This is likely the cause of parse errors like "non-whitespace after JSON". Body prefix:`, text.substring(0, 300));
-        throw new Error(`Invalid JSON (status ${r.status}). Check console for actual body.`);
-      }
-    };
-
+    setLoading(true);
+    setError(null);
     Promise.all([
-      safeJson("/admin/api/translations/domains"),
-      safeJson("/admin/api/translations/keys"),
-      safeJson("/admin/api/translations/values"),
-      safeJson("/admin/api/translations/missing"),
+      loadAdminData<any>("translations/domains"),
+      loadAdminData<any>("translations/keys"),
+      loadAdminData<any>("translations/values"),
+      loadAdminData<any>("translations/missing"),
     ])
       .then(([d, k, v, m]) => {
         setDomains(d?.domains || d || []);
@@ -42,7 +30,8 @@ export default function TranslationsPage() {
         setValues(v?.values || v || []);
         setMissing(m?.missing || m || []);
       })
-      .catch((e: Error) => setError(e.message));
+      .catch((e: Error) => setError(e.message))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -60,18 +49,23 @@ export default function TranslationsPage() {
       description="Gestion des traductions serveur (domaines, clés, valeurs, imports, missing). Tout passe par les APIs Go."
     >
       {error ? <ErrorState message={error} /> : null}
-      {!domains.length && !error ? <LoadingState /> : null}
+      {loading && !error ? <LoadingState /> : null}
 
-      {domains.length > 0 && (
+      {!loading && !error && (
         <>
           <section className="panel">
             <h2>Domaines</h2>
+            <p>{domains.length} domaine(s), {keys.length} clé(s), {values.length} valeur(s), {missing.length} clé(s) manquante(s).</p>
             <p><a href="/nexus/translations/domains">Gérer les domaines →</a></p>
-            <ul>
-              {domains.map((d) => (
-                <li key={d.ID}>{d.Code} — {d.Name} ({d.Description})</li>
-              ))}
-            </ul>
+            {domains.length ? (
+              <ul>
+                {domains.map((d) => (
+                  <li key={d.ID}>{d.Code} — {d.Name} ({d.Description})</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">Aucun domaine pour le moment. Lance un import ou crée un domaine.</p>
+            )}
           </section>
 
           <section className="panel">
@@ -110,6 +104,7 @@ export default function TranslationsPage() {
                 })}
               </tbody>
             </table>
+            {!filteredKeys.length ? <p className="muted">Aucune clé à afficher.</p> : null}
             {filteredKeys.length > 50 && <p>... et {filteredKeys.length - 50} autres</p>}
           </section>
 
