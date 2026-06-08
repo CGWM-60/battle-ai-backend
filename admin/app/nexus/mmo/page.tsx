@@ -524,7 +524,7 @@ export default function NexusMmoPage() {
                       const pPct = m > 0 ? Math.min(100, Math.round((p / m) * 100)) : 0;
                       const fPct = mf > 0 ? Math.min(100, Math.round((f / mf) * 100)) : 0;
                       return (
-                        <div key={ci} style={{ background: '#0f172a', padding: 8, borderRadius: 6, color: 'white', color: 'white' }}>
+                        <div key={ci} style={{ background: '#0f172a', padding: 8, borderRadius: 6, color: 'white' }}>
                           <div style={{ fontWeight: 600 }}>{c.name}</div>
                           <div>Joueurs: {p}/{m} ({pPct}%)</div>
                           <div style={{ height: 6, background: '#1e2937', borderRadius: 3, margin: '4px 0' }}><div style={{ width: `${pPct}%`, height: '100%', background: pPct > 80 ? '#ef4444' : '#3b82f6', borderRadius: 3 }} /></div>
