@@ -15,10 +15,12 @@ export default function NexusMmoPage() {
   const [avatars, setAvatars] = useState<Avatar[]>([]);
   const [factions, setFactions] = useState<any[]>([]);
   const [companions, setCompanions] = useState<any[]>([]);
+  const [worlds, setWorlds] = useState<any[]>([]);
+  const [prompts, setPrompts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeView, setActiveView] = useState<'overview' | 'avatars' | 'factions' | 'companions'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'avatars' | 'factions' | 'companions' | 'worlds' | 'prompts' | 'stats' | 'ia'>('overview');
 
   // Modal state for CRUD (create / edit / delete) - per type for simplicity
   const [modal, setModal] = useState<'create' | 'edit' | 'delete' | null>(null);
@@ -37,15 +39,19 @@ export default function NexusMmoPage() {
   const avatarCount = avatars.length;
   const factionCount = factions.length;
   const companionCount = companions.length;
+  const worldCount = worlds.length;
+  const promptCount = prompts.length;
 
   const fetchAll = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [avRes, facRes, comRes] = await Promise.all([
+      const [avRes, facRes, comRes, worldRes, promptRes] = await Promise.all([
         fetch("/api/nexus-game/assets/avatars", { credentials: "same-origin" }),
         fetch("/api/nexus-game/factions", { credentials: "same-origin" }),
         fetch("/api/nexus-game/ia-companions", { credentials: "same-origin" }),
+        fetch("/api/nexus-game/worlds", { credentials: "same-origin" }),
+        fetch("/api/nexus-game/prompts", { credentials: "same-origin" }),
       ]);
 
       if (avRes.ok) {
@@ -59,6 +65,14 @@ export default function NexusMmoPage() {
       if (comRes.ok) {
         const comData = await comRes.json();
         setCompanions(comData.ia_companions || []);
+      }
+      if (worldRes.ok) {
+        const wData = await worldRes.json();
+        setWorlds(wData.worlds || []);
+      }
+      if (promptRes.ok) {
+        const pData = await promptRes.json();
+        setPrompts(pData.prompts || []);
       }
     } catch (e: any) {
       setError(e.message || "Erreur de chargement");
@@ -141,7 +155,7 @@ export default function NexusMmoPage() {
   // Old avatar-specific handleEdit/handleDelete removed (conflicted with new state).
   // Avatar CRUD is handled via the generic modals when modalType==='avatars' (port the previous full modals here if needed for full avatar functionality).
 
-  const goToView = (view: 'avatars' | 'factions' | 'companions') => {
+  const goToView = (view: 'avatars' | 'factions' | 'companions' | 'worlds' | 'prompts' | 'stats' | 'ia') => {
     setActiveView(view);
     // scroll to content if needed
     window.scrollTo({ top: 400, behavior: 'smooth' });
@@ -237,6 +251,54 @@ export default function NexusMmoPage() {
                 <div style={{ fontSize: 32, fontWeight: 700, color: '#f59e0b' }}>{companionCount}</div>
                 <p style={{ fontSize: 13, color: '#64748b' }}>Compagnons IA (Gouverneur, Stratège...)</p>
                 <button style={{ marginTop: 8, width: '100%' }}>Gérer les IA Compagnons →</button>
+              </div>
+
+              {/* Worlds Card */}
+              <div 
+                className="card" 
+                style={{ border: '1px solid #3b82f6', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => goToView('worlds')}
+              >
+                <h3>Mondes & Continents</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#3b82f6' }}>{worldCount}</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>Gestion des mondes (5 continents, 500 joueurs max, 3 factions max par continent, IA events)</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Gérer les Mondes →</button>
+              </div>
+
+              {/* Prompts Card */}
+              <div 
+                className="card" 
+                style={{ border: '1px solid #8b5cf6', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => goToView('prompts')}
+              >
+                <h3>Prompts IA Serveur</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#8b5cf6' }}>{promptCount}</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>CRUD prompts pour IA serveur (versionnés, optimisés, modifiables)</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Gérer les Prompts →</button>
+              </div>
+
+              {/* Stats Card */}
+              <div 
+                className="card" 
+                style={{ border: '1px solid #ef4444', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => goToView('stats')}
+              >
+                <h3>Stats & Visualisation</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#ef4444' }}>📊</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>Distribution joueurs par continent, capacité, full worlds, IA logs</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Voir les Stats →</button>
+              </div>
+
+              {/* IA Tools Card */}
+              <div 
+                className="card" 
+                style={{ border: '1px solid #14b8a6', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => goToView('ia')}
+              >
+                <h3>Outils IA Serveur</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#14b8a6' }}>🤖</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>Déclencher génération events, ticks, prompts live</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Outils IA →</button>
               </div>
 
             </div>
@@ -378,6 +440,151 @@ export default function NexusMmoPage() {
               ))}
             </tbody>
           </table>
+        </section>
+      )}
+
+      {/* Worlds View - Gestion complète des Mondes (backend Go + IA serveur) */}
+      {activeView === 'worlds' && (
+        <section className="panel">
+          <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2>Gestion des Mondes ({worldCount}) - 5 Continents, 500 joueurs max, 3 factions max</h2>
+            <button onClick={async () => { await fetch('/api/nexus-game/worlds', { method: 'POST', credentials: 'same-origin' }); await fetchAll(); }} style={{ background: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>
+              + Créer Nouveau Monde
+            </button>
+          </div>
+          {loading ? <p>Chargement...</p> : error ? <p style={{color:'red'}}>{error}</p> : (
+            <div>
+              {worlds.length === 0 && <p>Aucun monde. Créez-en un (backend crée 5 continents automatiquement, assignation proportionnelle).</p>}
+              {worlds.map((w: any, wi: number) => (
+                <div key={wi} style={{ border: '1px solid #334155', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                  <h4>{w.name || `Monde ${w.id}`} (ID {w.id}) - {w.is_active ? 'Actif' : 'Inactif'}</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8, marginTop: 8 }}>
+                    {(w.continents || []).map((c: any, ci: number) => {
+                      const p = parseInt(c.players || '0');
+                      const m = c.max_players || 500;
+                      const f = parseInt(c.factions || '0');
+                      const mf = c.max_factions || 3;
+                      const pPct = m > 0 ? Math.min(100, Math.round((p / m) * 100)) : 0;
+                      const fPct = mf > 0 ? Math.min(100, Math.round((f / mf) * 100)) : 0;
+                      return (
+                        <div key={ci} style={{ background: '#0f172a', padding: 8, borderRadius: 6 }}>
+                          <div style={{ fontWeight: 600 }}>{c.name}</div>
+                          <div>Joueurs: {p}/{m} ({pPct}%)</div>
+                          <div style={{ height: 6, background: '#1e2937', borderRadius: 3, margin: '4px 0' }}><div style={{ width: `${pPct}%`, height: '100%', background: pPct > 80 ? '#ef4444' : '#3b82f6', borderRadius: 3 }} /></div>
+                          <div>Factions: {f}/{mf} ({fPct}%)</div>
+                          <div style={{ height: 6, background: '#1e2937', borderRadius: 3, margin: '4px 0' }}><div style={{ width: `${fPct}%`, height: '100%', background: '#10b981', borderRadius: 3 }} /></div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={async () => { await fetch(`/api/nexus-game/worlds/${w.id}/trigger-tick`, { method: 'POST', credentials: 'same-origin' }); alert('Tick + IA résumé exécuté (voir logs backend)'); }} style={{ padding: '4px 8px', fontSize: 12 }}>Déclencher Tick Monde + IA Serveur</button>
+                    <button onClick={async () => { const r = await fetch(`/api/nexus-game/worlds/${w.id}/generate-event`, { method: 'POST', credentials: 'same-origin' }); const j = await r.json(); alert('Événement IA Serveur proposé (prompt optimisé): ' + (j.proposed_event?.title || JSON.stringify(j))); }} style={{ padding: '4px 8px', fontSize: 12 }}>Générer Événement IA (prompt optimisé)</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <p style={{ fontSize: 12, color: '#64748b', marginTop: 12 }}>Règle backend: 5 continents fixes. Max 500 joueurs/continent, max 3 factions/continent. Si plein → nouveau monde prioritaire pour nouvelles factions. Assignation auto sur création profil (basée sur faction). Redis pour counts/locks.</p>
+        </section>
+      )}
+
+      {/* Prompts View - CRUD complet pour IA Serveur (optimisés, versionnés, modifiables) */}
+      {activeView === 'prompts' && (
+        <section className="panel">
+          <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2>Prompts IA Serveur ({promptCount}) - Modifiables, versionnés, optimisés coût/rapidité/enrichissant</h2>
+            <button onClick={async () => {
+              const pid = prompt('prompt_id (ex: quest_seed_generation)');
+              const ver = prompt('version (ex: v1.3)');
+              const dom = prompt('domain', 'quest_seed_generation');
+              const pur = prompt('purpose', 'Génération seeds');
+              const sp = prompt('system_prompt (détaillé, optimisé, évolue avec univers)');
+              if (!pid || !ver || !sp) return;
+              await fetch('/api/nexus-game/prompts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({prompt_id: pid, version: ver, domain: dom, purpose: pur, system_prompt: sp, is_active: true}), credentials: 'same-origin' });
+              await fetchAll();
+            }} style={{ background: '#8b5cf6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>
+              + Créer / Versionner Prompt
+            </button>
+          </div>
+          {loading ? <p>Chargement...</p> : error ? <p style={{color:'red'}}>{error}</p> : (
+            <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: 8 }}>prompt_id @ version</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Domain / Purpose</th>
+                  <th style={{ textAlign: 'left', padding: 8 }}>Prompt (tronqué)</th>
+                  <th style={{ textAlign: 'right', padding: 8 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {prompts.map((p: any, pi: number) => (
+                  <tr key={pi} style={{ borderTop: '1px solid #334155' }}>
+                    <td style={{ padding: 8, fontWeight: 500 }}>{p.prompt_id} @ {p.version}</td>
+                    <td style={{ padding: 8, fontSize: 13 }}>{p.domain} / {p.purpose}</td>
+                    <td style={{ padding: 8, fontSize: 12, color: '#64748b', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(p.system_prompt || '').substring(0, 70)}...</td>
+                    <td style={{ padding: 8, textAlign: 'right' }}>
+                      <button onClick={async () => {
+                        const newSp = prompt('Nouveau system_prompt (optimisé, évolue avec monde)', p.system_prompt || '');
+                        if (!newSp) return;
+                        await fetch(`/api/nexus-game/prompts/${p.id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({system_prompt: newSp}), credentials: 'same-origin' });
+                        await fetchAll();
+                      }} style={{ marginRight: 8, padding: '4px 10px', fontSize: 12 }}>Modifier (évoluer)</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          <p style={{ fontSize: 12, color: '#64748b', marginTop: 12 }}>Prompts utilisés par l'IA serveur (world tick, events, lore, tribunal, seeds). Modifiables ici. Évoluent automatiquement avec l'état du monde/jour/univers. Optimisés coût, rapidité, constructif/enrichissant.</p>
+        </section>
+      )}
+
+      {/* Stats & Visualisation */}
+      {activeView === 'stats' && (
+        <section className="panel">
+          <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
+          <h2>Stats & Visualisation Mondes (capacité 5 continents × 500 = 2500 joueurs max par monde)</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16, marginTop: 16 }}>
+            <div className="stat-card"><div className="label">Mondes</div><div className="value">{worldCount}</div></div>
+            <div className="stat-card"><div className="label">Factions</div><div className="value">{factionCount}</div></div>
+            <div className="stat-card"><div className="label">Capacité max / monde</div><div className="value">2500</div></div>
+          </div>
+          <div style={{ marginTop: 24 }}>
+            <h3>Visualisation Distribution Joueurs par Continent (barres proportionnelles)</h3>
+            {worlds.length > 0 ? worlds.map((w: any, wi: number) => (
+              <div key={wi} style={{ marginBottom: 16 }}>
+                <strong>{w.name} (priorité assignations)</strong>
+                <div style={{ display: 'flex', gap: 4, marginTop: 4, height: 28 }}>
+                  {(w.continents || []).map((c: any, ci: number) => {
+                    const p = parseInt(c.players || 0);
+                    const pct = Math.round((p / (c.max_players || 500)) * 100);
+                    return <div key={ci} title={`${c.name}: ${p} joueurs (${pct}%)`} style={{ flex: 1, background: '#1e2937', position: 'relative', borderRadius: 4, overflow: 'hidden', border: '1px solid #334155' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: pct > 80 ? '#ef4444' : '#3b82f6' }} />
+                      <div style={{ position: 'absolute', top: 4, left: 4, fontSize: 11, color: 'white', textShadow: '0 1px 1px black' }}>{c.name?.substring(0,8)}: {pct}%</div>
+                    </div>;
+                  })}
+                </div>
+              </div>
+            )) : <p>Créez des mondes pour visualiser la distribution proportionnelle (max 3 factions/continent).</p>}
+          </div>
+          <p style={{ fontSize: 12, color: '#64748b', marginTop: 12 }}>Si tous continents pleins → nouveau monde auto. Assignation auto sur création profil (basée sur faction choisie). Redis pour counts/locks.</p>
+        </section>
+      )}
+
+      {/* IA Server Tools */}
+      {activeView === 'ia' && (
+        <section className="panel">
+          <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
+          <h2>Outils IA Serveur (gestion complète des prompts, ticks, events)</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+            <button onClick={async () => { if (worlds[0]) { const r = await fetch(`/api/nexus-game/worlds/${worlds[0].id}/generate-event`, {method:'POST', credentials:'same-origin'}); const j = await r.json(); alert('IA Event proposé (prompt optimisé): ' + JSON.stringify(j.proposed_event || j)); } else alert('Créez un monde d\'abord'); }} style={{ padding: '10px 16px' }}>Générer Événement IA Serveur</button>
+            <button onClick={async () => { if (worlds[0]) { await fetch(`/api/nexus-game/worlds/${worlds[0].id}/trigger-tick`, {method:'POST', credentials:'same-origin'}); alert('World Tick + IA résumé exécuté (logs backend)'); } else alert('Créez un monde d\'abord'); }} style={{ padding: '10px 16px' }}>Déclencher Tick + IA Serveur</button>
+            <button onClick={() => goToView('prompts')} style={{ padding: '10px 16px' }}>Gérer Prompts (CRUD, versions, évolution)</button>
+          </div>
+          <p style={{ marginTop: 12, fontSize: 13, color: '#64748b' }}>Prompts optimisés (coût, rapidité, constructif/enrichissant). Évoluent automatiquement avec l'état du monde/jour/univers. Logs et coûts traçables. Tous les appels IA serveur respectent les limits (pas de bypass policies).</p>
         </section>
       )}
 
