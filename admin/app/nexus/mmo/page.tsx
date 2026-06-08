@@ -287,7 +287,7 @@ export default function NexusMmoPage() {
   // Old avatar-specific handleEdit/handleDelete removed (conflicted with new state).
   // Avatar CRUD is handled via the generic modals when modalType==='avatars' (port the previous full modals here if needed for full avatar functionality).
 
-  const goToView = (view: 'avatars' | 'factions' | 'companions' | 'worlds' | 'prompts' | 'stats' | 'ia') => {
+  const goToView = (view: 'avatars' | 'factions' | 'companions' | 'worlds' | 'prompts' | 'stats' | 'ia' | 'players') => {
     setActiveView(view);
     // scroll to content if needed
     window.scrollTo({ top: 400, behavior: 'smooth' });
@@ -833,54 +833,7 @@ export default function NexusMmoPage() {
             </thead>
             <tbody>
               {filteredPlayers.length === 0 && (
-                <tr><td colSpan="5" style={{ padding: 8, color: '#64748b' }}>Aucun joueur assigné pour ce filtre. (Les assignations se font auto à la création de profil via la faction.)</td></tr>
-              )}
-              {filteredPlayers.map((p, i) => (
-                <tr key={i} style={{ borderTop: '1px solid #334155' }}>
-                  <td style={{ padding: 8 }}>{p.world}</td>
-                  <td style={{ padding: 8 }}>{p.continent}</td>
-                  <td style={{ padding: 8 }}>{p.user_id || '-'}</td>
-                  <td style={{ padding: 8, fontWeight: 500 }}>{p.pseudo}</td>
-                  <td style={{ padding: 8, fontSize: 12 }}>{p.assigned_at || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p style={{ fontSize: 12, color: '#64748b', marginTop: 12 }}>Données du backend Go (ProfileGamer avec ContinentID/WorldID, via /worlds qui inclut players_list). Filtre client-side.</p>
-        </section>
-      )}
-
-      {/* Players View - Tableau avec filtre par monde */}
-      {activeView === 'players' && (
-        <section className="panel">
-          <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
-          <h2>Liste des Joueurs par Monde</h2>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ marginRight: 8 }}>Filtrer par monde:</label>
-            <select 
-              value={selectedWorldForPlayers} 
-              onChange={e => setSelectedWorldForPlayers(e.target.value)}
-              style={{ padding: 8, background: '#1e2937', color: 'white', border: '1px solid #334155' }}
-            >
-              <option value="all">Tous les mondes</option>
-              {worlds.map((w, i) => (
-                <option key={i} value={String(w.id)}>{w.name || `Monde ${w.id}`}</option>
-              ))}
-            </select>
-          </div>
-          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ textAlign: 'left', padding: 8 }}>Monde</th>
-                <th style={{ textAlign: 'left', padding: 8 }}>Continent</th>
-                <th style={{ textAlign: 'left', padding: 8 }}>User ID</th>
-                <th style={{ textAlign: 'left', padding: 8 }}>Pseudo (Joueur)</th>
-                <th style={{ textAlign: 'left', padding: 8 }}>Date Assignation</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPlayers.length === 0 && (
-                <tr><td colSpan="5" style={{ padding: 8, color: '#64748b' }}>Aucun joueur assigné pour ce filtre. (Les assignations se font auto à la création de profil via la faction.)</td></tr>
+                <tr><td colSpan={5} style={{ padding: 8, color: '#64748b' }}>Aucun joueur assigné pour ce filtre. (Les assignations se font auto à la création de profil via la faction.)</td></tr>
               )}
               {filteredPlayers.map((p, i) => (
                 <tr key={i} style={{ borderTop: '1px solid #334155' }}>
