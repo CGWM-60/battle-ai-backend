@@ -29,6 +29,7 @@ import (
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
+	translations "cgwm/battle/internal/nexus_game/translations"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -381,6 +382,14 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.DELETE("/nexus-coin/plans/:id", server.deleteNexusCoinPlanAPI)
 	// Monde IA desactive: ne pas exposer /admin/api/game.
 	// server.registerGameAdminAPI(api)
+
+	// Also register the Nexus translations admin endpoints under the /admin/api group.
+	// This makes /admin/api/translations/* work when the Next.js admin UI is accessed
+	// directly through the Go backend's /admin static serving (serveAdminUI + adminNoRoute).
+	// Fixes 404 when visiting /admin/nexus/translations/ (the page loads the static,
+	// but its data fetches to /admin/api/... were 404ing because the handlers were only
+	// mounted under the separate /api/admin group).
+	translations.RegisterAdminRoutes(api, db)
 
 	router.GET("/api/v1/nexus-coin/plans", server.publicNexusCoinPlansAPI)
 
