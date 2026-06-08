@@ -22,13 +22,14 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	health := handlers.NewHealthHandler(database, redis)
 	bootstrap := handlers.NewBootstrapHandler(database)
 	avatar := handlers.NewAvatarHandler(database)
-	factionH := handlers.NewFactionHandler(database)
+	factionH := handlers.NewFactionHandler(database, redis)
 	companionH := handlers.NewIACompanionHandler(database)
-	profileH := handlers.NewProfileHandler(database)
+	profileH := handlers.NewProfileHandler(database, redis)
+	worldH := handlers.NewWorldHandler(database, redis)
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
-		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{})
+		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{})
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
@@ -76,4 +77,17 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// Server truth. Flutter calls after creation or on load check.
 	group.GET("/profile", profileH.GetProfile)
 	group.POST("/profile", profileH.SaveProfile)
+
+	// World management (gestion des worlds) - card entry via admin or API.
+	// GET /worlds -> list worlds with continents and capacities (from Redis)
+	// POST /worlds -> create new world (auto 5 continents)
+	// GET /worlds/:id -> detail
+	// POST /factions/assign-continent (internal on faction create)
+	// POST /profiles/assign-continent (internal on profile create)
+	// Uses Redis heavily for capacities, locks, player counts, faction assignments.
+	group.GET("/worlds", worldH.ListWorlds)
+	group.POST("/worlds", worldH.CreateWorld)
+	group.GET("/worlds/:id", worldH.GetWorld)
+	group.GET("/continents", worldH.ListContinents)
+	group.POST("/worlds/:id/generate-event", worldH.GenerateWorldEvent) // IA serveur trigger for gestion des world
 }

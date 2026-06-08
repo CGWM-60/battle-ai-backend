@@ -13,7 +13,9 @@ import (
 	"path"
 	"path/filepath"
 
+	"cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/nexus_game/models"
+	"cgwm/battle/internal/nexus_game/services"
 
 	"github.com/chai2010/webp"
 	"github.com/gin-gonic/gin"
@@ -22,11 +24,12 @@ import (
 )
 
 type FactionHandler struct {
-	db *gorm.DB
+	db    *gorm.DB
+	redis *cache.RedisService
 }
 
-func NewFactionHandler(db *gorm.DB) *FactionHandler {
-	return &FactionHandler{db: db}
+func NewFactionHandler(db *gorm.DB, redis *cache.RedisService) *FactionHandler {
+	return &FactionHandler{db: db, redis: redis}
 }
 
 func factionBaseDir() string {
@@ -111,6 +114,20 @@ func (h *FactionHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save to database"})
 		return
 	}
+
+	// Auto assign continent on faction creation (max 3 factions per continent).
+	// If no space in existing, creates new world and assigns priority to this faction.
+	// "Si y a plus elle sont en attente de creation d un nouveau monde"
+	if h.redis != nil {
+		ws := services.NewWorldService(h.db, h.redis)
+		wID, cID, aErr := ws.GetOrCreateWorldForFaction(c.Request.Context(), f.ID)
+		if aErr == nil {
+			f.WorldID = wID
+			f.ContinentID = cID
+			h.db.Save(&f)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"faction": f})
 }
 

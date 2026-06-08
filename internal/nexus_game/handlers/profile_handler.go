@@ -5,7 +5,9 @@ import (
 	"strconv"
 	"time"
 
+	"cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/nexus_game/models"
+	"cgwm/battle/internal/nexus_game/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -14,11 +16,12 @@ import (
 // ProfileHandler manages the ProfileGamer (may be empty for new players).
 // All saves go through here. Server validates + applies. Flutter displays result.
 type ProfileHandler struct {
-	db *gorm.DB
+	db    *gorm.DB
+	redis *cache.RedisService
 }
 
-func NewProfileHandler(db *gorm.DB) *ProfileHandler {
-	return &ProfileHandler{db: db}
+func NewProfileHandler(db *gorm.DB, redis *cache.RedisService) *ProfileHandler {
+	return &ProfileHandler{db: db, redis: redis}
 }
 
 // GetProfile returns the profile for a given user_id (from main app user).
@@ -110,6 +113,22 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 		if err := h.db.Create(&p).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create profile_gamer"})
 			return
+		}
+
+		// Auto-assign continent based on faction (max 500 players per continent, proportional).
+		// If faction's continent full -> error "faction is full".
+		// Uses Redis for counts.
+		if h.redis != nil {
+			ws := services.NewWorldService(h.db, h.redis)
+			wID, cID, aErr := ws.AssignPlayerToContinent(c.Request.Context(), req.UserID, req.FactionID)
+			if aErr != nil {
+				// Rollback? For demo, log and continue or return specific error.
+				c.JSON(http.StatusBadRequest, gin.H{"error": aErr.Error(), "message": "faction continent full or no assignment possible"})
+				return
+			}
+			p.WorldID = wID
+			p.ContinentID = cID
+			h.db.Save(&p)
 		}
 	} else {
 		// update existing (only the gamer fields; never touch other tables here)

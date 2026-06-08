@@ -14,6 +14,10 @@ type ProfileGamer struct {
 	IACompanionID uint      `json:"ia_companion_id" gorm:"index"`
 	Pseudo        string    `json:"pseudo" gorm:"size:100"`
 	CityName      string    `json:"city_name" gorm:"size:100"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	// Continent assignment for world capacity and faction-based distribution.
+	// Assigned at profile creation based on chosen Faction's continent.
+	ContinentID uint      `json:"continent_id" gorm:"index"`
+	WorldID     uint      `json:"world_id" gorm:"index"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
