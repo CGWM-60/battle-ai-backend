@@ -76,12 +76,12 @@ func NewTranslationService(db *gorm.DB) TranslationService {
 
 func (s *dbTranslationService) GetTranslations(ctx context.Context, lang string, domains []string) (map[string]string, error) {
 	var results []struct {
-		Key   string
-		Value string
+		TranslationKey string
+		Value          string
 	}
 
 	query := s.db.Table("nexus_translation_values as v").
-		Select("k.key as key, v.value as value").
+		Select("k.`key` as translation_key, v.value as value").
 		Joins("JOIN nexus_translation_keys as k ON k.id = v.key_id").
 		Joins("JOIN nexus_translation_domains as d ON d.id = k.domain_id").
 		Where("v.locale = ?", lang)
@@ -96,17 +96,17 @@ func (s *dbTranslationService) GetTranslations(ctx context.Context, lang string,
 
 	m := make(map[string]string, len(results))
 	for _, r := range results {
-		m[r.Key] = r.Value
+		m[r.TranslationKey] = r.Value
 	}
 
 	// Fallback sur FR si certaines clés manquent pour la langue demandée (simple implémentation)
 	if lang != "fr" {
 		var frResults []struct {
-			Key   string
-			Value string
+			TranslationKey string
+			Value          string
 		}
 		frQuery := s.db.Table("nexus_translation_values as v").
-			Select("k.key as key, v.value as value").
+			Select("k.`key` as translation_key, v.value as value").
 			Joins("JOIN nexus_translation_keys as k ON k.id = v.key_id").
 			Joins("JOIN nexus_translation_domains as d ON d.id = k.domain_id").
 			Where("v.locale = ?", "fr")
@@ -115,8 +115,8 @@ func (s *dbTranslationService) GetTranslations(ctx context.Context, lang string,
 		}
 		_ = frQuery.Find(&frResults).Error
 		for _, r := range frResults {
-			if _, ok := m[r.Key]; !ok {
-				m[r.Key] = r.Value
+			if _, ok := m[r.TranslationKey]; !ok {
+				m[r.TranslationKey] = r.Value
 			}
 		}
 	}
@@ -134,12 +134,12 @@ func (s *dbTranslationService) GetDomains(ctx context.Context) ([]models.Transla
 
 func (s *dbTranslationService) GetDomainTranslations(ctx context.Context, domain string, lang string) (map[string]string, error) {
 	var results []struct {
-		Key   string
-		Value string
+		TranslationKey string
+		Value          string
 	}
 
 	query := s.db.Table("nexus_translation_values as v").
-		Select("k.key as key, v.value as value").
+		Select("k.`key` as translation_key, v.value as value").
 		Joins("JOIN nexus_translation_keys as k ON k.id = v.key_id").
 		Joins("JOIN nexus_translation_domains as d ON d.id = k.domain_id").
 		Where("d.code = ? AND v.locale = ?", domain, lang)
@@ -150,7 +150,7 @@ func (s *dbTranslationService) GetDomainTranslations(ctx context.Context, domain
 
 	m := make(map[string]string, len(results))
 	for _, r := range results {
-		m[r.Key] = r.Value
+		m[r.TranslationKey] = r.Value
 	}
 	return m, nil
 }
