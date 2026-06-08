@@ -3,6 +3,7 @@ package router
 import (
 	"cgwm/battle/internal/admin"
 	"cgwm/battle/internal/models"
+	nexuscache "cgwm/battle/internal/nexus_game/cache"
 	nexusdev "cgwm/battle/internal/nexus_game/dev"
 	translations "cgwm/battle/internal/nexus_game/translations"
 	nexustribunal "cgwm/battle/internal/nexus_tribunal"
@@ -81,6 +82,7 @@ func RouterApp(database *gorm.DB) {
 	nexustribunal.RegisterRoutes(router, database, jwtAuth(), adminAPIAuth())
 	translations.RegisterRoutes(router, database)
 	nexusdev.RegisterRoutes(router)
+	nexuscache.RegisterRoutes(router)
 
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())

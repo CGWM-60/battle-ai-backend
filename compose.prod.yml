@@ -55,11 +55,26 @@ services:
       DB_MAX_OPEN_CONNS: ${DB_MAX_OPEN_CONNS:-25}
       DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}
       DB_CONN_MAX_LIFETIME_MINUTES: ${DB_CONN_MAX_LIFETIME_MINUTES:-30}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:
       mariadb:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     restart: unless-stopped
 
   mariadb:
@@ -81,3 +96,4 @@ services:
 
 volumes:
   mariadb-data:
+  redis-data:

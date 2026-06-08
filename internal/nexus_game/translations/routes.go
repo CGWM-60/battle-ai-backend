@@ -1,11 +1,14 @@
 package translations
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"cgwm/battle/internal/models"
+	"cgwm/battle/internal/nexus_game/cache"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -14,20 +17,33 @@ import (
 // Suivant la spec AGENTS.md POINT 02.
 func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 	svc := NewTranslationService(database)
+	redis := cache.NewRedisServiceFromEnv()
 
 	// Public bootstrap pour le client Flutter au démarrage
 	r.GET("/api/translations/bootstrap", func(c *gin.Context) {
 		locale := c.DefaultQuery("locale", "fr")
+		cacheKey := "translations:bootstrap:" + locale
+		if cached, ok, err := redis.GetString(c.Request.Context(), cacheKey); err == nil && ok {
+			c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(cached))
+			return
+		}
+
 		// Pour l'instant on retourne tout, domaines optionnels via query si besoin plus tard
 		data, err := svc.GetTranslations(c.Request.Context(), locale, nil)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
+		payload := gin.H{
 			"locale":       locale,
 			"translations": data,
-		})
+		}
+		if encoded, err := json.Marshal(payload); err == nil {
+			_ = redis.SetString(c.Request.Context(), cacheKey, string(encoded), 5*time.Minute)
+			c.Data(http.StatusOK, "application/json; charset=utf-8", encoded)
+			return
+		}
+		c.JSON(http.StatusOK, payload)
 	})
 
 	// Liste des domaines
@@ -56,16 +72,28 @@ func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 	r.GET("/api/translations/domain/:domain", func(c *gin.Context) {
 		domain := c.Param("domain")
 		locale := c.DefaultQuery("locale", "fr")
+		cacheKey := "translations:domain:" + domain + ":" + locale
+		if cached, ok, err := redis.GetString(c.Request.Context(), cacheKey); err == nil && ok {
+			c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(cached))
+			return
+		}
+
 		data, err := svc.GetDomainTranslations(c.Request.Context(), domain, locale)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
+		payload := gin.H{
 			"domain":       domain,
 			"locale":       locale,
 			"translations": data,
-		})
+		}
+		if encoded, err := json.Marshal(payload); err == nil {
+			_ = redis.SetString(c.Request.Context(), cacheKey, string(encoded), 5*time.Minute)
+			c.Data(http.StatusOK, "application/json; charset=utf-8", encoded)
+			return
+		}
+		c.JSON(http.StatusOK, payload)
 	})
 
 	// Auth requis pour mettre à jour la locale utilisateur
