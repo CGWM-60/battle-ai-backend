@@ -9,6 +9,699 @@
   "file_name": "NEXUS_TRANSLATIONS_INITIAL_IMPORT.fr.json",
   "rows": [
     {
+      "domain": "battle",
+      "key": "battle.action.judge",
+      "locale": "fr",
+      "value": "Lancer le jugement",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.action.next_round",
+      "locale": "fr",
+      "value": "Round suivant",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.action.reset",
+      "locale": "fr",
+      "value": "Réinitialiser le battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.action.reset_parameters",
+      "locale": "fr",
+      "value": "Réinitialiser les paramètres",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.action.start",
+      "locale": "fr",
+      "value": "Démarrer le battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.action.view_result",
+      "locale": "fr",
+      "value": "Voir le résultat",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.display_mode",
+      "locale": "fr",
+      "value": "Mode d’affichage",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.multi_round_hint",
+      "locale": "fr",
+      "value": "Débat en plusieurs rounds avec {seconds} secondes par round.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.one_round_hint",
+      "locale": "fr",
+      "value": "Débat en un seul round.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.parameters_title",
+      "locale": "fr",
+      "value": "Paramètres du battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.protocol_initialized",
+      "locale": "fr",
+      "value": "Protocole de battle initialisé.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.public_vote",
+      "locale": "fr",
+      "value": "Vote public",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.quest_prefill_notice",
+      "locale": "fr",
+      "value": "Le sujet ci-dessous est prérempli depuis cette quête. Si tu modifies le texte du débat, le battle repassera en sujet libre.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.quest_synced_helper",
+      "locale": "fr",
+      "value": "Sujet synchronisé avec la quête sélectionnée.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.quest_topic_hint",
+      "locale": "fr",
+      "value": "Sujet de quête{questTitle}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.round_count",
+      "locale": "fr",
+      "value": "Nombre de rounds",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.round_duration",
+      "locale": "fr",
+      "value": "Durée d’un round",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.title",
+      "locale": "fr",
+      "value": "Configurer un battle IA",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.topic_hint",
+      "locale": "fr",
+      "value": "Décris le sujet du duel IA.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.topic_label",
+      "locale": "fr",
+      "value": "Sujet du débat",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.display.split",
+      "locale": "fr",
+      "value": "Vue séparée",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.display.timeline",
+      "locale": "fr",
+      "value": "Timeline",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.display.vs",
+      "locale": "fr",
+      "value": "VS",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.fighter.ia_one",
+      "locale": "fr",
+      "value": "IA 1",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.fighter.ia_two",
+      "locale": "fr",
+      "value": "IA 2",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.arbitration",
+      "locale": "fr",
+      "value": "Arbitrage",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.backend_verdict",
+      "locale": "fr",
+      "value": "Verdict backend",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.current_score",
+      "locale": "fr",
+      "value": "Score actuel",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.default_judge",
+      "locale": "fr",
+      "value": "Juge IA",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.messages_analyzed",
+      "locale": "fr",
+      "value": "Messages analysés",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.no_reason",
+      "locale": "fr",
+      "value": "Le backend a renvoyé les scores, mais pas d’argumentaire textuel.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.not_started_hint",
+      "locale": "fr",
+      "value": "Le jugement sera disponible après le lancement du battle.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.running",
+      "locale": "fr",
+      "value": "Jugement en cours...",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.start_backend",
+      "locale": "fr",
+      "value": "Démarrer le jugement backend",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.title",
+      "locale": "fr",
+      "value": "Jugement",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.verdict_hint",
+      "locale": "fr",
+      "value": "{judge} donne {scoreOne} contre {scoreTwo}.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.why_ia",
+      "locale": "fr",
+      "value": "Pourquoi {name} ?",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.judgement.why_judge",
+      "locale": "fr",
+      "value": "Pourquoi ce jugement ?",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.live.next_round",
+      "locale": "fr",
+      "value": "Round suivant",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.live.previous_round",
+      "locale": "fr",
+      "value": "Round précédent",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.live.round",
+      "locale": "fr",
+      "value": "Round {round}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.live.round_short",
+      "locale": "fr",
+      "value": "R{round}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.live.split_title",
+      "locale": "fr",
+      "value": "Vue split",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.live.title",
+      "locale": "fr",
+      "value": "Battle IA en direct",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quest.level_free",
+      "locale": "fr",
+      "value": "Niveau libre",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quest.theme_free",
+      "locale": "fr",
+      "value": "Thème libre",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.choose_title",
+      "locale": "fr",
+      "value": "Choisir une quête de battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.empty_message",
+      "locale": "fr",
+      "value": "Aucune quête publiée n’est disponible pour le battle IA.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.empty_title",
+      "locale": "fr",
+      "value": "Aucune quête disponible",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.filters",
+      "locale": "fr",
+      "value": "Filtres",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.found_count",
+      "locale": "fr",
+      "value": "{count} quête(s) trouvée(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.no_result_message",
+      "locale": "fr",
+      "value": "Aucune quête ne correspond à ces filtres.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.no_result_title",
+      "locale": "fr",
+      "value": "Aucun résultat",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.search_hint",
+      "locale": "fr",
+      "value": "Rechercher une quête, un thème ou une mission.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.status",
+      "locale": "fr",
+      "value": "Statut",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.quests.title",
+      "locale": "fr",
+      "value": "Quêtes IA Battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.reset.content",
+      "locale": "fr",
+      "value": "Le battle en cours sera remis à zéro.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.reset.snackbar",
+      "locale": "fr",
+      "value": "Battle réinitialisé.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.reset.title",
+      "locale": "fr",
+      "value": "Réinitialiser le battle ?",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.end_title",
+      "locale": "fr",
+      "value": "Battle terminé",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.final_score",
+      "locale": "fr",
+      "value": "Score final : {score}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.hybrid_score",
+      "locale": "fr",
+      "value": "Score hybride : {scoreOne} / {scoreTwo}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.judge_score",
+      "locale": "fr",
+      "value": "Score de {judge} : {scoreOne} / {scoreTwo}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.new_clash",
+      "locale": "fr",
+      "value": "Nouveau clash",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.public_score",
+      "locale": "fr",
+      "value": "Score public : {scoreOne} / {scoreTwo}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.public_vote",
+      "locale": "fr",
+      "value": "Vote public",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.random_judge",
+      "locale": "fr",
+      "value": "Juge aléatoire",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.refuted_arguments",
+      "locale": "fr",
+      "value": "Arguments réfutés",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.share",
+      "locale": "fr",
+      "value": "Partager",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.speeches",
+      "locale": "fr",
+      "value": "Prises de parole",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.stats_title",
+      "locale": "fr",
+      "value": "Statistiques du battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.title",
+      "locale": "fr",
+      "value": "Résultat",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.user_votes",
+      "locale": "fr",
+      "value": "Votes : {votesOne} / {votesTwo}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.result.winner_badge",
+      "locale": "fr",
+      "value": "Vainqueur",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.status.running",
+      "locale": "fr",
+      "value": "En cours",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.stream.chunks",
+      "locale": "fr",
+      "value": "{count} chunk(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.stream.connected_at",
+      "locale": "fr",
+      "value": "Connecté à {time}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.stream.events",
+      "locale": "fr",
+      "value": "{count} événement(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.vote.required_for_round",
+      "locale": "fr",
+      "value": "Vote requis pour le round {round}",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.vote.required_this_round",
+      "locale": "fr",
+      "value": "Vote requis sur ce round",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.vote.saved",
+      "locale": "fr",
+      "value": "Vote enregistré",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.app.title",
+      "locale": "fr",
+      "value": "IA Battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.create_battle",
+      "locale": "fr",
+      "value": "Créer un battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.archives.badge",
+      "locale": "fr",
+      "value": "Archives",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.archives.cta",
+      "locale": "fr",
+      "value": "Voir les archives",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.archives.desc",
+      "locale": "fr",
+      "value": "Revoir les battles terminés, les scores et les replays publics.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.archives.title",
+      "locale": "fr",
+      "value": "Archives",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.create.badge",
+      "locale": "fr",
+      "value": "Création",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.create.cta",
+      "locale": "fr",
+      "value": "Créer un battle",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.create.desc",
+      "locale": "fr",
+      "value": "Préparer un duel entre deux profils IA avec vote et jugement.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.create.title",
+      "locale": "fr",
+      "value": "Créer",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.live.badge",
+      "locale": "fr",
+      "value": "Live",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.live.cta",
+      "locale": "fr",
+      "value": "Voir le live",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.live.desc",
+      "locale": "fr",
+      "value": "Suivre les battles publics en direct et rejoindre l’arène.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.live.title",
+      "locale": "fr",
+      "value": "Battle live",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.quests.badge",
+      "locale": "fr",
+      "value": "Quêtes",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.quests.cta",
+      "locale": "fr",
+      "value": "Choisir une quête",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.quests.desc",
+      "locale": "fr",
+      "value": "Démarrer un battle depuis une quête RP publiée.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle_ia",
+      "key": "battle_ia.landing.quests.title",
+      "locale": "fr",
+      "value": "Quêtes",
+      "language": "fr"
+    },
+    {
       "domain": "common",
       "key": "common.app.title",
       "locale": "fr",
@@ -17,23 +710,23 @@
     },
     {
       "domain": "common",
-      "key": "common.button.confirm",
+      "key": "common.badge.local",
       "locale": "fr",
-      "value": "CONFIRMER",
+      "value": "Local",
       "language": "fr"
     },
     {
       "domain": "common",
-      "key": "common.button.cancel",
+      "key": "common.badge.secured",
       "locale": "fr",
-      "value": "ANNULER",
+      "value": "Sécurisé",
       "language": "fr"
     },
     {
       "domain": "common",
-      "key": "common.button.refresh",
+      "key": "common.button.abandon",
       "locale": "fr",
-      "value": "Rafraîchir",
+      "value": "Abandonner",
       "language": "fr"
     },
     {
@@ -45,408 +738,331 @@
     },
     {
       "domain": "common",
+      "key": "common.button.cancel",
+      "locale": "fr",
+      "value": "Annuler",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.change",
+      "locale": "fr",
+      "value": "Changer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.clear",
+      "locale": "fr",
+      "value": "Effacer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.confirm",
+      "locale": "fr",
+      "value": "Confirmer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.create",
+      "locale": "fr",
+      "value": "Créer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
       "key": "common.button.delete",
       "locale": "fr",
-      "value": "SUPPRIMER",
+      "value": "Supprimer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.download",
+      "locale": "fr",
+      "value": "Télécharger",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.edit",
+      "locale": "fr",
+      "value": "Modifier",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.pause",
+      "locale": "fr",
+      "value": "Pause",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.quit",
+      "locale": "fr",
+      "value": "Quitter",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.refresh",
+      "locale": "fr",
+      "value": "Rafraîchir",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.reload",
+      "locale": "fr",
+      "value": "Recharger",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.restart",
+      "locale": "fr",
+      "value": "Redémarrer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.resume",
+      "locale": "fr",
+      "value": "Reprendre",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.save",
+      "locale": "fr",
+      "value": "Enregistrer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.send",
+      "locale": "fr",
+      "value": "Envoyer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.start",
+      "locale": "fr",
+      "value": "Démarrer",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.stop",
+      "locale": "fr",
+      "value": "Arrêter",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.test",
+      "locale": "fr",
+      "value": "Tester",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.update",
+      "locale": "fr",
+      "value": "Mettre à jour",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.button.use",
+      "locale": "fr",
+      "value": "Utiliser",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.filter.all",
+      "locale": "fr",
+      "value": "Tous",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.input.free_text",
+      "locale": "fr",
+      "value": "Texte libre",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.nav.archives",
+      "locale": "fr",
+      "value": "Archives",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.nav.history",
+      "locale": "fr",
+      "value": "Historique",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.nav.menu",
+      "locale": "fr",
+      "value": "Menu",
+      "language": "fr"
+    },
+    {
+      "domain": "common",
+      "key": "common.nav.network",
+      "locale": "fr",
+      "value": "Réseau",
       "language": "fr"
     },
     {
       "domain": "common",
       "key": "common.snackbar.copied",
       "locale": "fr",
-      "value": "Code {code} copié dans le presse-papiers.",
-      "language": "fr"
-    },
-    {
-      "domain": "common",
-      "key": "common.snackbar.profile_synced",
-      "locale": "fr",
-      "value": "Profil synchronisé",
+      "value": "Code {code} copié.",
       "language": "fr"
     },
     {
       "domain": "common",
       "key": "common.snackbar.ia_profile_synced",
       "locale": "fr",
-      "value": "Profil IA synchronisé",
+      "value": "Profil IA synchronisé.",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.quest_catalog.title",
+      "domain": "common",
+      "key": "common.snackbar.profile_synced",
       "locale": "fr",
-      "value": "QUÊTES DISPONIBLES",
+      "value": "Profil synchronisé.",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.quest_catalog.tooltip.archives",
+      "domain": "common",
+      "key": "common.status.active",
       "locale": "fr",
-      "value": "Archives RP",
+      "value": "Actif",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.quest_catalog.tooltip.refresh",
+      "domain": "common",
+      "key": "common.status.connecting",
       "locale": "fr",
-      "value": "Rafraîchir",
+      "value": "Connexion...",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.hub_narrative.title",
+      "domain": "common",
+      "key": "common.status.creating",
       "locale": "fr",
-      "value": "HUB NARRATIF",
+      "value": "Création...",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.stat.xp",
+      "domain": "common",
+      "key": "common.status.inactive",
       "locale": "fr",
-      "value": "XP {xp}",
+      "value": "Inactif",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.stat.coins",
+      "domain": "common",
+      "key": "common.status.initializing",
       "locale": "fr",
-      "value": "{coins} coins",
+      "value": "Initialisation...",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.stat.provider_ready",
+      "domain": "common",
+      "key": "common.status.loading",
       "locale": "fr",
-      "value": "Provider backend • {count} prêt{s}",
+      "value": "Chargement...",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.stat.provider_not_configured",
+      "domain": "common",
+      "key": "common.status.syncing",
       "locale": "fr",
-      "value": "Provider backend non configuré",
+      "value": "Synchronisation...",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.stat.local_unavailable",
+      "domain": "common",
+      "key": "common.user.you",
       "locale": "fr",
-      "value": "Local llama indisponible",
+      "value": "Vous",
       "language": "fr"
     },
     {
-      "domain": "roleplay",
-      "key": "roleplay.stat.local_ready",
+      "domain": "common",
+      "key": "common.value.none",
       "locale": "fr",
-      "value": "Local mobile • {fileName}",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.hub_narrative.desc.ready",
-      "locale": "fr",
-      "value": "Le RP strict est prêt : tu peux lancer la narration via le backend Go avec une clé provider stockée localement, ou basculer volontairement sur un modèle llama local.",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.hub_narrative.desc.no_provider",
-      "locale": "fr",
-      "value": "Configure au moins une clé provider locale reliée à un profil narrateur, ou charge un modèle GGUF local. Sans ça, pas de RP — juste un écran qui te juge silencieusement.",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.hub_narrative.desc.no_ready",
-      "locale": "fr",
-      "value": "Aucun provider prêt pour le moment : le mode local llama reste disponible si ton appareil supporte le modèle GGUF sélectionné.",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.filters.title",
-      "locale": "fr",
-      "value": "FILTRES QUÊTES RP",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.filters.search.label",
-      "locale": "fr",
-      "value": "Recherche",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.filters.search.hint",
-      "locale": "fr",
-      "value": "titre, résumé, prompt, thème...",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.filters.search.clear_tooltip",
-      "locale": "fr",
-      "value": "Effacer",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.section.ongoing_sessions",
-      "locale": "fr",
-      "value": "SESSIONS EN COURS",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.level.all",
-      "locale": "fr",
-      "value": "Tous niveaux",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.theme.all",
-      "locale": "fr",
-      "value": "Tous thèmes",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.source.all",
-      "locale": "fr",
-      "value": "Toutes sources",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.card.join",
-      "locale": "fr",
-      "value": "Lancer la quête",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.card.resume",
-      "locale": "fr",
-      "value": "Reprendre",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.history.title",
-      "locale": "fr",
-      "value": "ARCHIVES RP",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.history.empty",
-      "locale": "fr",
-      "value": "Aucune session RP pour l’instant.",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.session_detail.title",
-      "locale": "fr",
-      "value": "SESSION RP",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.progress.xp_reward",
-      "locale": "fr",
-      "value": "+{xp} XP",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.progress.status.current",
-      "locale": "fr",
-      "value": "ACTUELLE",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.progress.source.local",
-      "locale": "fr",
-      "value": "LOCAL",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.session.view",
-      "locale": "fr",
-      "value": "VOIR LA SESSION RP",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.abandoned",
-      "locale": "fr",
-      "value": "Quête abandonnée • progression remise à zéro.",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.session.back_to_active",
-      "locale": "fr",
-      "value": "REVENIR À L’ÉTAPE ACTIVE",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.session.progress",
-      "locale": "fr",
-      "value": "PROGRESSION",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.abandon",
-      "locale": "fr",
-      "value": "ABANDONNER LA QUÊTE",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.session.back",
-      "locale": "fr",
-      "value": "RETOUR À LA SESSION",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.session.resume",
-      "locale": "fr",
-      "value": "REPRENDRE",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.action.scan",
-      "locale": "fr",
-      "value": "SCANNER ZONE",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.action.hack",
-      "locale": "fr",
-      "value": "EXÉCUTER HACK",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.abandon_confirm",
-      "locale": "fr",
-      "value": "Abandonner la quête ?",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.abandon_cancel",
-      "locale": "fr",
-      "value": "ANNULER",
-      "language": "fr"
-    },
-    {
-      "domain": "roleplay",
-      "key": "roleplay.quest.abandon_confirm_action",
-      "locale": "fr",
-      "value": "ABANDONNER",
+      "value": "Aucun",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.hub.title",
+      "key": "coop.action.cover_ally",
       "locale": "fr",
-      "value": "MISSION CO-OP LIVE",
+      "value": "Couvrir l’allié",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.hub.subtitle",
+      "key": "coop.action.inject_ghost",
       "locale": "fr",
-      "value": "SYNCHRO TACTIQUE",
+      "value": "Injecter un ghost payload",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.hub.description",
+      "key": "coop.action.jam_signal",
       "locale": "fr",
-      "value": "Crée un lobby, partage le code, puis avancez à deux dans une vraie scène commune : présence visible, choix synchronisés, confirmation en popin et chat partagé. Bref, le coop arrête enfin de faire semblant.",
+      "value": "Brouiller le signal",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.create.title",
+      "key": "coop.ally",
       "locale": "fr",
-      "value": "CRÉER UNE MISSION",
+      "value": "Allié",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.create.provider_required.title",
+      "key": "coop.chat.hint",
       "locale": "fr",
-      "value": "FOURNISSEUR IA REQUIS",
+      "value": "Message rapide à l’allié...",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.create.provider_required.desc",
+      "key": "coop.chat.quick_message_hint",
       "locale": "fr",
-      "value": "Ajoute une clé API fournisseur avant de lancer une mission co-op.",
+      "value": "Message rapide...",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.create.provider_required.button",
+      "key": "coop.choice.none",
       "locale": "fr",
-      "value": "CONFIGURER LES FOURNISSEURS",
+      "value": "Aucun choix",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.create.provider_label",
+      "key": "coop.copy_code.tooltip",
       "locale": "fr",
-      "value": "Fournisseur IA de mission",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.create.provider_helper",
-      "locale": "fr",
-      "value": "Obligatoire: moteur IA utilisé pour la mission co-op.",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.create.quest_label",
-      "locale": "fr",
-      "value": "Quête pour la mission",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.create.quest_helper",
-      "locale": "fr",
-      "value": "La quête sera jouée en coopération avec un autre joueur.",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.create.no_quest",
-      "locale": "fr",
-      "value": "Choisis une quete avant de creer le coop.",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.create.no_provider",
-      "locale": "fr",
-      "value": "Sélectionne un fournisseur IA (clé API) avant de créer la mission.",
+      "value": "Copier le code",
       "language": "fr"
     },
     {
@@ -465,16 +1081,233 @@
     },
     {
       "domain": "coop",
-      "key": "coop.join.title",
+      "key": "coop.create.no_provider",
       "locale": "fr",
-      "value": "REJOINDRE PAR CODE",
+      "value": "Sélectionne un fournisseur IA (clé API) avant de créer la mission.",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.join.hint",
+      "key": "coop.create.no_quest",
       "locale": "fr",
-      "value": "Ex. SYNC42",
+      "value": "Choisis une quete avant de creer le coop.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_helper",
+      "locale": "fr",
+      "value": "Obligatoire: moteur IA utilisé pour la mission co-op.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_label",
+      "locale": "fr",
+      "value": "Fournisseur IA de mission",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_required.button",
+      "locale": "fr",
+      "value": "CONFIGURER LES FOURNISSEURS",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_required.desc",
+      "locale": "fr",
+      "value": "Ajoute une clé API fournisseur avant de lancer une mission co-op.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.provider_required.title",
+      "locale": "fr",
+      "value": "FOURNISSEUR IA REQUIS",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.quest_helper",
+      "locale": "fr",
+      "value": "La quête sera jouée en coopération avec un autre joueur.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.quest_label",
+      "locale": "fr",
+      "value": "Quête pour la mission",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.create.title",
+      "locale": "fr",
+      "value": "CRÉER UNE MISSION",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.default_option.ghost_payload.caption",
+      "locale": "fr",
+      "value": "Détourne l’attention ennemie.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.default_option.ghost_payload.label",
+      "locale": "fr",
+      "value": "Charge fantôme",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.default_option.jam_signal.caption",
+      "locale": "fr",
+      "value": "Brouille le signal hostile.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.default_option.jam_signal.label",
+      "locale": "fr",
+      "value": "Brouiller le signal",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.default_option.shield_ally.caption",
+      "locale": "fr",
+      "value": "Protège l’allié pendant l’action.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.default_option.shield_ally.label",
+      "locale": "fr",
+      "value": "Bouclier allié",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.form.provider_helper",
+      "locale": "fr",
+      "value": "Choisis un profil IA pour créer la mission.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.form.provider_label",
+      "locale": "fr",
+      "value": "Profil IA",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.code_hint",
+      "locale": "fr",
+      "value": "Code de mission",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.code_label",
+      "locale": "fr",
+      "value": "Code coop",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.create_live_lobby",
+      "locale": "fr",
+      "value": "Créer un lobby live",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.create_mission",
+      "locale": "fr",
+      "value": "Créer une mission",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.description",
+      "locale": "fr",
+      "value": "Crée un lobby, partage le code, puis avancez à deux dans une vraie scène commune : présence visible, choix synchronisés, confirmation en popin et chat partagé. Bref, le coop arrête enfin de faire semblant.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.join_by_code",
+      "locale": "fr",
+      "value": "Rejoindre par code",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.join_mission",
+      "locale": "fr",
+      "value": "Rejoindre la mission",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.no_lobby_message",
+      "locale": "fr",
+      "value": "Aucun lobby coop actif pour le moment.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.no_lobby_title",
+      "locale": "fr",
+      "value": "Aucun lobby",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.status_title",
+      "locale": "fr",
+      "value": "Statut coop",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.subtitle",
+      "locale": "fr",
+      "value": "SYNCHRO TACTIQUE",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.sync_description",
+      "locale": "fr",
+      "value": "Les choix des joueurs sont synchronisés par le backend.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.sync_title",
+      "locale": "fr",
+      "value": "Coop live synchronisée",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.title",
+      "locale": "fr",
+      "value": "MISSION CO-OP LIVE",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.hub.your_lobbies",
+      "locale": "fr",
+      "value": "Vos lobbies",
       "language": "fr"
     },
     {
@@ -486,93 +1319,16 @@
     },
     {
       "domain": "coop",
-      "key": "coop.lobby.title",
+      "key": "coop.join.hint",
       "locale": "fr",
-      "value": "LOBBY CO-OP",
+      "value": "Ex. SYNC42",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.lobby.code_label",
+      "key": "coop.join.title",
       "locale": "fr",
-      "value": "CODE LOBBY",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.copy_tooltip",
-      "locale": "fr",
-      "value": "Copier le code",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.waiting",
-      "locale": "fr",
-      "value": "En attente du deuxième joueur...",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.state.hub",
-      "locale": "fr",
-      "value": "ÉTAT DU HUB",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.my_lobbies",
-      "locale": "fr",
-      "value": "TES LOBBIES",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.empty",
-      "locale": "fr",
-      "value": "Aucun lobby pour l’instant",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.resync",
-      "locale": "fr",
-      "value": "RESYNC",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.leave",
-      "locale": "fr",
-      "value": "QUITTER",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.check_connection",
-      "locale": "fr",
-      "value": "VÉRIFIER LA CONNEXION",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.verify_connection",
-      "locale": "fr",
-      "value": "Vérifier la connexion",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.connection_ok",
-      "locale": "fr",
-      "value": "Connexion co-op OK",
-      "language": "fr"
-    },
-    {
-      "domain": "coop",
-      "key": "coop.lobby.connection_issue",
-      "locale": "fr",
-      "value": "Problème de connexion co-op",
+      "value": "REJOINDRE PAR CODE",
       "language": "fr"
     },
     {
@@ -584,9 +1340,65 @@
     },
     {
       "domain": "coop",
+      "key": "coop.lobby.check_connection",
+      "locale": "fr",
+      "value": "VÉRIFIER LA CONNEXION",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.code_label",
+      "locale": "fr",
+      "value": "CODE LOBBY",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
       "key": "coop.lobby.confirm_quit",
       "locale": "fr",
       "value": "CONFIRMER",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.connection_issue",
+      "locale": "fr",
+      "value": "Problème de connexion co-op",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.connection_ok",
+      "locale": "fr",
+      "value": "Connexion co-op OK",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.copy_tooltip",
+      "locale": "fr",
+      "value": "Copier le code",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.empty",
+      "locale": "fr",
+      "value": "Aucun lobby pour l’instant",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.leave",
+      "locale": "fr",
+      "value": "QUITTER",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.my_lobbies",
+      "locale": "fr",
+      "value": "TES LOBBIES",
       "language": "fr"
     },
     {
@@ -598,9 +1410,44 @@
     },
     {
       "domain": "coop",
-      "key": "coop.mission.sync",
+      "key": "coop.lobby.resync",
       "locale": "fr",
-      "value": "SYNC {percent}%",
+      "value": "RESYNC",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.state.hub",
+      "locale": "fr",
+      "value": "ÉTAT DU HUB",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.title",
+      "locale": "fr",
+      "value": "LOBBY CO-OP",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.verify_connection",
+      "locale": "fr",
+      "value": "Vérifier la connexion",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.lobby.waiting",
+      "locale": "fr",
+      "value": "En attente du deuxième joueur...",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.mission.ally_choice",
+      "locale": "fr",
+      "value": "Choix allié",
       "language": "fr"
     },
     {
@@ -612,37 +1459,72 @@
     },
     {
       "domain": "coop",
-      "key": "coop.action.jam_signal",
+      "key": "coop.mission.resync",
       "locale": "fr",
-      "value": "Brouiller le signal",
+      "value": "Resynchroniser",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.action.inject_ghost",
+      "key": "coop.mission.sync",
       "locale": "fr",
-      "value": "Injecter un ghost payload",
+      "value": "SYNC {percent}%",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.action.cover_ally",
+      "key": "coop.mission.sync_percent",
       "locale": "fr",
-      "value": "Couvrir l’allié",
+      "value": "Synchronisation {percent}%",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.chat.hint",
+      "key": "coop.mission.syncing",
       "locale": "fr",
-      "value": "Message rapide à l’allié...",
+      "value": "Synchronisation en cours",
       "language": "fr"
     },
     {
       "domain": "coop",
-      "key": "coop.quest.xp",
+      "key": "coop.mission.your_choice",
       "locale": "fr",
-      "value": "+{xp} XP",
+      "value": "Votre choix",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.provider_required.cta",
+      "locale": "fr",
+      "value": "Configurer un profil IA",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.provider_required.message",
+      "locale": "fr",
+      "value": "Un profil IA est requis pour créer une mission coop.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.provider_required.title",
+      "locale": "fr",
+      "value": "Profil IA requis",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.change",
+      "locale": "fr",
+      "value": "Changer de quête",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.current",
+      "locale": "fr",
+      "value": "Quête actuelle",
       "language": "fr"
     },
     {
@@ -654,44 +1536,2221 @@
     },
     {
       "domain": "coop",
+      "key": "coop.quest.none_found",
+      "locale": "fr",
+      "value": "Aucune quête trouvée.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.none_published",
+      "locale": "fr",
+      "value": "Aucune quête publiée.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.search_hint",
+      "locale": "fr",
+      "value": "Rechercher une quête coop.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.select",
+      "locale": "fr",
+      "value": "Sélectionner la quête",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.status_mismatch",
+      "locale": "fr",
+      "value": "Statut incompatible",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.tip",
+      "locale": "fr",
+      "value": "Choisis une quête avant de lancer la mission.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.unavailable",
+      "locale": "fr",
+      "value": "Quêtes indisponibles : {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.quest.xp",
+      "locale": "fr",
+      "value": "+{xp} XP",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
       "key": "coop.search.hint",
       "locale": "fr",
       "value": "titre, contenu, thème...",
       "language": "fr"
     },
     {
-      "domain": "sandbox",
-      "key": "sandbox.title",
+      "domain": "coop",
+      "key": "coop.snackbar.choose_provider_before_create",
       "locale": "fr",
-      "value": "SANDBOX NEXUS",
+      "value": "Choisis un profil IA avant de créer.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.snackbar.choose_quest_before_create",
+      "locale": "fr",
+      "value": "Choisis une quête avant de créer.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.snackbar.enter_code_before_join",
+      "locale": "fr",
+      "value": "Entre un code coop avant de rejoindre.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.title",
+      "locale": "fr",
+      "value": "Coop live",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.waiting.check_connection",
+      "locale": "fr",
+      "value": "Vérifier la connexion",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.waiting.guest_message",
+      "locale": "fr",
+      "value": "En attente de l’hôte.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.waiting.host_message",
+      "locale": "fr",
+      "value": "En attente de l’allié.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.waiting.players",
+      "locale": "fr",
+      "value": "{count} joueur(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.waiting.resume_tip",
+      "locale": "fr",
+      "value": "La mission reprendra dès que les deux joueurs seront synchronisés.",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.waiting.waiting_ally",
+      "locale": "fr",
+      "value": "Attente de l’allié",
+      "language": "fr"
+    },
+    {
+      "domain": "coop",
+      "key": "coop.waiting.waiting_host",
+      "locale": "fr",
+      "value": "Attente de l’hôte",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.created_section",
+      "locale": "fr",
+      "value": "Profils créés",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.delete.title",
+      "locale": "fr",
+      "value": "Supprimer ce profil IA ?",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.empty",
+      "locale": "fr",
+      "value": "Aucun profil IA créé.",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.choose_preset",
+      "locale": "fr",
+      "value": "Choisir un preset",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.create_title",
+      "locale": "fr",
+      "value": "Créer un profil IA",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.edit_title",
+      "locale": "fr",
+      "value": "Modifier le profil IA",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.goal",
+      "locale": "fr",
+      "value": "Objectif",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.mindset",
+      "locale": "fr",
+      "value": "État d’esprit",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.model_name",
+      "locale": "fr",
+      "value": "Modèle",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.name_label",
+      "locale": "fr",
+      "value": "Nom du profil",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.personality",
+      "locale": "fr",
+      "value": "Personnalité",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.provider_label",
+      "locale": "fr",
+      "value": "Fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.style",
+      "locale": "fr",
+      "value": "Style",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.form.weakness",
+      "locale": "fr",
+      "value": "Faiblesse",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.providers_unavailable",
+      "locale": "fr",
+      "value": "Fournisseurs indisponibles : {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.snackbar.error",
+      "locale": "fr",
+      "value": "Erreur profil IA : {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.subtitle.free_provider",
+      "locale": "fr",
+      "value": "Fournisseur libre",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.subtitle.undefined_model",
+      "locale": "fr",
+      "value": "Modèle non défini",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.title",
+      "locale": "fr",
+      "value": "Profils IA",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.validation.name_required",
+      "locale": "fr",
+      "value": "Le nom est obligatoire.",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_profiles",
+      "key": "ia_profiles.validation.provider_invalid",
+      "locale": "fr",
+      "value": "Choisis un fournisseur valide.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.compat.blocked",
+      "locale": "fr",
+      "value": "Incompatible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.compat.good",
+      "locale": "fr",
+      "value": "Compatible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.compat.unknown",
+      "locale": "fr",
+      "value": "Compatibilité inconnue",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.compat.warning",
+      "locale": "fr",
+      "value": "Compatibilité limitée",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.delete.content",
+      "locale": "fr",
+      "value": "Supprimer le modèle local {fileName} ?",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.delete.title",
+      "locale": "fr",
+      "value": "Supprimer le modèle ?",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.lock_active",
+      "locale": "fr",
+      "value": "Verrou actif",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.low",
+      "locale": "fr",
+      "value": "Appareil limité",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.powerful",
+      "locale": "fr",
+      "value": "Appareil puissant",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.standard",
+      "locale": "fr",
+      "value": "Appareil standard",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.unavailable",
+      "locale": "fr",
+      "value": "État appareil indisponible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.download.blocked_mobile",
+      "locale": "fr",
+      "value": "Téléchargement bloqué sur mobile",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.download.restart",
+      "locale": "fr",
+      "value": "Relancer le téléchargement",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.installed.empty.text",
+      "locale": "fr",
+      "value": "Aucun modèle local installé.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.installed.empty.title",
+      "locale": "fr",
+      "value": "Aucun modèle installé",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.local_read_error.title",
+      "locale": "fr",
+      "value": "Lecture locale impossible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.downloaded_at",
+      "locale": "fr",
+      "value": "Téléchargé le {date}",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.downloads",
+      "locale": "fr",
+      "value": "{count} téléchargement(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.hf_size",
+      "locale": "fr",
+      "value": "Taille HF : {size}",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.hf_size_unknown",
+      "locale": "fr",
+      "value": "Taille HF inconnue",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.loaded",
+      "locale": "fr",
+      "value": "Chargé",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.selected",
+      "locale": "fr",
+      "value": "Sélectionné",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.size_unknown",
+      "locale": "fr",
+      "value": "Taille inconnue",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.progress.bytes",
+      "locale": "fr",
+      "value": "{received} / {total}",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.empty.text",
+      "locale": "fr",
+      "value": "Essaie une autre recherche Hugging Face.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.empty.title",
+      "locale": "fr",
+      "value": "Aucun modèle trouvé",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.error.title",
+      "locale": "fr",
+      "value": "Recherche impossible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.hf_running",
+      "locale": "fr",
+      "value": "Recherche Hugging Face en cours...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.hint",
+      "locale": "fr",
+      "value": "Nom du modèle ou organisation",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.label",
+      "locale": "fr",
+      "value": "Recherche modèle",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.load_more",
+      "locale": "fr",
+      "value": "Charger plus",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.loading",
+      "locale": "fr",
+      "value": "Recherche...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.section.catalog",
+      "locale": "fr",
+      "value": "Catalogue Hugging Face",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.section.installed",
+      "locale": "fr",
+      "value": "Modèles installés",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.default_prompt",
+      "locale": "fr",
+      "value": "Écris une réponse courte pour tester ce modèle local.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.empty_transcript",
+      "locale": "fr",
+      "value": "Aucun message local.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.interrupted_response",
+      "locale": "fr",
+      "value": "Réponse interrompue : {partial}",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.loading_runtime",
+      "locale": "fr",
+      "value": "Chargement du runtime local...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.local_conversation",
+      "locale": "fr",
+      "value": "Conversation locale",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.local_model",
+      "locale": "fr",
+      "value": "Modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.prompt_hint",
+      "locale": "fr",
+      "value": "Message à envoyer au modèle local.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.prompt_label",
+      "locale": "fr",
+      "value": "Prompt de test",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.reset_chat",
+      "locale": "fr",
+      "value": "Réinitialiser le chat",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.thinking",
+      "locale": "fr",
+      "value": "Réflexion...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.thinking_empty",
+      "locale": "fr",
+      "value": "Réponse en cours...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.title",
+      "locale": "fr",
+      "value": "Testeur local",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.title",
+      "locale": "fr",
+      "value": "Modèles IA locaux",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.battles",
+      "locale": "fr",
+      "value": "{count} battle(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.filter_reasons",
+      "locale": "fr",
+      "value": "Raisons de filtrage",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.live_title",
+      "locale": "fr",
+      "value": "Audit live",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.live_ui",
+      "locale": "fr",
+      "value": "UI live : {count}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.mode_legacy",
+      "locale": "fr",
+      "value": "Mode legacy",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.mode_sessions_only",
+      "locale": "fr",
+      "value": "Sessions uniquement",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.replays_ui",
+      "locale": "fr",
+      "value": "UI replays : {count}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.sessions",
+      "locale": "fr",
+      "value": "Sessions : {count}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.sessions_live",
+      "locale": "fr",
+      "value": "Sessions live : {count}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.sessions_with_battle",
+      "locale": "fr",
+      "value": "Sessions avec battle : {count}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.audit.sync",
+      "locale": "fr",
+      "value": "Sync : {time}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.battle_id",
+      "locale": "fr",
+      "value": "Battle #{id}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.channel",
+      "locale": "fr",
+      "value": "Canal : {channel}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.cursor",
+      "locale": "fr",
+      "value": "Curseur : {cursor}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.events",
+      "locale": "fr",
+      "value": "Événements : {count}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.no_sync_message",
+      "locale": "fr",
+      "value": "Aucune synchronisation live.",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.polls",
+      "locale": "fr",
+      "value": "Polls : {count}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.refresh_900ms",
+      "locale": "fr",
+      "value": "Rafraîchissement 900 ms",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.source_battle",
+      "locale": "fr",
+      "value": "Source battle",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.source_live_history",
+      "locale": "fr",
+      "value": "Source historique live",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.transport",
+      "locale": "fr",
+      "value": "Transport : {transport}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.transport_title",
+      "locale": "fr",
+      "value": "Transport live",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.debug.turns",
+      "locale": "fr",
+      "value": "Tours : {count}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.hero.active",
+      "locale": "fr",
+      "value": "Live actif",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.hero.idle",
+      "locale": "fr",
+      "value": "Aucun live actif",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.default_battle_title",
+      "locale": "fr",
+      "value": "Battle #{id}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.delete.content",
+      "locale": "fr",
+      "value": "Supprimer l’archive du battle #{id} ?",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.delete.snackbar",
+      "locale": "fr",
+      "value": "Archive #{id} supprimée.",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.delete.title",
+      "locale": "fr",
+      "value": "Supprimer cette archive ?",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.empty.message",
+      "locale": "fr",
+      "value": "Aucune archive de battle disponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.empty.title",
+      "locale": "fr",
+      "value": "Aucune archive",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.period",
+      "locale": "fr",
+      "value": "Du {startedAt} au {endedAt}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.rounds",
+      "locale": "fr",
+      "value": "Rounds : {current}/{total}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.status.archive",
+      "locale": "fr",
+      "value": "Archive",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.title",
+      "locale": "fr",
+      "value": "Archives Battle IA",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.view_replay",
+      "locale": "fr",
+      "value": "Voir le replay",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.wall_title",
+      "locale": "fr",
+      "value": "Mur des archives",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.history.winner",
+      "locale": "fr",
+      "value": "Vainqueur : {winner}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.live.empty.message",
+      "locale": "fr",
+      "value": "Aucun battle live public pour le moment.",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.live.empty.title",
+      "locale": "fr",
+      "value": "Aucun live",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.live.section.live",
+      "locale": "fr",
+      "value": "Battles live",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.live.section.replays",
+      "locale": "fr",
+      "value": "Replays publics",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.live.title",
+      "locale": "fr",
+      "value": "Coop / Live Network",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.metric.archives",
+      "locale": "fr",
+      "value": "Archives",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.metric.comments",
+      "locale": "fr",
+      "value": "{count} commentaire(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.metric.live",
+      "locale": "fr",
+      "value": "Live",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.metric.public",
+      "locale": "fr",
+      "value": "Public",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.metric.replays",
+      "locale": "fr",
+      "value": "Replays",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.metric.viewers",
+      "locale": "fr",
+      "value": "{count} spectateur(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.metric.viewers_label",
+      "locale": "fr",
+      "value": "Spectateurs",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.replays.empty.message",
+      "locale": "fr",
+      "value": "Aucun replay public disponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.replays.empty.title",
+      "locale": "fr",
+      "value": "Aucun replay",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.channel_title",
+      "locale": "fr",
+      "value": "Canal spectateur",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.highlights",
+      "locale": "fr",
+      "value": "Temps forts",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.join_arena",
+      "locale": "fr",
+      "value": "Rejoindre l’arène",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.joined_arena",
+      "locale": "fr",
+      "value": "Arène rejointe",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.login_to_interact",
+      "locale": "fr",
+      "value": "Connecte-toi pour interagir.",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.no_highlights",
+      "locale": "fr",
+      "value": "Aucun temps fort.",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.timeline",
+      "locale": "fr",
+      "value": "Timeline",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.timeline_empty",
+      "locale": "fr",
+      "value": "Timeline vide.",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.spectator.title",
+      "locale": "fr",
+      "value": "Spectateur live",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.status.public_live",
+      "locale": "fr",
+      "value": "Live public",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.status.public_replay",
+      "locale": "fr",
+      "value": "Replay public",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.status.read_only",
+      "locale": "fr",
+      "value": "Lecture seule",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.winner.explicit",
+      "locale": "fr",
+      "value": "Vainqueur : {winner}",
+      "language": "fr"
+    },
+    {
+      "domain": "network",
+      "key": "network.winner.unknown",
+      "locale": "fr",
+      "value": "Vainqueur inconnu",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.analyse",
+      "locale": "fr",
+      "value": "Analyse IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.ask",
+      "locale": "fr",
+      "value": "Demander à mon IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.budget",
+      "locale": "fr",
+      "value": "Budget tokens",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.plan",
+      "locale": "fr",
+      "value": "Plan IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.energy",
+      "locale": "fr",
+      "value": "Énergie",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.hub.title",
+      "locale": "fr",
+      "value": "HUB VILLE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.moral",
+      "locale": "fr",
+      "value": "Moral",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.population",
+      "locale": "fr",
+      "value": "Population",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.security",
+      "locale": "fr",
+      "value": "Sécurité",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.loading",
+      "locale": "fr",
+      "value": "Chargement du Nexus...",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.offline",
+      "locale": "fr",
+      "value": "Mode hors-ligne • données locales",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.action.logout_network",
+      "locale": "fr",
+      "value": "Quitter le réseau",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.form.confirm_password",
+      "locale": "fr",
+      "value": "Confirmer le mot de passe",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.form.new_password",
+      "locale": "fr",
+      "value": "Nouveau mot de passe",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.form.pseudo",
+      "locale": "fr",
+      "value": "Pseudo",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.player.title",
+      "locale": "fr",
+      "value": "Profil joueur",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.add",
+      "locale": "fr",
+      "value": "Ajouter la clé",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.api_key_hint",
+      "locale": "fr",
+      "value": "Colle ta clé API ici.",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.api_key_label",
+      "locale": "fr",
+      "value": "Clé API",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.description",
+      "locale": "fr",
+      "value": "Gère les clés fournisseur utilisées par tes profils IA.",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.empty",
+      "locale": "fr",
+      "value": "Aucune clé fournisseur enregistrée.",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.load_error",
+      "locale": "fr",
+      "value": "Impossible de charger les clés : {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.model_helper",
+      "locale": "fr",
+      "value": "Modèle par défaut : {model}",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.model_label",
+      "locale": "fr",
+      "value": "Modèle préféré",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.no_provider",
+      "locale": "fr",
+      "value": "Aucun fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.provider_label",
+      "locale": "fr",
+      "value": "Fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.recent_models",
+      "locale": "fr",
+      "value": "Modèles récents",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.test_failed",
+      "locale": "fr",
+      "value": "Test échoué",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.test_key",
+      "locale": "fr",
+      "value": "Tester la clé",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.test_ok",
+      "locale": "fr",
+      "value": "Test réussi",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.title",
+      "locale": "fr",
+      "value": "Clés fournisseurs IA",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.provider_keys.where_create",
+      "locale": "fr",
+      "value": "Créer une clé fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.rank.elite_level",
+      "locale": "fr",
+      "value": "Elite niveau {level}",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.session_unavailable",
+      "locale": "fr",
+      "value": "Session indisponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.stats.credits",
+      "locale": "fr",
+      "value": "Crédits",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.stats.victories",
+      "locale": "fr",
+      "value": "Victoires",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.stats.xp",
+      "locale": "fr",
+      "value": "XP",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.status.online",
+      "locale": "fr",
+      "value": "En ligne",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.title",
+      "locale": "fr",
+      "value": "Profil",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.validation.min_3",
+      "locale": "fr",
+      "value": "Minimum 3 caractères.",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.validation.min_8",
+      "locale": "fr",
+      "value": "Minimum 8 caractères.",
+      "language": "fr"
+    },
+    {
+      "domain": "profile",
+      "key": "profile.validation.password_mismatch",
+      "locale": "fr",
+      "value": "Les mots de passe ne correspondent pas.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.abandon_dialog.content",
+      "locale": "fr",
+      "value": "Abandonner la quête {questTitle} ?",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.abandon_dialog.title",
+      "locale": "fr",
+      "value": "Abandonner la quête ?",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.action.hack",
+      "locale": "fr",
+      "value": "EXÉCUTER HACK",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.action.scan",
+      "locale": "fr",
+      "value": "SCANNER ZONE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.archive.arc_count",
+      "locale": "fr",
+      "value": "{arcs} arc(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.archive.arc_position",
+      "locale": "fr",
+      "value": "Arc {arc}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.archive.arc_trail",
+      "locale": "fr",
+      "value": "Trajectoire d’arc",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filter.all",
+      "locale": "fr",
+      "value": "Tous",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filter.all_sources",
+      "locale": "fr",
+      "value": "Toutes les sources",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filter.level",
+      "locale": "fr",
+      "value": "Niveau",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filter.source",
+      "locale": "fr",
+      "value": "Source",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filter.theme",
+      "locale": "fr",
+      "value": "Thème",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filters.search.clear_tooltip",
+      "locale": "fr",
+      "value": "Effacer la recherche",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filters.search.hint",
+      "locale": "fr",
+      "value": "Rechercher une quête RP.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filters.search.label",
+      "locale": "fr",
+      "value": "Recherche",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.filters.title",
+      "locale": "fr",
+      "value": "Filtres RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.history.empty",
+      "locale": "fr",
+      "value": "Aucune session RP pour l’instant.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.history.empty.message",
+      "locale": "fr",
+      "value": "Aucune session RP terminée.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.history.empty.title",
+      "locale": "fr",
+      "value": "Aucun historique RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.history.title",
+      "locale": "fr",
+      "value": "Historique RP IA",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.history.turn",
+      "locale": "fr",
+      "value": "Tour {turn}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.history.view_session",
+      "locale": "fr",
+      "value": "Voir la session",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.hub_narrative.desc.no_provider",
+      "locale": "fr",
+      "value": "Configure un profil IA pour démarrer une narration.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.hub_narrative.desc.no_ready",
+      "locale": "fr",
+      "value": "Prépare un profil IA ou un modèle local pour jouer.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.hub_narrative.desc.ready",
+      "locale": "fr",
+      "value": "Narration IA prête.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.hub_narrative.title",
+      "locale": "fr",
+      "value": "Hub narratif",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.active_arc",
+      "locale": "fr",
+      "value": "Arc actif",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.arc_map",
+      "locale": "fr",
+      "value": "Carte des arcs",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.arc_order",
+      "locale": "fr",
+      "value": "Arc #{order}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.arcs_progress",
+      "locale": "fr",
+      "value": "Progression des arcs",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.back_to_path_view",
+      "locale": "fr",
+      "value": "Retour au chemin",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.back_to_session",
+      "locale": "fr",
+      "value": "Retour à la session",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.completed_percent",
+      "locale": "fr",
+      "value": "Progression terminée",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.map",
+      "locale": "fr",
+      "value": "Carte",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.not_found",
+      "locale": "fr",
+      "value": "Progression introuvable.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.percent",
+      "locale": "fr",
+      "value": "{percent}% terminé",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.rewards",
+      "locale": "fr",
+      "value": "Récompenses",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.source.local",
+      "locale": "fr",
+      "value": "LOCAL",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.status.current",
+      "locale": "fr",
+      "value": "ACTUELLE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.toggle_view",
+      "locale": "fr",
+      "value": "Changer de vue",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.vertical_path",
+      "locale": "fr",
+      "value": "Chemin vertical",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.progress.xp_reward",
+      "locale": "fr",
+      "value": "+{xp} XP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandon",
+      "locale": "fr",
+      "value": "ABANDONNER LA QUÊTE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandon_cancel",
+      "locale": "fr",
+      "value": "ANNULER",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandon_confirm",
+      "locale": "fr",
+      "value": "Abandonner la quête ?",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandon_confirm_action",
+      "locale": "fr",
+      "value": "ABANDONNER",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandoned",
+      "locale": "fr",
+      "value": "Quête abandonnée • progression remise à zéro.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.abandoned_snackbar",
+      "locale": "fr",
+      "value": "Quête abandonnée.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.boss_mission",
+      "locale": "fr",
+      "value": "Mission boss",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.card.join",
+      "locale": "fr",
+      "value": "Lancer la quête",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.card.resume",
+      "locale": "fr",
+      "value": "Reprendre",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.daily_quests",
+      "locale": "fr",
+      "value": "Quêtes quotidiennes",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.empty.filtered_message",
+      "locale": "fr",
+      "value": "Aucune quête ne correspond aux filtres.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.empty.filtered_title",
+      "locale": "fr",
+      "value": "Aucun résultat",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.empty.published_message",
+      "locale": "fr",
+      "value": "Aucune quête publiée disponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.empty.published_title",
+      "locale": "fr",
+      "value": "Aucune quête publiée",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.level.all",
+      "locale": "fr",
+      "value": "Tous niveaux",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.source.all",
+      "locale": "fr",
+      "value": "Toutes sources",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.special_mission",
+      "locale": "fr",
+      "value": "Mission spéciale",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.start",
+      "locale": "fr",
+      "value": "Démarrer la quête",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.start_boss",
+      "locale": "fr",
+      "value": "Démarrer le boss",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest.theme.all",
+      "locale": "fr",
+      "value": "Tous thèmes",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest_catalog.title",
+      "locale": "fr",
+      "value": "Quêtes RP IA",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest_catalog.tooltip.archives",
+      "locale": "fr",
+      "value": "Archives RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.quest_catalog.tooltip.refresh",
+      "locale": "fr",
+      "value": "Rafraîchir",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.reward.coins",
+      "locale": "fr",
+      "value": "{coins} crédits",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.reward.xp",
+      "locale": "fr",
+      "value": "{xp} XP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.section.ongoing_sessions",
+      "locale": "fr",
+      "value": "Sessions en cours",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.abandon_quest",
+      "locale": "fr",
+      "value": "Abandonner la quête",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.arc_chapter",
+      "locale": "fr",
+      "value": "Arc {arc}/{arcTotal} · Chapitre {chapter}/{chapterTotal}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.back",
+      "locale": "fr",
+      "value": "RETOUR À LA SESSION",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.back_to_active",
+      "locale": "fr",
+      "value": "REVENIR À L’ÉTAPE ACTIVE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.back_to_active_step",
+      "locale": "fr",
+      "value": "Retour à l’étape active",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.choose_action",
+      "locale": "fr",
+      "value": "Choisir une action",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.completed_snackbar",
+      "locale": "fr",
+      "value": "Quête terminée : +{xp} XP.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.mission_validated",
+      "locale": "fr",
+      "value": "Mission validée",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.next_step",
+      "locale": "fr",
+      "value": "Étape suivante",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.objective",
+      "locale": "fr",
+      "value": "Objectif",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.previous_step",
+      "locale": "fr",
+      "value": "Étape précédente",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.progress",
+      "locale": "fr",
+      "value": "Progression",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.resume",
+      "locale": "fr",
+      "value": "REPRENDRE",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session.view",
+      "locale": "fr",
+      "value": "VOIR LA SESSION RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.session_detail.title",
+      "locale": "fr",
+      "value": "SESSION RP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.start.default_model",
+      "locale": "fr",
+      "value": "Modèle par défaut",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.start.local_model_title",
+      "locale": "fr",
+      "value": "Modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.start.narrator_profile",
+      "locale": "fr",
+      "value": "Narrateur IA",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.start.no_local_model",
+      "locale": "fr",
+      "value": "Aucun modèle local disponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.start.no_provider_profile",
+      "locale": "fr",
+      "value": "Aucun profil fournisseur.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.start.provider_api_desc",
+      "locale": "fr",
+      "value": "Utilise un profil IA connecté au backend.",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.start.provider_api_title",
+      "locale": "fr",
+      "value": "API fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.coins",
+      "locale": "fr",
+      "value": "{coins} crédits",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.local_ready",
+      "locale": "fr",
+      "value": "Local : {fileName}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.local_unavailable",
+      "locale": "fr",
+      "value": "Aucun modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.provider_not_configured",
+      "locale": "fr",
+      "value": "Aucun fournisseur configuré",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.provider_ready",
+      "locale": "fr",
+      "value": "{count} profil{s} IA prêt{s}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.stat.xp",
+      "locale": "fr",
+      "value": "{xp} XP",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.tag.boss",
+      "locale": "fr",
+      "value": "Boss",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.tag.current",
+      "locale": "fr",
+      "value": "Actuel",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.tag.validated",
+      "locale": "fr",
+      "value": "Validé",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.zone.execute_hack",
+      "locale": "fr",
+      "value": "Exécuter le hack",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.zone.scan",
+      "locale": "fr",
+      "value": "Scanner la zone",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.zone.threat",
+      "locale": "fr",
+      "value": "Menace {threat}",
+      "language": "fr"
+    },
+    {
+      "domain": "roleplay",
+      "key": "roleplay.zone.uplink_active",
+      "locale": "fr",
+      "value": "Uplink actif",
       "language": "fr"
     },
     {
       "domain": "sandbox",
-      "key": "sandbox.new_conversation",
+      "key": "sandbox.action.create_first",
       "locale": "fr",
-      "value": "NOUVELLE CONVERSATION",
+      "value": "Créer la première conversation",
       "language": "fr"
     },
     {
       "domain": "sandbox",
-      "key": "sandbox.view_history",
+      "key": "sandbox.action.new_chat",
       "locale": "fr",
-      "value": "VOIR TOUT L’HISTORIQUE",
+      "value": "Nouveau chat",
       "language": "fr"
     },
     {
       "domain": "sandbox",
-      "key": "sandbox.start",
+      "key": "sandbox.action.new_conversation",
       "locale": "fr",
-      "value": "COMMENCER",
+      "value": "Nouvelle conversation",
       "language": "fr"
     },
     {
       "domain": "sandbox",
-      "key": "sandbox.history.all",
+      "key": "sandbox.action.show_all_history",
       "locale": "fr",
-      "value": "Tout",
+      "value": "Voir tout l’historique",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.bot.name",
+      "locale": "fr",
+      "value": "Assistant sandbox",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.chat.empty_header",
+      "locale": "fr",
+      "value": "Aucun message",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.chat.message_count",
+      "locale": "fr",
+      "value": "{count} message{plural}",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.chat.new_title",
+      "locale": "fr",
+      "value": "Nouvelle conversation",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.chat.resume_header",
+      "locale": "fr",
+      "value": "Reprendre la conversation",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversation.api_ready",
+      "locale": "fr",
+      "value": "API prête",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversation.local_ready",
+      "locale": "fr",
+      "value": "Local prêt",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversations.description",
+      "locale": "fr",
+      "value": "Conversations sauvegardées localement.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversations.recent_count",
+      "locale": "fr",
+      "value": "{count} conversation(s) récente(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversations.title",
+      "locale": "fr",
+      "value": "Conversations",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty.api_description",
+      "locale": "fr",
+      "value": "Configure une clé fournisseur pour utiliser l’API.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty.configure_provider_key",
+      "locale": "fr",
+      "value": "Configurer une clé fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty.install_local_model",
+      "locale": "fr",
+      "value": "Installer un modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty.local_description",
+      "locale": "fr",
+      "value": "Installe un modèle local pour discuter hors ligne.",
       "language": "fr"
     },
     {
@@ -703,9 +3762,219 @@
     },
     {
       "domain": "sandbox",
+      "key": "sandbox.engine.description",
+      "locale": "fr",
+      "value": "Choisis le moteur de génération.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine.local",
+      "locale": "fr",
+      "value": "Modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine.provider",
+      "locale": "fr",
+      "value": "Fournisseur API",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine.title",
+      "locale": "fr",
+      "value": "Moteur IA",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
       "key": "sandbox.engine_chooser",
       "locale": "fr",
       "value": "Choisir moteur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine_sheet.description",
+      "locale": "fr",
+      "value": "Sélectionne la source de réponse pour cette conversation.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine_sheet.title",
+      "locale": "fr",
+      "value": "Changer de moteur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.error_panel",
+      "locale": "fr",
+      "value": "messages d'erreur IA",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.history.all",
+      "locale": "fr",
+      "value": "Tout",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.history.empty",
+      "locale": "fr",
+      "value": "Aucun historique.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.history.title",
+      "locale": "fr",
+      "value": "Historique",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.empty.cta",
+      "locale": "fr",
+      "value": "Installer un modèle",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.empty.message",
+      "locale": "fr",
+      "value": "Aucun modèle local chargé.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.empty.title",
+      "locale": "fr",
+      "value": "Local indisponible",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.not_configured",
+      "locale": "fr",
+      "value": "Modèle local non configuré",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.select_label",
+      "locale": "fr",
+      "value": "Sélectionner un modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.message.generating",
+      "locale": "fr",
+      "value": "Génération...",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.new_conversation",
+      "locale": "fr",
+      "value": "NOUVELLE CONVERSATION",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.prompt.hint",
+      "locale": "fr",
+      "value": "Écris ton message...",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.empty.cta",
+      "locale": "fr",
+      "value": "Configurer une clé",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.empty.message",
+      "locale": "fr",
+      "value": "Aucune clé fournisseur disponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.empty.title",
+      "locale": "fr",
+      "value": "Fournisseur indisponible",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.not_configured",
+      "locale": "fr",
+      "value": "Fournisseur non configuré",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.select_label",
+      "locale": "fr",
+      "value": "Sélectionner un fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.recent.empty.message",
+      "locale": "fr",
+      "value": "Aucune conversation récente.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.recent.empty.title",
+      "locale": "fr",
+      "value": "Rien à reprendre",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.recent.title",
+      "locale": "fr",
+      "value": "Récents",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.source.local_llama",
+      "locale": "fr",
+      "value": "Llama local",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.source.provider_backend",
+      "locale": "fr",
+      "value": "Backend fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.start",
+      "locale": "fr",
+      "value": "COMMENCER",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.title",
+      "locale": "fr",
+      "value": "Sandbox IA",
       "language": "fr"
     },
     {
@@ -731,86 +4000,9 @@
     },
     {
       "domain": "sandbox",
-      "key": "sandbox.error_panel",
+      "key": "sandbox.view_history",
       "locale": "fr",
-      "value": "messages d'erreur IA",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.city.population",
-      "locale": "fr",
-      "value": "Population",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.city.moral",
-      "locale": "fr",
-      "value": "Moral",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.city.energy",
-      "locale": "fr",
-      "value": "Énergie",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.city.security",
-      "locale": "fr",
-      "value": "Sécurité",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.city.hub.title",
-      "locale": "fr",
-      "value": "HUB VILLE",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.ai.plan",
-      "locale": "fr",
-      "value": "Plan IA",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.ai.ask",
-      "locale": "fr",
-      "value": "Demander à mon IA",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.ai.analyse",
-      "locale": "fr",
-      "value": "Analyse IA",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.ai.budget",
-      "locale": "fr",
-      "value": "Budget tokens",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.loading",
-      "locale": "fr",
-      "value": "Chargement du Nexus...",
-      "language": "fr"
-    },
-    {
-      "domain": "nexus_game",
-      "key": "nexus_game.offline",
-      "locale": "fr",
-      "value": "Mode hors-ligne • données locales",
+      "value": "VOIR TOUT L’HISTORIQUE",
       "language": "fr"
     }
   ]

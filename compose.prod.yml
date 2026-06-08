@@ -86,6 +86,9 @@ services:
       MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?MARIADB_ROOT_PASSWORD is required}
     volumes:
       - mariadb-data:/var/lib/mysql
+      # Persistent volume for Nexus Game assets (avatars, etc.) to survive rebuilds
+      # Mounted at /nexus_game/assets as requested (see Etape 2)
+      - nexus-assets:/nexus_game/assets
     healthcheck:
       test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p$$MARIADB_ROOT_PASSWORD || exit 1"]
       interval: 10s
@@ -97,3 +100,4 @@ services:
 volumes:
   mariadb-data:
   redis-data:
+  nexus-assets:
