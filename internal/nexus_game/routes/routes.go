@@ -24,10 +24,11 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	avatar := handlers.NewAvatarHandler(database)
 	factionH := handlers.NewFactionHandler(database)
 	companionH := handlers.NewIACompanionHandler(database)
+	profileH := handlers.NewProfileHandler(database)
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
-		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{})
+		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{})
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
@@ -68,4 +69,11 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/ia-companions", companionH.Create)
 	group.PUT("/ia-companions/:id", companionH.Update)
 	group.DELETE("/ia-companions/:id", companionH.Delete)
+
+	// ProfileGamer save routes (prepare all save endpoints).
+	// GET /profile?user_id=XX  -> {exists, profile}  (profile may be empty/zero IDs)
+	// POST /profile body {user_id, avatar_id, faction_id, ia_companion_id, pseudo, city_name}
+	// Server truth. Flutter calls after creation or on load check.
+	group.GET("/profile", profileH.GetProfile)
+	group.POST("/profile", profileH.SaveProfile)
 }

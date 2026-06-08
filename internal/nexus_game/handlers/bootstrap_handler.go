@@ -100,11 +100,11 @@ func (h *BootstrapHandler) Load(c *gin.Context) {
 		"status":  "ok",
 		"message": "Bootstrap simulation (10s delay)",
 		"player": gin.H{
-			"id":           1,
-			"name":         "VOIDKAT_77",
-			"city_level":   3,
-			"population":   142,
-			"energy":       87,
+			"id":         1,
+			"name":       "VOIDKAT_77",
+			"city_level": 3,
+			"population": 142,
+			"energy":     87,
 			"resources": gin.H{
 				"metal":   1240,
 				"quantum": 320,
