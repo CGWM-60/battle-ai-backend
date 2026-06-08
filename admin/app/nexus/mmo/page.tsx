@@ -51,22 +51,31 @@ export default function NexusMmoPage() {
   const [selectedWorldForPlayers, setSelectedWorldForPlayers] = useState('all');
 
   // IA server generated outputs (textual view of what server AI produces)
-  const [iaOutputs, setIaOutputs] = useState([]);
-  const [historicalIAOutputs, setHistoricalIAOutputs] = useState([]);
+  const [iaOutputs, setIaOutputs] = useState<any[]>([]);
+  const [historicalIAOutputs, setHistoricalIAOutputs] = useState<any[]>([]);
   const [selectedWorldForIA, setSelectedWorldForIA] = useState('all');
 
+  interface Player {
+    world: string;
+    worldId: number | string;
+    continent: string;
+    user_id: string | number;
+    pseudo: string;
+    assigned_at: string;
+  }
+
   // Flatten players from worlds data (provided by backend with players_list per continent as objects now)
-  const allPlayers = [];
-  worlds.forEach(w => {
-    (w.continents || []).forEach(c => {
+  const allPlayers: Player[] = [];
+  worlds.forEach((w: any) => {
+    (w.continents || []).forEach((c: any) => {
       (c.players_list || []).forEach((pl: any) => {
         if (typeof pl === 'string') {
           allPlayers.push({
             world: w.name || `Monde ${w.id}`,
             worldId: w.id,
             continent: c.name,
-            pseudo: pl,
             user_id: '-',
+            pseudo: pl,
             assigned_at: '-'
           });
         } else {
@@ -82,7 +91,7 @@ export default function NexusMmoPage() {
       });
     });
   });
-  const filteredPlayers = selectedWorldForPlayers === 'all' 
+  const filteredPlayers: Player[] = selectedWorldForPlayers === 'all' 
     ? allPlayers 
     : allPlayers.filter(p => String(p.worldId) === selectedWorldForPlayers || p.world === selectedWorldForPlayers);
 

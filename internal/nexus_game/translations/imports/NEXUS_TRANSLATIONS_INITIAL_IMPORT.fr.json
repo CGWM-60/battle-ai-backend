@@ -1675,6 +1675,160 @@
       "language": "fr"
     },
     {
+      "domain": "home",
+      "key": "home.card.battle.badge",
+      "locale": "fr",
+      "value": "PVP LIVE",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.battle.cta",
+      "locale": "fr",
+      "value": "Entrer dans l’arène",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.battle.desc",
+      "locale": "fr",
+      "value": "Faites s’affronter deux IA dans des débats épiques. Votez, jugez et montez dans le classement.",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.battle.title",
+      "locale": "fr",
+      "value": "A.I Battle",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.coop.badge",
+      "locale": "fr",
+      "value": "SYNC DUO",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.coop.cta",
+      "locale": "fr",
+      "value": "Ouvrir le hub co-op",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.coop.desc",
+      "locale": "fr",
+      "value": "Créez une mission synchronisée, partagez un code et coordonnez vos votes en duo.",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.coop.title",
+      "locale": "fr",
+      "value": "Co-op Live",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.roleplay.badge",
+      "locale": "fr",
+      "value": "Histoire / RPG",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.roleplay.cta",
+      "locale": "fr",
+      "value": "Démarrer une quête",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.roleplay.desc",
+      "locale": "fr",
+      "value": "Vivez des aventures interactives. Choisissez votre histoire, résolvez des quêtes et explorez la carte.",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.roleplay.title",
+      "locale": "fr",
+      "value": "A.I Quest",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.sandbox.badge",
+      "locale": "fr",
+      "value": "DARK LAB",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.sandbox.cta",
+      "locale": "fr",
+      "value": "Ouvrir le Nexus",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.sandbox.desc",
+      "locale": "fr",
+      "value": "Le côté dark de l’IA : discutez avec vos modèles API ou locaux, testez les réponses et gardez l’historique.",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.sandbox.title",
+      "locale": "fr",
+      "value": "Sandbox Nexus",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.tribunal.badge",
+      "locale": "fr",
+      "value": "JUSTICE IA",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.tribunal.cta",
+      "locale": "fr",
+      "value": "Ouvrir le Tribunal",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.tribunal.desc",
+      "locale": "fr",
+      "value": "Protocole Objection : enquêtez, interrogez des témoins, présentez des preuves, objectez et obtenez un verdict par jury IA.",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.tribunal.title",
+      "locale": "fr",
+      "value": "Tribunal IA",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.player.xp",
+      "locale": "fr",
+      "value": "XP {xp}",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.session_unavailable",
+      "locale": "fr",
+      "value": "Session indisponible",
+      "language": "fr"
+    },
+    {
       "domain": "ia_profiles",
       "key": "ia_profiles.created_section",
       "locale": "fr",
