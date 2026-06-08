@@ -1059,6 +1059,132 @@ func (s *dbTranslationService) BatchUpdate(ctx context.Context, entries []Transl
 	return s.UpsertBatch(ctx, entries)
 }
 
+func (s *dbTranslationService) GetAITranslationProviders(ctx context.Context) ([]TranslationAIProviderStatus, error) {
+	providers := []string{"mistral", "openai", "openrouter", "gemini", "anthropic", "xai", "ollama"}
+	statuses := make([]TranslationAIProviderStatus, 0, len(providers))
+	for _, providerType := range providers {
+		statuses = append(statuses, TranslationAIProviderStatus{
+			ProviderType: providerType,
+			DisplayName:  translationProviderDisplayName(providerType),
+			DefaultModel: translationDefaultModel(providerType),
+			Configured:   translationProviderConfigured(providerType),
+		})
+	}
+	return statuses, nil
+}
+
+func (s *dbTranslationService) AITranslateMissing(ctx context.Context, req AITranslateMissingRequest) (*AITranslateMissingResult, error) {
+	targetLocale := strings.TrimSpace(req.TargetLocale)
+	if targetLocale == "" {
+		return nil, errors.New("targetLocale is required")
+	}
+	sourceLocale := strings.TrimSpace(req.SourceLocale)
+	if sourceLocale == "" {
+		sourceLocale = "fr"
+	}
+	if sourceLocale == targetLocale {
+		return nil, errors.New("sourceLocale and targetLocale must be different")
+	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = 25
+	}
+	if limit > 100 {
+		limit = 100
+	}
+
+	providerType := strings.TrimSpace(req.Provider)
+	if providerType == "" {
+		providerType = translationDefaultProvider()
+	}
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = translationDefaultModel(providerType)
+	}
+
+	type translationCandidate struct {
+		KeyID       uint
+		Domain      string
+		Key         string
+		Description string
+		SourceValue string
+		TargetValue string
+	}
+	var candidates []translationCandidate
+	query := s.db.WithContext(ctx).
+		Table("nexus_translation_keys as k").
+		Select("k.id as key_id, d.code as domain, k.`key` as `key`, k.description as description, sv.value as source_value, COALESCE(tv.value, '') as target_value").
+		Joins("JOIN nexus_translation_domains as d ON d.id = k.domain_id").
+		Joins("JOIN nexus_translation_values as sv ON sv.key_id = k.id AND sv.locale = ?", sourceLocale).
+		Joins("LEFT JOIN nexus_translation_values as tv ON tv.key_id = k.id AND tv.locale = ?", targetLocale).
+		Where("sv.value <> ''").
+		Where("(tv.id IS NULL OR tv.value = '')")
+
+	if len(req.Domains) > 0 {
+		query = query.Where("d.code IN ?", cleanStringList(req.Domains))
+	}
+	if len(req.Keys) > 0 {
+		query = query.Where("k.`key` IN ?", cleanStringList(req.Keys))
+	}
+	if err := query.Order("d.code ASC, k.`key` ASC").Limit(limit).Scan(&candidates).Error; err != nil {
+		return nil, err
+	}
+
+	adapter := tribunaladapters.NewAIProviderAdapter(translationProviderEnvKey).WithTimeout(90 * time.Second)
+	result := &AITranslateMissingResult{
+		Provider:     tribunaladapters.NormalizeProviderType(providerType),
+		Model:        model,
+		SourceLocale: sourceLocale,
+		TargetLocale: targetLocale,
+		Items:        make([]AITranslatedValueItem, 0, len(candidates)),
+	}
+
+	for _, candidate := range candidates {
+		item := AITranslatedValueItem{
+			Domain: candidate.Domain,
+			Key:    candidate.Key,
+			Source: candidate.SourceValue,
+		}
+		translated, err := adapter.Generate(ctx, tribunaladapters.GenerateRequest{
+			ProviderType:  providerType,
+			Model:         model,
+			APIKey:        req.APIKey,
+			LocalEndpoint: req.LocalEndpoint,
+			SystemPrompt:  translationAISystemPrompt(),
+			Prompt:        translationAIUserPrompt(sourceLocale, targetLocale, candidate.Key, candidate.Description, candidate.SourceValue),
+		})
+		if err != nil {
+			item.Error = err.Error()
+			result.Errors++
+			result.Items = append(result.Items, item)
+			continue
+		}
+		value := cleanAITranslatedText(translated.Text)
+		if value == "" {
+			item.Error = "provider returned empty translation"
+			result.Errors++
+			result.Items = append(result.Items, item)
+			continue
+		}
+		if err := upsertTranslationRow(s.db.WithContext(ctx), models.TranslationImportRow{
+			Domain: candidate.Domain,
+			Key:    candidate.Key,
+			Locale: targetLocale,
+			Value:  value,
+			Status: "ok",
+		}); err != nil {
+			item.Error = err.Error()
+			result.Errors++
+			result.Items = append(result.Items, item)
+			continue
+		}
+		item.Value = value
+		result.Translated++
+		result.Items = append(result.Items, item)
+	}
+	return result, nil
+}
+
 func upsertTranslationRow(tx *gorm.DB, row models.TranslationImportRow) error {
 	var domain models.TranslationDomain
 	if err := tx.Where("code = ?", row.Domain).
@@ -1080,4 +1206,116 @@ func upsertTranslationRow(tx *gorm.DB, row models.TranslationImportRow) error {
 	return tx.Where("key_id = ? AND locale = ?", key.ID, row.Locale).
 		Assign(value).
 		FirstOrCreate(&value).Error
+}
+
+func translationAISystemPrompt() string {
+	return "Tu es un outil de localisation produit. Traduis uniquement la valeur demandee, sans markdown, sans guillemets et sans commentaire. Preserve exactement les placeholders entre accolades comme {count}, {name}, {xp}. Preserve les acronymes produit comme IA, Nexus, Battle, Sandbox, Tribunal et Co-op si pertinent."
+}
+
+func translationAIUserPrompt(sourceLocale, targetLocale, key, description, value string) string {
+	return "Source locale: " + sourceLocale +
+		"\nTarget locale: " + targetLocale +
+		"\nKey: " + key +
+		"\nDescription: " + strings.TrimSpace(description) +
+		"\nText:\n" + value
+}
+
+func cleanAITranslatedText(value string) string {
+	cleaned := strings.TrimSpace(value)
+	cleaned = strings.TrimPrefix(cleaned, "```")
+	cleaned = strings.TrimSuffix(cleaned, "```")
+	cleaned = strings.TrimSpace(cleaned)
+	if len(cleaned) >= 2 {
+		if (strings.HasPrefix(cleaned, "\"") && strings.HasSuffix(cleaned, "\"")) ||
+			(strings.HasPrefix(cleaned, "'") && strings.HasSuffix(cleaned, "'")) {
+			cleaned = strings.TrimSpace(cleaned[1 : len(cleaned)-1])
+		}
+	}
+	return cleaned
+}
+
+func cleanStringList(values []string) []string {
+	cleaned := make([]string, 0, len(values))
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	return cleaned
+}
+
+func translationDefaultProvider() string {
+	for _, value := range []string{
+		os.Getenv("TRANSLATION_AI_PROVIDER"),
+		os.Getenv("WORLD_AI_PRIMARY_PROVIDER"),
+		os.Getenv("TRIBUNAL_AI_PROVIDER"),
+	} {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return "mistral"
+}
+
+func translationDefaultModel(providerType string) string {
+	_, modelEnv := translationProviderEnvNames(providerType)
+	if model := strings.TrimSpace(os.Getenv(modelEnv)); model != "" {
+		return model
+	}
+	if model := strings.TrimSpace(os.Getenv("TRANSLATION_AI_MODEL")); model != "" {
+		return model
+	}
+	return tribunaladapters.DefaultModelForProvider(providerType)
+}
+
+func translationProviderEnvKey(providerType string) string {
+	keyEnv, _ := translationProviderEnvNames(providerType)
+	return strings.TrimSpace(os.Getenv(keyEnv))
+}
+
+func translationProviderConfigured(providerType string) bool {
+	if tribunaladapters.IsLocalProvider(providerType) {
+		return strings.TrimSpace(os.Getenv("TRANSLATION_AI_LOCAL_ENDPOINT")) != "" ||
+			strings.TrimSpace(os.Getenv("OLLAMA_ENDPOINT")) != "" ||
+			strings.TrimSpace(os.Getenv("LMSTUDIO_ENDPOINT")) != ""
+	}
+	return translationProviderEnvKey(providerType) != ""
+}
+
+func translationProviderDisplayName(providerType string) string {
+	switch tribunaladapters.NormalizeProviderType(providerType) {
+	case "mistral":
+		return "Mistral"
+	case "openai":
+		return "OpenAI"
+	case "openrouter":
+		return "OpenRouter"
+	case "gemini", "google", "google_ai", "google-ai":
+		return "Google Gemini"
+	case "claude", "anthropic":
+		return "Anthropic Claude"
+	case "xia", "xai", "x-ai":
+		return "xAI"
+	case "ollama":
+		return "Ollama local"
+	default:
+		return providerType
+	}
+}
+
+func translationProviderEnvNames(providerType string) (string, string) {
+	switch tribunaladapters.NormalizeProviderType(providerType) {
+	case "mistral":
+		return "MISTRAL_AI_KEY", "MISTRAL_AI_MODEL"
+	case "claude", "anthropic":
+		return "ANTHROPIC_AI_KEY", "ANTHROPIC_AI_MODEL"
+	case "gemini", "google", "google_ai", "google-ai":
+		return "GEMINI_AI_KEY", "GEMINI_AI_MODEL"
+	case "xia", "xai", "x-ai":
+		return "XAI_AI_KEY", "XAI_AI_MODEL"
+	case "openrouter", "open_router":
+		return "OPENROUTER_AI_KEY", "OPENROUTER_AI_MODEL"
+	default:
+		return "OPEN_AI_KEY", "OPEN_AI_MODEL"
+	}
 }

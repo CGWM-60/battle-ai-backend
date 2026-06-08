@@ -332,6 +332,27 @@ func RegisterAdminRoutes(adminGroup *gin.RouterGroup, database *gorm.DB) {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "updated"})
 	})
+	adminGroup.GET("/translations/ai/providers", func(c *gin.Context) {
+		providers, err := svc.GetAITranslationProviders(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"providers": providers})
+	})
+	adminGroup.POST("/translations/ai/translate-missing", func(c *gin.Context) {
+		var req AITranslateMissingRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		result, err := svc.AITranslateMissing(c.Request.Context(), req)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	})
 }
 
 func bindImportPayload(c *gin.Context) (*ImportPayload, error) {
