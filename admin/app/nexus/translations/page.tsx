@@ -40,8 +40,36 @@ export default function TranslationsPage() {
 
   const filteredKeys = keys.filter((k) =>
     k.Key.toLowerCase().includes(search.toLowerCase()) ||
-    (k.Description || "").toLowerCase().includes(search.toLowerCase())
+    (k.Description || "").toLowerCase().includes(search.toLowerCase()) ||
+    String(k.Domain?.Code || k.DomainID).toLowerCase().includes(search.toLowerCase()) ||
+    values.some((v) =>
+      v.KeyID === k.ID &&
+      (v.Locale.toLowerCase().includes(search.toLowerCase()) ||
+        v.Value.toLowerCase().includes(search.toLowerCase()))
+    )
   );
+
+  const translationRows = filteredKeys.flatMap((k) => {
+    const keyValues = values.filter((v) => v.KeyID === k.ID);
+    if (!keyValues.length) {
+      return [{
+        id: `missing-${k.ID}`,
+        domain: k.Domain?.Code || String(k.DomainID),
+        key: k.Key,
+        description: k.Description,
+        locale: "-",
+        value: "",
+      }];
+    }
+    return keyValues.map((v) => ({
+      id: String(v.ID),
+      domain: k.Domain?.Code || String(k.DomainID),
+      key: k.Key,
+      description: k.Description,
+      locale: v.Locale,
+      value: v.Value,
+    }));
+  });
 
   return (
     <AdminShell
@@ -69,10 +97,10 @@ export default function TranslationsPage() {
           </section>
 
           <section className="panel">
-            <h2>Recherche clés</h2>
+            <h2>Traductions Flutter</h2>
             <input
               type="text"
-              placeholder="Filtrer par clé ou description..."
+              placeholder="Filtrer par domaine, clé, description, locale ou valeur..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ width: "100%", padding: 8, marginBottom: 12 }}
@@ -83,29 +111,24 @@ export default function TranslationsPage() {
                   <th>Domaine</th>
                   <th>Clé</th>
                   <th>Description</th>
-                  <th>Valeurs</th>
+                  <th>Locale</th>
+                  <th>Valeur Flutter</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredKeys.slice(0, 50).map((k) => {
-                  const keyValues = values.filter((v) => v.KeyID === k.ID);
-                  return (
-                    <tr key={k.ID}>
-                      <td>{k.Domain?.Code || k.DomainID}</td>
-                      <td><code>{k.Key}</code></td>
-                      <td>{k.Description}</td>
-                      <td>
-                        {keyValues.map((v) => (
-                          <div key={v.ID}>{v.Locale}: {v.Value}</div>
-                        ))}
-                      </td>
-                    </tr>
-                  );
-                })}
+                {translationRows.slice(0, 100).map((row) => (
+                  <tr key={row.id}>
+                    <td>{row.domain}</td>
+                    <td><code>{row.key}</code></td>
+                    <td>{row.description || "-"}</td>
+                    <td><code>{row.locale}</code></td>
+                    <td>{row.value || <span className="muted">Valeur manquante</span>}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
             {!filteredKeys.length ? <p className="muted">Aucune clé à afficher.</p> : null}
-            {filteredKeys.length > 50 && <p>... et {filteredKeys.length - 50} autres</p>}
+            {translationRows.length > 100 && <p>... et {translationRows.length - 100} autres lignes</p>}
           </section>
 
           <section className="panel">
