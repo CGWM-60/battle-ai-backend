@@ -29,8 +29,8 @@ func NewIACompanionHandler(db *gorm.DB) *IACompanionHandler {
 }
 
 var (
-	companionBaseDir = getEnv("NEXUS_ASSET_DIR", "/nexus_game/assets/companion")
-	companionBaseURL = getEnv("NEXUS_ASSET_BASE_URL", "/nexus_game/assets/companion")
+	companionBaseDir   = assetsBaseDir + "/companion"
+	companionBaseURL   = assetsBaseURL + "/companion"
 )
 
 // List all companions (for admin, or filter by player later)

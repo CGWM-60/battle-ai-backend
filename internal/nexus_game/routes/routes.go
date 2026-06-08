@@ -28,11 +28,11 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// Auto migrate models (inside nexus_game only)
 	database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{})
 
-	// Serve persistent assets (avatars etc.) - mounted via volume in compose.prod.yml
-	// Use env vars so user can configure the persistent path in Dokploy (Persistent Storage)
-	assetDir := getEnv("NEXUS_ASSET_DIR", "/nexus_game/assets/avatar")
-	assetBase := getEnv("NEXUS_ASSET_BASE_URL", "/nexus_game/assets/avatar")
-	router.Static(assetBase, assetDir)
+	// Serve persistent assets - use BASE_DIR and BASE_URL so one volume mount covers avatar, faction, companion.
+	// In Dokploy: configure Persistent Storage with Container Path = value of NEXUS_ASSETS_BASE_DIR (default /nexus_game/assets)
+	assetsBaseDir := getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets")
+	assetsBaseURL := getEnv("NEXUS_ASSETS_BASE_URL", "/nexus_game/assets")
+	router.Static(assetsBaseURL, assetsBaseDir)
 
 	group := router.Group("/api/nexus-game")
 	group.GET("/health", health.Health)

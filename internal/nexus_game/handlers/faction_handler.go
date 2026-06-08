@@ -28,8 +28,8 @@ func NewFactionHandler(db *gorm.DB) *FactionHandler {
 }
 
 var (
-	factionBaseDir  = getEnv("NEXUS_ASSET_DIR", "/nexus_game/assets/faction")
-	factionBaseURL  = getEnv("NEXUS_ASSET_BASE_URL", "/nexus_game/assets/faction")
+	factionBaseDir   = assetsBaseDir + "/faction"
+	factionBaseURL   = assetsBaseURL + "/faction"
 )
 
 // List all factions

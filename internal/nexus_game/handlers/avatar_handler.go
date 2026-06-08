@@ -21,8 +21,10 @@ import (
 )
 
 var (
-	avatarBaseDir = getEnv("NEXUS_ASSET_DIR", "/nexus_game/assets/avatar")
-	avatarBaseURL = getEnv("NEXUS_ASSET_BASE_URL", "/nexus_game/assets/avatar")
+	assetsBaseDir    = getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets")
+	assetsBaseURL    = getEnv("NEXUS_ASSETS_BASE_URL", "/nexus_game/assets")
+	avatarBaseDir    = assetsBaseDir + "/avatar"
+	avatarBaseURL    = assetsBaseURL + "/avatar"
 )
 
 func getEnv(key, def string) string {
