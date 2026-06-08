@@ -176,6 +176,13 @@ func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}
 		for _, c := range conts {
 			pStr, _, _ := s.redis.GetString(ctx, fmt.Sprintf("nexus:continent:%d:players", c.ID))
 			fStr, _, _ := s.redis.GetString(ctx, fmt.Sprintf("nexus:continent:%d:factions", c.ID))
+			// Liste des joueurs pour la gestion (from DB ProfileGamer)
+			var profiles []models.ProfileGamer
+			s.db.Where("continent_id = ?", c.ID).Find(&profiles)
+			playerPseudos := []string{}
+			for _, pr := range profiles {
+				playerPseudos = append(playerPseudos, pr.Pseudo)
+			}
 			contSummary = append(contSummary, map[string]interface{}{
 				"id":            c.ID,
 				"name":          c.Name,
@@ -183,6 +190,7 @@ func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}
 				"factions":      fStr,
 				"max_players":   c.MaxPlayers,
 				"max_factions":  c.MaxFactions,
+				"players_list":  playerPseudos,
 			})
 		}
 		result = append(result, map[string]interface{}{

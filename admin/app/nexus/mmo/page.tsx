@@ -27,6 +27,11 @@ export default function NexusMmoPage() {
   const [modalType, setModalType] = useState<'avatars' | 'factions' | 'companions' | null>(null);
   const [currentItem, setCurrentItem] = useState<any>(null);
 
+  // For Prompts real popin
+  const [promptModal, setPromptModal] = useState(false);
+  const [promptForm, setPromptForm] = useState({ prompt_id: '', version: '', domain: '', purpose: '', system_prompt: '' });
+  const [editingPrompt, setEditingPrompt] = useState<any>(null);
+
   // Form states
   const [formName, setFormName] = useState("");
   const [formFile, setFormFile] = useState<File | null>(null);
@@ -123,6 +128,57 @@ export default function NexusMmoPage() {
     setFormRole("Gouverneur");
     setFormLevel(1);
     setError(null);
+  };
+
+  // Prompt popin handlers
+  const openPromptModal = (p: any = null) => {
+    if (p) {
+      setPromptForm({
+        prompt_id: p.prompt_id || '',
+        version: p.version || '',
+        domain: p.domain || '',
+        purpose: p.purpose || '',
+        system_prompt: p.system_prompt || '',
+      });
+      setEditingPrompt(p);
+    } else {
+      setPromptForm({ prompt_id: '', version: '', domain: '', purpose: '', system_prompt: '' });
+      setEditingPrompt(null);
+    }
+    setPromptModal(true);
+  };
+
+  const closePromptModal = () => {
+    setPromptModal(false);
+    setPromptForm({ prompt_id: '', version: '', domain: '', purpose: '', system_prompt: '' });
+    setEditingPrompt(null);
+  };
+
+  const submitPrompt = async () => {
+    setSubmitting(true);
+    try {
+      if (editingPrompt) {
+        await fetch(`/api/nexus-game/prompts/${editingPrompt.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system_prompt: promptForm.system_prompt }),
+          credentials: 'same-origin',
+        });
+      } else {
+        await fetch('/api/nexus-game/prompts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(promptForm),
+          credentials: 'same-origin',
+        });
+      }
+      closePromptModal();
+      await fetchAll();
+    } catch (e: any) {
+      setError(e.message || 'Erreur prompt');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // Create
@@ -468,12 +524,15 @@ export default function NexusMmoPage() {
                       const pPct = m > 0 ? Math.min(100, Math.round((p / m) * 100)) : 0;
                       const fPct = mf > 0 ? Math.min(100, Math.round((f / mf) * 100)) : 0;
                       return (
-                        <div key={ci} style={{ background: '#0f172a', padding: 8, borderRadius: 6 }}>
+                        <div key={ci} style={{ background: '#0f172a', padding: 8, borderRadius: 6, color: 'white', color: 'white' }}>
                           <div style={{ fontWeight: 600 }}>{c.name}</div>
                           <div>Joueurs: {p}/{m} ({pPct}%)</div>
                           <div style={{ height: 6, background: '#1e2937', borderRadius: 3, margin: '4px 0' }}><div style={{ width: `${pPct}%`, height: '100%', background: pPct > 80 ? '#ef4444' : '#3b82f6', borderRadius: 3 }} /></div>
                           <div>Factions: {f}/{mf} ({fPct}%)</div>
                           <div style={{ height: 6, background: '#1e2937', borderRadius: 3, margin: '4px 0' }}><div style={{ width: `${fPct}%`, height: '100%', background: '#10b981', borderRadius: 3 }} /></div>
+                          {c.players_list && c.players_list.length > 0 && (
+                            <div style={{ fontSize: 11, marginTop: 4, color: '#94a3b8' }}>Joueurs: {c.players_list.join(', ')}</div>
+                          )}
                         </div>
                       );
                     })}
@@ -496,17 +555,19 @@ export default function NexusMmoPage() {
           <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2>Prompts IA Serveur ({promptCount}) - Modifiables, versionnés, optimisés coût/rapidité/enrichissant</h2>
-            <button onClick={async () => {
-              const pid = prompt('prompt_id (ex: quest_seed_generation)');
-              const ver = prompt('version (ex: v1.3)');
-              const dom = prompt('domain', 'quest_seed_generation');
-              const pur = prompt('purpose', 'Génération seeds');
-              const sp = prompt('system_prompt (détaillé, optimisé, évolue avec univers)');
-              if (!pid || !ver || !sp) return;
-              await fetch('/api/nexus-game/prompts', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({prompt_id: pid, version: ver, domain: dom, purpose: pur, system_prompt: sp, is_active: true}), credentials: 'same-origin' });
-              await fetchAll();
+            <button onClick={() => {
+              setPromptForm({ prompt_id: 'quest_seed_generation', version: 'v1.3', domain: 'quest_seed_generation', purpose: 'Génération de seeds de quêtes', system_prompt: 'System: You are the Nexus server IA. Generate a controlled quest seed. Output ONLY valid JSON. Optimized for low cost and fast response. Constructive, detailed and enriching with lore hooks and balanced outcomes. Respect max rewards and policies. User: [player report and world state]' });
+              setEditingPrompt(null);
+              setPromptModal(true);
             }} style={{ background: '#8b5cf6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>
-              + Créer / Versionner Prompt
+              + Créer Prompt (exemple 1)
+            </button>
+            <button onClick={() => {
+              setPromptForm({ prompt_id: 'event_generation', version: 'v1.1', domain: 'event_generation', purpose: 'Génération d\'événements mondiaux', system_prompt: 'System: Generate a world event proposal. Max 4 per day. Linked to region/faction. Output JSON with title, summary (enriching narrative), duration, difficulty, rewards_cap. Evolves with current tensions. User: [world state]' });
+              setEditingPrompt(null);
+              setPromptModal(true);
+            }} style={{ background: '#8b5cf6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>
+              + Créer Prompt (exemple 2)
             </button>
           </div>
           {loading ? <p>Chargement...</p> : error ? <p style={{color:'red'}}>{error}</p> : (
@@ -526,12 +587,7 @@ export default function NexusMmoPage() {
                     <td style={{ padding: 8, fontSize: 13 }}>{p.domain} / {p.purpose}</td>
                     <td style={{ padding: 8, fontSize: 12, color: '#64748b', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(p.system_prompt || '').substring(0, 70)}...</td>
                     <td style={{ padding: 8, textAlign: 'right' }}>
-                      <button onClick={async () => {
-                        const newSp = prompt('Nouveau system_prompt (optimisé, évolue avec monde)', p.system_prompt || '');
-                        if (!newSp) return;
-                        await fetch(`/api/nexus-game/prompts/${p.id}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({system_prompt: newSp}), credentials: 'same-origin' });
-                        await fetchAll();
-                      }} style={{ marginRight: 8, padding: '4px 10px', fontSize: 12 }}>Modifier (évoluer)</button>
+                      <button onClick={() => openPromptModal(p)} style={{ marginRight: 8, padding: '4px 10px', fontSize: 12 }}>Modifier (évoluer)</button>
                     </td>
                   </tr>
                 ))}
@@ -697,6 +753,32 @@ export default function NexusMmoPage() {
       )}
 
       {error && <div style={{ color: '#f87171', marginTop: 12 }}>{error}</div>}
+
+      {/* Real Popin for Prompts CRUD */}
+      {promptModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div className="panel" style={{ width: 520, maxWidth: '92%', position: 'relative', padding: 24 }}>
+            <button onClick={closePromptModal} style={{ position: 'absolute', top: 12, right: 16, background: 'none', border: 'none', fontSize: 24, cursor: 'pointer' }}>×</button>
+            <h3>{editingPrompt ? 'Modifier le Prompt IA' : 'Créer un Prompt IA Serveur'}</h3>
+            <p style={{ fontSize: 13, color: '#64748b' }}>Versionné, optimisé coût/rapidité/enrichissant. Utilisé par l'IA serveur pour le tick, events, lore, etc.</p>
+            <div style={{ marginTop: 12 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Prompt ID</label>
+              <input type="text" value={promptForm.prompt_id} onChange={e => setPromptForm({...promptForm, prompt_id: e.target.value})} placeholder="ex: quest_seed_generation" style={{ width: '100%', padding: 10, marginBottom: 12 }} disabled={!!editingPrompt} />
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Version</label>
+              <input type="text" value={promptForm.version} onChange={e => setPromptForm({...promptForm, version: e.target.value})} placeholder="v1.0" style={{ width: '100%', padding: 10, marginBottom: 12 }} disabled={!!editingPrompt} />
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Domain</label>
+              <input type="text" value={promptForm.domain} onChange={e => setPromptForm({...promptForm, domain: e.target.value})} placeholder="quest_seed_generation" style={{ width: '100%', padding: 10, marginBottom: 12 }} />
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>Purpose</label>
+              <input type="text" value={promptForm.purpose} onChange={e => setPromptForm({...promptForm, purpose: e.target.value})} placeholder="Génération de seeds" style={{ width: '100%', padding: 10, marginBottom: 12 }} />
+              <label style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 500 }}>System Prompt (détaillé, optimisé)</label>
+              <textarea value={promptForm.system_prompt} onChange={e => setPromptForm({...promptForm, system_prompt: e.target.value})} style={{ width: '100%', padding: 10, marginBottom: 16, height: 120 }} placeholder="System: ..." />
+              <button onClick={submitPrompt} disabled={submitting} style={{ width: '100%', padding: 12, background: '#8b5cf6', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600 }}>
+                {submitting ? '...' : (editingPrompt ? 'Mettre à jour Prompt' : 'Créer Prompt')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminShell>
   );
 }
