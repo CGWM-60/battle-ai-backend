@@ -4,9 +4,18 @@ import (
 	"cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/nexus_game/handlers"
 	"cgwm/battle/internal/nexus_game/models"
+	"os"
+
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
 
 func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	redis := cache.NewRedisServiceFromEnv()
@@ -20,8 +29,10 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{})
 
 	// Serve persistent assets (avatars etc.) - mounted via volume in compose.prod.yml
-	// Path chosen to match user request: /nexus_game/assets
-	router.Static("/nexus_game/assets", "/nexus_game/assets")
+	// Use env vars so user can configure the persistent path in Dokploy (Persistent Storage)
+	assetDir := getEnv("NEXUS_ASSET_DIR", "/nexus_game/assets/avatar")
+	assetBase := getEnv("NEXUS_ASSET_BASE_URL", "/nexus_game/assets/avatar")
+	router.Static(assetBase, assetDir)
 
 	group := router.Group("/api/nexus-game")
 	group.GET("/health", health.Health)

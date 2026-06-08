@@ -20,10 +20,17 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	avatarBaseDir = "/nexus_game/assets/avatar"
-	avatarBaseURL = "/nexus_game/assets/avatar"
+var (
+	avatarBaseDir = getEnv("NEXUS_ASSET_DIR", "/nexus_game/assets/avatar")
+	avatarBaseURL = getEnv("NEXUS_ASSET_BASE_URL", "/nexus_game/assets/avatar")
 )
+
+func getEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
 
 type AvatarHandler struct {
 	db *gorm.DB

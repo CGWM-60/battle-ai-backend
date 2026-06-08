@@ -56,6 +56,9 @@ services:
       DB_MAX_IDLE_CONNS: ${DB_MAX_IDLE_CONNS:-10}
       DB_CONN_MAX_LIFETIME_MINUTES: ${DB_CONN_MAX_LIFETIME_MINUTES:-30}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # Persistent assets for Nexus (avatars, etc.) - configure in Dokploy Persistent Storage if not using compose
+      NEXUS_ASSET_DIR: /nexus_game/assets/avatar
+      NEXUS_ASSET_BASE_URL: /nexus_game/assets/avatar
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:
