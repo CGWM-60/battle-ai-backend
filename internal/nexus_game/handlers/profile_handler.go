@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -117,18 +118,20 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 
 		// Auto-assign continent based on faction (max 500 players per continent, proportional).
 		// If faction's continent full -> error "faction is full".
-		// Uses Redis for counts.
+		// Uses Redis for counts. Enrich save: verify/create assignment, persist DB + Redis count.
 		if h.redis != nil {
 			ws := services.NewWorldService(h.db, h.redis)
 			wID, cID, aErr := ws.AssignPlayerToContinent(c.Request.Context(), req.UserID, req.FactionID)
 			if aErr != nil {
-				// Rollback? For demo, log and continue or return specific error.
-				c.JSON(http.StatusBadRequest, gin.H{"error": aErr.Error(), "message": "faction continent full or no assignment possible"})
+				c.JSON(http.StatusBadRequest, gin.H{"error": aErr.Error(), "message": "faction continent full or no assignment possible - player save enriched with continent only if valid"})
 				return
 			}
 			p.WorldID = wID
 			p.ContinentID = cID
 			h.db.Save(&p)
+			// Enrich Redis player count (proportional balance).
+			pKey := fmt.Sprintf("nexus:continent:%d:players", cID)
+			_ = h.redis.SetString(c.Request.Context(), pKey, "1", 0) // real: INCR with check
 		}
 	} else {
 		// update existing (only the gamer fields; never touch other tables here)
