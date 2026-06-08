@@ -99,6 +99,16 @@ func DbConnect() *gorm.DB {
 		&models.AdminAuditLog{},
 		&models.DailyTask{},
 		&models.MarketOffer{}, // IA Global + player continental market offers (source, direction, continent_id)
+		// Nexus Games translation models (POINT 01)
+		&models.TranslationDomain{},
+		&models.TranslationKey{},
+		&models.TranslationValue{},
+		&models.TranslationBatch{},
+		&models.TranslationImport{},
+		&models.TranslationImportRow{},
+		&models.TranslationImportError{},
+		&models.TranslationMissingLog{},
+		&models.UserLocalePreference{},
 	)
 	if err := seedDefaultBuildingDefinitions(db); err != nil {
 		panic(fmt.Sprintf("failed to seed default building catalog: %v", err))
