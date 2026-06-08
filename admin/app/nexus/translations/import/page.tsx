@@ -29,7 +29,14 @@ export default function ImportPage() {
         body: JSON.stringify(rows),
       });
       if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error('[admin import preview] Bad JSON body prefix:', text.substring(0, 300));
+        throw new Error('Invalid JSON from preview endpoint. See console.');
+      }
       setPreview(data.preview || data);
       // In real, the preview may return an import ID, here we simulate
       setImportId(1);
@@ -52,6 +59,13 @@ export default function ImportPage() {
         body: JSON.stringify({ import_id: importId }),
       });
       if (!res.ok) throw new Error(await res.text());
+      const text = await res.text();
+      try {
+        JSON.parse(text); // just validate it's JSON, we don't need the value
+      } catch (e) {
+        console.error('[admin import commit] Bad JSON body prefix:', text.substring(0, 300));
+        throw new Error('Invalid JSON from commit endpoint. See console.');
+      }
       alert("Import commit OK (côté Go).");
       setPreview(null);
       setJsonText("");

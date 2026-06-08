@@ -1,5 +1,6 @@
 export async function loadAdminData<T>(path: string): Promise<T> {
-  const response = await fetch(`/admin/api/${path}`, {
+  const url = `/admin/api/${path}`;
+  const response = await fetch(url, {
     credentials: "same-origin",
     headers: { Accept: "application/json" },
   });
@@ -8,10 +9,23 @@ export async function loadAdminData<T>(path: string): Promise<T> {
     window.location.href = "/admin/login";
     throw new Error("admin authentication required");
   }
+
+  const text = await response.text();
+
   if (!response.ok) {
+    console.error(`[admin] HTTP ${response.status} for ${url}. Body prefix:`, text.substring(0, 300));
     throw new Error(`HTTP ${response.status}`);
   }
-  return response.json() as Promise<T>;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch (parseErr) {
+    // This is the key diagnostic for "Unexpected non-whitespace character after JSON" type issues.
+    // The actual body from Go (or proxy/ingress) is logged here.
+    console.error(`[admin] Invalid JSON from ${url} (status ${response.status}). Parse error:`, parseErr);
+    console.error(`[admin] Offending body (first 300 chars):`, text.substring(0, 300));
+    throw new Error(`Invalid JSON from backend (status ${response.status}). See console for body prefix.`);
+  }
 }
 
 export function formatNumber(value: number | null | undefined): string {

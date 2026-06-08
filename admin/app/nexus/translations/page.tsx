@@ -15,11 +15,26 @@ export default function TranslationsPage() {
   const [search, setSearch] = useState("");
 
   const reload = () => {
+    const safeJson = async (url: string) => {
+      const r = await fetch(url, { credentials: "same-origin" });
+      const text = await r.text();
+      if (!r.ok) {
+        console.error(`[admin translations] HTTP ${r.status} for ${url}. Body:`, text.substring(0, 300));
+        throw new Error(`HTTP ${r.status}`);
+      }
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.error(`[admin translations] Bad JSON from ${url} status=${r.status}. This is likely the cause of parse errors like "non-whitespace after JSON". Body prefix:`, text.substring(0, 300));
+        throw new Error(`Invalid JSON (status ${r.status}). Check console for actual body.`);
+      }
+    };
+
     Promise.all([
-      fetch("/admin/api/translations/domains", { credentials: "same-origin" }).then(r => r.json()),
-      fetch("/admin/api/translations/keys", { credentials: "same-origin" }).then(r => r.json()),
-      fetch("/admin/api/translations/values", { credentials: "same-origin" }).then(r => r.json()),
-      fetch("/admin/api/translations/missing", { credentials: "same-origin" }).then(r => r.json()),
+      safeJson("/admin/api/translations/domains"),
+      safeJson("/admin/api/translations/keys"),
+      safeJson("/admin/api/translations/values"),
+      safeJson("/admin/api/translations/missing"),
     ])
       .then(([d, k, v, m]) => {
         setDomains(d?.domains || d || []);
