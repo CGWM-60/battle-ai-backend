@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AdminShell } from "../../../components/AdminShell";
+import { AdminShell } from "../../components/AdminShell";
 
 export default function NexusMmoPage() {
   const [avatarName, setAvatarName] = useState("");
