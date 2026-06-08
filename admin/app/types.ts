@@ -357,3 +357,52 @@ export type TribunalGeneratedAdminResponse = {
     published: number;
   };
 };
+
+// Nexus translations admin types (POINT 06)
+export type TranslationDomain = {
+  ID: number;
+  Code: string;
+  Name: string;
+  Description: string;
+};
+
+export type TranslationKey = {
+  ID: number;
+  DomainID: number;
+  Key: string;
+  Description: string;
+  Domain?: TranslationDomain;
+};
+
+export type TranslationValue = {
+  ID: number;
+  KeyID: number;
+  Locale: string;
+  Value: string;
+  Key?: TranslationKey;
+};
+
+export type TranslationImportRow = {
+  Domain: string;
+  Key: string;
+  Locale: string;
+  Value: string;
+  Status?: string;
+  Error?: string;
+};
+
+export type TranslationMissingLog = {
+  ID: number;
+  CreatedAt: string;
+  Key: string;
+  Locale: string;
+  Count: number;
+};
+
+export type TranslationImport = {
+  ID: number;
+  CreatedAt: string;
+  FileName: string;
+  Status: string;
+  RowCount: number;
+};

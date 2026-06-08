@@ -23,6 +23,7 @@ const navItems = [
   { href: "/roleplay-quests/", path: "/admin/roleplay-quests/", label: "Quetes RP", icon: ListChecks },
   { href: "/quests/", path: "/admin/quests/", label: "Quetes", icon: ListChecks },
   { href: "/live/", path: "/admin/live/", label: "Live", icon: Radio },
+  { href: "/nexus/translations/", path: "/admin/nexus/translations/", label: "Traductions", icon: ListChecks },
 ];
 
 export function AdminShell({
