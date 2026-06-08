@@ -303,6 +303,7 @@ export default function NexusMmoPage() {
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ textAlign: 'left', padding: 8 }}>Preview</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Nom</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Description</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Couleur</th>
@@ -312,10 +313,17 @@ export default function NexusMmoPage() {
             <tbody>
               {factions.map((f: any) => (
                 <tr key={f.id} style={{ borderTop: '1px solid #334155' }}>
+                  <td style={{ padding: 8 }}>
+                    {f.url ? (
+                      <img src={f.url} alt={f.name} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #1e2937' }} />
+                    ) : (
+                      <span style={{ color: '#64748b', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: 8, fontWeight: 500 }}>{f.name}</td>
                   <td style={{ padding: 8, fontSize: 13 }}>{f.description}</td>
                   <td style={{ padding: 8 }}>
-                    <span style={{ display: 'inline-block', width: 24, height: 24, background: f.color || '#ccc', borderRadius: 4, border: '1px solid #334155' }}></span>
+                    <span style={{ display: 'inline-block', width: 24, height: 24, background: f.color || '#ccc', borderRadius: 4, border: '1px solid #334155' }} title={f.color}></span>
                   </td>
                   <td style={{ padding: 8, textAlign: 'right' }}>
                     <button onClick={() => { setModalType('factions'); setModal('edit'); setCurrentItem(f); setFormName(f.name); setFormDesc(f.description || ''); setFormColor(f.color || '#FF0000'); }} style={{ marginRight: 8, padding: '4px 10px', fontSize: 12 }}>Modifier</button>
@@ -342,6 +350,7 @@ export default function NexusMmoPage() {
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
+                <th style={{ textAlign: 'left', padding: 8 }}>Preview</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Nom</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Rôle</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Niveau</th>
@@ -351,6 +360,13 @@ export default function NexusMmoPage() {
             <tbody>
               {companions.map((c: any) => (
                 <tr key={c.id} style={{ borderTop: '1px solid #334155' }}>
+                  <td style={{ padding: 8 }}>
+                    {c.url ? (
+                      <img src={c.url} alt={c.name} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, border: '1px solid #1e2937' }} />
+                    ) : (
+                      <span style={{ color: '#64748b', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: 8, fontWeight: 500 }}>{c.name}</td>
                   <td style={{ padding: 8 }}>{c.role}</td>
                   <td style={{ padding: 8 }}>{c.level}</td>
