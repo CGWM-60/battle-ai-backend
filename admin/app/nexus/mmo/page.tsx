@@ -20,7 +20,7 @@ export default function NexusMmoPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [activeView, setActiveView] = useState<'overview' | 'avatars' | 'factions' | 'companions' | 'worlds' | 'prompts' | 'stats' | 'ia'>('overview');
+  const [activeView, setActiveView] = useState<'overview' | 'avatars' | 'factions' | 'companions' | 'worlds' | 'prompts' | 'stats' | 'ia' | 'players'>('overview');
 
   // Modal state for CRUD (create / edit / delete) - per type for simplicity
   const [modal, setModal] = useState<'create' | 'edit' | 'delete' | null>(null);
@@ -46,6 +46,45 @@ export default function NexusMmoPage() {
   const companionCount = companions.length;
   const worldCount = worlds.length;
   const promptCount = prompts.length;
+
+  // For players table filter by world
+  const [selectedWorldForPlayers, setSelectedWorldForPlayers] = useState('all');
+
+  // IA server generated outputs (textual view of what server AI produces)
+  const [iaOutputs, setIaOutputs] = useState([]);
+  const [historicalIAOutputs, setHistoricalIAOutputs] = useState([]);
+  const [selectedWorldForIA, setSelectedWorldForIA] = useState('all');
+
+  // Flatten players from worlds data (provided by backend with players_list per continent as objects now)
+  const allPlayers = [];
+  worlds.forEach(w => {
+    (w.continents || []).forEach(c => {
+      (c.players_list || []).forEach((pl: any) => {
+        if (typeof pl === 'string') {
+          allPlayers.push({
+            world: w.name || `Monde ${w.id}`,
+            worldId: w.id,
+            continent: c.name,
+            pseudo: pl,
+            user_id: '-',
+            assigned_at: '-'
+          });
+        } else {
+          allPlayers.push({
+            world: w.name || `Monde ${w.id}`,
+            worldId: w.id,
+            continent: c.name,
+            user_id: pl.user_id || '-',
+            pseudo: pl.pseudo || pl,
+            assigned_at: pl.assigned_at || '-'
+          });
+        }
+      });
+    });
+  });
+  const filteredPlayers = selectedWorldForPlayers === 'all' 
+    ? allPlayers 
+    : allPlayers.filter(p => String(p.worldId) === selectedWorldForPlayers || p.world === selectedWorldForPlayers);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -179,6 +218,34 @@ export default function NexusMmoPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const exportIAOutputsToCSV = () => {
+    const outputs = [...iaOutputs, ...historicalIAOutputs];
+    if (outputs.length === 0) {
+      alert('Aucun output IA à exporter');
+      return;
+    }
+    const filtered = selectedWorldForIA === 'all' ? outputs : outputs.filter(o => String(o.world) === selectedWorldForIA || o.world === selectedWorldForIA);
+    const headers = ['time', 'type', 'world', 'text'];
+    const csvRows = [headers.join(',')];
+    filtered.forEach(o => {
+      const row = [
+        o.time || '',
+        o.type || '',
+        o.world || '',
+        `"${(o.text || '').replace(/"/g, '""')}"`
+      ];
+      csvRows.push(row.join(','));
+    });
+    const csv = csvRows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'ia_server_outputs.csv';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // Create
@@ -355,6 +422,30 @@ export default function NexusMmoPage() {
                 <div style={{ fontSize: 32, fontWeight: 700, color: '#14b8a6' }}>🤖</div>
                 <p style={{ fontSize: 13, color: '#64748b' }}>Déclencher génération events, ticks, prompts live</p>
                 <button style={{ marginTop: 8, width: '100%' }}>Outils IA →</button>
+              </div>
+
+              {/* Players Card */}
+              <div 
+                className="card" 
+                style={{ border: '1px solid #06b6d4', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => goToView('players')}
+              >
+                <h3>Joueurs par Monde</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#06b6d4' }}>{allPlayers.length}</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>Tableau des joueurs assignés, filtre par monde (depuis backend)</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Voir les Joueurs →</button>
+              </div>
+
+              {/* IA Outputs Dedicated Page Card */}
+              <div 
+                className="card" 
+                style={{ border: '1px solid #14b8a6', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => window.location.href = '/nexus/mmo/ia-outputs'}
+              >
+                <h3>IA Outputs (Page Séparée)</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#14b8a6' }}>📜</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>Historique complet IA serveur (DB + Redis), filtre monde, export CSV</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Ouvrir Page IA Outputs →</button>
               </div>
 
             </div>
@@ -538,8 +629,18 @@ export default function NexusMmoPage() {
                     })}
                   </div>
                   <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={async () => { await fetch(`/api/nexus-game/worlds/${w.id}/trigger-tick`, { method: 'POST', credentials: 'same-origin' }); alert('Tick + IA résumé exécuté (voir logs backend)'); }} style={{ padding: '4px 8px', fontSize: 12 }}>Déclencher Tick Monde + IA Serveur</button>
-                    <button onClick={async () => { const r = await fetch(`/api/nexus-game/worlds/${w.id}/generate-event`, { method: 'POST', credentials: 'same-origin' }); const j = await r.json(); alert('Événement IA Serveur proposé (prompt optimisé): ' + (j.proposed_event?.title || JSON.stringify(j))); }} style={{ padding: '4px 8px', fontSize: 12 }}>Générer Événement IA (prompt optimisé)</button>
+                    <button onClick={async () => {
+                      const r = await fetch(`/api/nexus-game/worlds/${w.id}/trigger-tick`, { method: 'POST', credentials: 'same-origin' });
+                      const j = await r.json();
+                      const text = j.summary || 'Tick exécuté avec résumé IA';
+                      setIaOutputs(prev => [...prev, { type: 'tick', text, time: new Date().toLocaleString(), world: w.name || w.id }]);
+                    }} style={{ padding: '4px 8px', fontSize: 12 }}>Déclencher Tick Monde + IA Serveur</button>
+                    <button onClick={async () => {
+                      const r = await fetch(`/api/nexus-game/worlds/${w.id}/generate-event`, { method: 'POST', credentials: 'same-origin' });
+                      const j = await r.json();
+                      const text = j.proposed_event ? `Événement IA:\nTitre: ${j.proposed_event.title}\nRésumé: ${j.proposed_event.summary}` : JSON.stringify(j, null, 2);
+                      setIaOutputs(prev => [...prev, { type: 'event', text, time: new Date().toLocaleString(), world: w.name || w.id }]);
+                    }} style={{ padding: '4px 8px', fontSize: 12 }}>Générer Événement IA (prompt optimisé)</button>
                   </div>
                 </div>
               ))}
@@ -636,11 +737,154 @@ export default function NexusMmoPage() {
           <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
           <h2>Outils IA Serveur (gestion complète des prompts, ticks, events)</h2>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-            <button onClick={async () => { if (worlds[0]) { const r = await fetch(`/api/nexus-game/worlds/${worlds[0].id}/generate-event`, {method:'POST', credentials:'same-origin'}); const j = await r.json(); alert('IA Event proposé (prompt optimisé): ' + JSON.stringify(j.proposed_event || j)); } else alert('Créez un monde d\'abord'); }} style={{ padding: '10px 16px' }}>Générer Événement IA Serveur</button>
-            <button onClick={async () => { if (worlds[0]) { await fetch(`/api/nexus-game/worlds/${worlds[0].id}/trigger-tick`, {method:'POST', credentials:'same-origin'}); alert('World Tick + IA résumé exécuté (logs backend)'); } else alert('Créez un monde d\'abord'); }} style={{ padding: '10px 16px' }}>Déclencher Tick + IA Serveur</button>
+            <button onClick={async () => {
+              if (!worlds[0]) { alert('Créez un monde d\'abord'); return; }
+              const r = await fetch(`/api/nexus-game/worlds/${worlds[0].id}/generate-event`, {method:'POST', credentials:'same-origin'});
+              const j = await r.json();
+              const text = j.proposed_event ? `Événement IA:\nTitre: ${j.proposed_event.title}\nRésumé: ${j.proposed_event.summary}` : JSON.stringify(j, null, 2);
+              setIaOutputs(prev => [...prev, { type: 'event', text, time: new Date().toLocaleString(), world: worlds[0].name || worlds[0].id }]);
+            }} style={{ padding: '10px 16px' }}>Générer Événement IA Serveur</button>
+            <button onClick={async () => {
+              if (!worlds[0]) { alert('Créez un monde d\'abord'); return; }
+              const r = await fetch(`/api/nexus-game/worlds/${worlds[0].id}/trigger-tick`, {method:'POST', credentials:'same-origin'});
+              const j = await r.json();
+              const text = j.summary || 'Tick exécuté avec résumé IA (voir logs backend pour détails complets)';
+              setIaOutputs(prev => [...prev, { type: 'tick', text, time: new Date().toLocaleString(), world: worlds[0].name || worlds[0].id }]);
+            }} style={{ padding: '10px 16px' }}>Déclencher Tick + IA Serveur</button>
             <button onClick={() => goToView('prompts')} style={{ padding: '10px 16px' }}>Gérer Prompts (CRUD, versions, évolution)</button>
+            <button onClick={() => window.location.href = '/nexus/mmo/ia-outputs'} style={{ padding: '10px 16px', background: '#14b8a6', color: 'white' }}>Ouvrir Page Séparée IA Outputs</button>
           </div>
+
+          <div style={{ marginTop: 24 }}>
+            <h3>Ce qui est généré par l'IA du serveur (textuel) - Persisté Redis pour historique cross-sessions</h3>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ marginRight: 8 }}>Filtrer par monde:</label>
+              <select 
+                value={selectedWorldForIA} 
+                onChange={e => setSelectedWorldForIA(e.target.value)}
+                style={{ padding: 8, background: '#1e2937', color: 'white', border: '1px solid #334155' }}
+              >
+                <option value="all">Tous les mondes</option>
+                {worlds.map((w, i) => (
+                  <option key={i} value={String(w.id)}>{w.name || `Monde ${w.id}`}</option>
+                ))}
+              </select>
+            </div>
+            <button onClick={async () => {
+              const res = await fetch('/api/nexus-game/ai-outputs', { credentials: 'same-origin' });
+              if (res.ok) {
+                const data = await res.json();
+                setHistoricalIAOutputs(data.outputs || []);
+              }
+            }} style={{ marginRight: 8, padding: '4px 10px', fontSize: 12 }}>Recharger historique Redis</button>
+            <button onClick={exportIAOutputsToCSV} style={{ padding: '4px 10px', fontSize: 12 }}>Exporter en CSV</button>
+            {iaOutputs.length === 0 && historicalIAOutputs.length === 0 && <p style={{ color: '#64748b' }}>Aucun output pour l'instant. Utilise les boutons ci-dessus pour générer (events, résumés de tick, etc.). Les outputs sont persistés en Redis.</p>}
+            {[...iaOutputs, ...historicalIAOutputs]
+              .filter(o => selectedWorldForIA === 'all' || String(o.world) === selectedWorldForIA || o.world === selectedWorldForIA)
+              .map((o, i) => (
+              <div key={i} style={{ background: '#0f172a', padding: 12, borderRadius: 6, marginBottom: 8, border: '1px solid #334155' }}>
+                <div style={{ fontSize: 12, color: '#64748b' }}>{o.time} | {o.type} | {o.world}</div>
+                <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, margin: 8, color: '#e2e8f0', maxHeight: 200, overflow: 'auto' }}>{o.text}</pre>
+              </div>
+            ))}
+            {(iaOutputs.length > 0 || historicalIAOutputs.length > 0) && <button onClick={() => { setIaOutputs([]); setHistoricalIAOutputs([]); }} style={{ marginTop: 8, fontSize: 12 }}>Clear tous outputs</button>}
+          </div>
+
           <p style={{ marginTop: 12, fontSize: 13, color: '#64748b' }}>Prompts optimisés (coût, rapidité, constructif/enrichissant). Évoluent automatiquement avec l'état du monde/jour/univers. Logs et coûts traçables. Tous les appels IA serveur respectent les limits (pas de bypass policies).</p>
+        </section>
+      )}
+
+      {/* Players View - Tableau avec filtre par monde */}
+      {activeView === 'players' && (
+        <section className="panel">
+          <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
+          <h2>Liste des Joueurs par Monde</h2>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ marginRight: 8 }}>Filtrer par monde:</label>
+            <select 
+              value={selectedWorldForPlayers} 
+              onChange={e => setSelectedWorldForPlayers(e.target.value)}
+              style={{ padding: 8, background: '#1e2937', color: 'white', border: '1px solid #334155' }}
+            >
+              <option value="all">Tous les mondes</option>
+              {worlds.map((w, i) => (
+                <option key={i} value={String(w.id)}>{w.name || `Monde ${w.id}`}</option>
+              ))}
+            </select>
+          </div>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: 8 }}>Monde</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>Continent</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>User ID</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>Pseudo (Joueur)</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>Date Assignation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPlayers.length === 0 && (
+                <tr><td colSpan="5" style={{ padding: 8, color: '#64748b' }}>Aucun joueur assigné pour ce filtre. (Les assignations se font auto à la création de profil via la faction.)</td></tr>
+              )}
+              {filteredPlayers.map((p, i) => (
+                <tr key={i} style={{ borderTop: '1px solid #334155' }}>
+                  <td style={{ padding: 8 }}>{p.world}</td>
+                  <td style={{ padding: 8 }}>{p.continent}</td>
+                  <td style={{ padding: 8 }}>{p.user_id || '-'}</td>
+                  <td style={{ padding: 8, fontWeight: 500 }}>{p.pseudo}</td>
+                  <td style={{ padding: 8, fontSize: 12 }}>{p.assigned_at || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={{ fontSize: 12, color: '#64748b', marginTop: 12 }}>Données du backend Go (ProfileGamer avec ContinentID/WorldID, via /worlds qui inclut players_list). Filtre client-side.</p>
+        </section>
+      )}
+
+      {/* Players View - Tableau avec filtre par monde */}
+      {activeView === 'players' && (
+        <section className="panel">
+          <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
+          <h2>Liste des Joueurs par Monde</h2>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ marginRight: 8 }}>Filtrer par monde:</label>
+            <select 
+              value={selectedWorldForPlayers} 
+              onChange={e => setSelectedWorldForPlayers(e.target.value)}
+              style={{ padding: 8, background: '#1e2937', color: 'white', border: '1px solid #334155' }}
+            >
+              <option value="all">Tous les mondes</option>
+              {worlds.map((w, i) => (
+                <option key={i} value={String(w.id)}>{w.name || `Monde ${w.id}`}</option>
+              ))}
+            </select>
+          </div>
+          <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: 8 }}>Monde</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>Continent</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>User ID</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>Pseudo (Joueur)</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>Date Assignation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPlayers.length === 0 && (
+                <tr><td colSpan="5" style={{ padding: 8, color: '#64748b' }}>Aucun joueur assigné pour ce filtre. (Les assignations se font auto à la création de profil via la faction.)</td></tr>
+              )}
+              {filteredPlayers.map((p, i) => (
+                <tr key={i} style={{ borderTop: '1px solid #334155' }}>
+                  <td style={{ padding: 8 }}>{p.world}</td>
+                  <td style={{ padding: 8 }}>{p.continent}</td>
+                  <td style={{ padding: 8 }}>{p.user_id || '-'}</td>
+                  <td style={{ padding: 8, fontWeight: 500 }}>{p.pseudo}</td>
+                  <td style={{ padding: 8, fontSize: 12 }}>{p.assigned_at || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p style={{ fontSize: 12, color: '#64748b', marginTop: 12 }}>Données du backend Go (ProfileGamer avec ContinentID/WorldID, via /worlds qui inclut players_list). Filtre client-side.</p>
         </section>
       )}
 

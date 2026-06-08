@@ -29,7 +29,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
-		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{})
+		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{})
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
@@ -99,4 +99,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/prompts", worldH.ListPrompts)
 	group.POST("/prompts", worldH.CreatePrompt)
 	group.PUT("/prompts/:id", worldH.UpdatePrompt)
+
+	// AI outputs history (persisted in Redis for cross-sessions)
+	group.GET("/ai-outputs", worldH.ListAIOutputs)
 }

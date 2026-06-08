@@ -179,9 +179,13 @@ func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}
 			// Liste des joueurs pour la gestion (from DB ProfileGamer)
 			var profiles []models.ProfileGamer
 			s.db.Where("continent_id = ?", c.ID).Find(&profiles)
-			playerPseudos := []string{}
+			playerList := []map[string]interface{}{}
 			for _, pr := range profiles {
-				playerPseudos = append(playerPseudos, pr.Pseudo)
+				playerList = append(playerList, map[string]interface{}{
+					"user_id":     pr.UserID,
+					"pseudo":      pr.Pseudo,
+					"assigned_at": pr.CreatedAt.Format("2006-01-02 15:04"),
+				})
 			}
 			contSummary = append(contSummary, map[string]interface{}{
 				"id":            c.ID,
@@ -190,7 +194,7 @@ func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}
 				"factions":      fStr,
 				"max_players":   c.MaxPlayers,
 				"max_factions":  c.MaxFactions,
-				"players_list":  playerPseudos,
+				"players_list":  playerList,
 			})
 		}
 		result = append(result, map[string]interface{}{

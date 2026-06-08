@@ -71,7 +71,7 @@ func (s *WorldTickService) RunWorldTick(ctx context.Context, worldID uint) error
 	count := 0
 	fmt.Sscanf(countStr, "%d", &count)
 	if count < 4 {
-		event, _ := s.ai.GenerateWorldEvent(ctx, worldState)
+		event, _ := s.ai.GenerateWorldEvent(ctx, worldState, worldID)
 		_ = s.redis.SetString(ctx, eventKey, fmt.Sprintf("%d", count+1), 24*time.Hour)
 		fmt.Printf("[WORLD_TICK] Proposed event: %+v\n", event)
 		// In real: persist event, notify via notifications.

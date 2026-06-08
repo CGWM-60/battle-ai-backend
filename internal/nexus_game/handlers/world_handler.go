@@ -72,7 +72,7 @@ func (h *WorldHandler) GenerateWorldEvent(c *gin.Context) {
 	worldID, _ := strconv.Atoi(c.Param("id"))
 	// Stub world state from Redis/DB.
 	state := map[string]interface{}{"tensions": 4, "recent_events": 2}
-	event, err := h.aiSvc.GenerateWorldEvent(c.Request.Context(), state)
+	event, err := h.aiSvc.GenerateWorldEvent(c.Request.Context(), state, uint(worldID))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -101,6 +101,16 @@ func (h *WorldHandler) TriggerWorldTick(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "tick executed", "world_id": worldID})
+}
+
+// ListAIOutputs - for admin to see textual outputs of server IA (persisted in Redis).
+func (h *WorldHandler) ListAIOutputs(c *gin.Context) {
+	outputs, err := h.aiSvc.GetAIOutputs(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"outputs": outputs})
 }
 
 func (h *WorldHandler) CreatePrompt(c *gin.Context) {

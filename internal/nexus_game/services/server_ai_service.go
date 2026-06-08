@@ -2,10 +2,12 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/cache"
+	"cgwm/battle/internal/nexus_game/models"
 
 	"gorm.io/gorm"
 )
@@ -84,13 +86,14 @@ Evolve based on universe: make it fit current day tensions.`, playerReport, regi
 
 	latency := time.Since(start).Milliseconds()
 	s.logAICall(ctx, "quest_seed_generation", promptVersion, 120, 80, latency, "success", "quest_seed", 0)
+	s.StoreAIOutput(ctx, seed)
 	return seed, nil
 }
 
 // GenerateWorldEvent - proposes controlled world event based on tick state.
 // Max 4 important/day, duration min 1h, rewards capped, linked to region/faction.
 // Prompt optimized for speed (structured), enriching (narrative depth).
-func (s *ServerAIService) GenerateWorldEvent(ctx context.Context, worldState map[string]interface{}) (map[string]interface{}, error) {
+func (s *ServerAIService) GenerateWorldEvent(ctx context.Context, worldState map[string]interface{}, worldID uint) (map[string]interface{}, error) {
 	start := time.Now()
 	promptVersion := "v1.1-world-event-optimized"
 	// ... similar detailed prompt ...
@@ -102,9 +105,11 @@ func (s *ServerAIService) GenerateWorldEvent(ctx context.Context, worldState map
 		"difficulty":  6,
 		"rewards_cap": map[string]int{"xp": 200},
 		"prompt_version": promptVersion,
+		"world_id":    worldID,
 	}
 	latency := time.Since(start).Milliseconds()
 	s.logAICall(ctx, "event_generation", promptVersion, 90, 60, latency, "success", "world_event", 0)
+	s.StoreAIOutput(ctx, event)
 	return event, nil
 }
 
@@ -129,6 +134,7 @@ func (s *ServerAIService) GenerateLivingLore(ctx context.Context, sourceType str
 	}
 	latency := time.Since(start).Milliseconds()
 	s.logAICall(ctx, "living_lore_summary", promptVersion, 80, 150, latency, "success", sourceType, 0)
+	s.StoreAIOutput(ctx, lore)
 	return lore, nil
 }
 
@@ -146,8 +152,128 @@ func (s *ServerAIService) PrepareTribunalCase(ctx context.Context, conflictData 
 	}
 	latency := time.Since(start).Milliseconds()
 	s.logAICall(ctx, "tribunal_bridge", promptVersion, 100, 120, latency, "success", "conflict", 0)
+	s.StoreAIOutput(ctx, caseData)
 	return caseData, nil
 }
 
 // Additional methods for Quest Seeds etc. follow the same optimized prompt pattern.
 // Prompts evolve automatically: include current day, recent canon, universe state in the prompt text for dynamic enrichment.
+
+// StoreAIOutput persists the full output to DB (ai_outputs table with GORM) + Redis (for fast history cross-sessions).
+// Used for admin visualization of what server IA actually generated (text, summaries, etc.).
+func (s *ServerAIService) StoreAIOutput(ctx context.Context, output map[string]interface{}) error {
+	// Always persist to DB for durable history
+	aiOut := models.AIOutput{
+		Feature:       getString(output, "feature"),
+		WorldID:       getUint(output, "world_id"),
+		LinkedType:    getString(output, "linked_type"),
+		LinkedID:      getUint(output, "linked_id"),
+		Output:        mustJSON(output),
+		PromptVersion: getString(output, "prompt_version"),
+		TokensIn:      getInt(output, "tokens_in"),
+		TokensOut:     getInt(output, "tokens_out"),
+		LatencyMs:     getInt64(output, "latency_ms"),
+		Status:        getString(output, "status"),
+		CreatedAt:     time.Now().UTC(),
+	}
+	if s.db != nil {
+		s.db.Create(&aiOut)
+	}
+
+	// Also to Redis for quick access (last 100)
+	key := "nexus:ai:outputs"
+	existing, _, _ := s.redis.GetString(ctx, key)
+	var list []map[string]interface{}
+	if existing != "" {
+		json.Unmarshal([]byte(existing), &list)
+	}
+	output["timestamp"] = time.Now().UTC().Format(time.RFC3339)
+	output["db_id"] = aiOut.ID // link to DB record
+	list = append(list, output)
+	if len(list) > 100 {
+		list = list[len(list)-100:]
+	}
+	data, _ := json.Marshal(list)
+	return s.redis.SetString(ctx, key, string(data), 0)
+}
+
+// GetAIOutputs retrieves from DB (full history) + Redis cache.
+func (s *ServerAIService) GetAIOutputs(ctx context.Context) ([]map[string]interface{}, error) {
+	var results []map[string]interface{}
+
+	// Prefer DB for complete history
+	if s.db != nil {
+		var dbOuts []models.AIOutput
+		s.db.Order("created_at desc").Limit(100).Find(&dbOuts)
+		for _, o := range dbOuts {
+			var out map[string]interface{}
+			json.Unmarshal([]byte(o.Output), &out)
+			out["db_id"] = o.ID
+			out["timestamp"] = o.CreatedAt.Format(time.RFC3339)
+			out["feature"] = o.Feature
+			out["world_id"] = o.WorldID
+			results = append(results, out)
+		}
+		return results, nil
+	}
+
+	// Fallback to Redis
+	key := "nexus:ai:outputs"
+	data, ok, err := s.redis.GetString(ctx, key)
+	if err != nil || !ok || data == "" {
+		return []map[string]interface{}{}, nil
+	}
+	json.Unmarshal([]byte(data), &results)
+	return results, nil
+}
+
+// Helpers for extraction (to avoid panics)
+func getString(m map[string]interface{}, k string) string {
+	if v, ok := m[k]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+func getUint(m map[string]interface{}, k string) uint {
+	if v, ok := m[k]; ok {
+		switch val := v.(type) {
+		case uint:
+			return val
+		case int:
+			return uint(val)
+		case float64:
+			return uint(val)
+		}
+	}
+	return 0
+}
+func getInt(m map[string]interface{}, k string) int {
+	if v, ok := m[k]; ok {
+		switch val := v.(type) {
+		case int:
+			return val
+		case float64:
+			return int(val)
+		}
+	}
+	return 0
+}
+func getInt64(m map[string]interface{}, k string) int64 {
+	if v, ok := m[k]; ok {
+		switch val := v.(type) {
+		case int64:
+			return val
+		case int:
+			return int64(val)
+		case float64:
+			return int64(val)
+		}
+	}
+	return 0
+}
+func mustJSON(v interface{}) string {
+	b, _ := json.Marshal(v)
+	return string(b)
+}
