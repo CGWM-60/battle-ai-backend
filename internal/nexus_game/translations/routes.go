@@ -24,8 +24,9 @@ func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 		locale := c.DefaultQuery("locale", "fr")
 		cacheKey := "translations:bootstrap:" + locale
 		if cached, ok, err := redis.GetString(c.Request.Context(), cacheKey); err == nil && ok {
-			c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(cached))
-			return
+			if writeCachedJSON(c, cached) {
+				return
+			}
 		}
 
 		// Pour l'instant on retourne tout, domaines optionnels via query si besoin plus tard
@@ -82,8 +83,9 @@ func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 		locale := c.DefaultQuery("locale", "fr")
 		cacheKey := "translations:domain:" + domain + ":" + locale
 		if cached, ok, err := redis.GetString(c.Request.Context(), cacheKey); err == nil && ok {
-			c.Data(http.StatusOK, "application/json; charset=utf-8", []byte(cached))
-			return
+			if writeCachedJSON(c, cached) {
+				return
+			}
 		}
 
 		data, err := svc.GetDomainTranslations(c.Request.Context(), domain, locale)
@@ -144,6 +146,15 @@ func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "logged"})
 	})
+}
+
+func writeCachedJSON(c *gin.Context, cached string) bool {
+	raw := []byte(cached)
+	if !json.Valid(raw) {
+		return false
+	}
+	c.Data(http.StatusOK, "application/json; charset=utf-8", raw)
+	return true
 }
 
 // RegisterAdminRoutes enregistre les endpoints admin pour les traductions.

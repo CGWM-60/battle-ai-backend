@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -229,7 +230,7 @@ func readRESP(reader *bufio.Reader) (string, error) {
 			return "", errRedisNil
 		}
 		buf := make([]byte, length+2)
-		if _, err := reader.Read(buf); err != nil {
+		if _, err := io.ReadFull(reader, buf); err != nil {
 			return "", err
 		}
 		return string(buf[:length]), nil

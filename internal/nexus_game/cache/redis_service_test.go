@@ -1,6 +1,12 @@
 package cache
 
-import "testing"
+import (
+	"bufio"
+	"fmt"
+	"io"
+	"strings"
+	"testing"
+)
 
 func TestRedisDisabledDoesNotErrorForFallbackOperations(t *testing.T) {
 	t.Setenv(envRedisURL, "")
@@ -25,4 +31,38 @@ func TestRedactRedisURL(t *testing.T) {
 	if got != "redis://redis:redacted@localhost:6379/0" {
 		t.Fatalf("redacted url=%q", got)
 	}
+}
+
+func TestReadRESPBulkStringReadsFullPayload(t *testing.T) {
+	want := strings.Repeat("payload-", 1024)
+	resp := fmt.Sprintf("$%d\r\n%s\r\n", len(want), want)
+
+	got, err := readRESP(bufio.NewReaderSize(&chunkedReader{data: resp, size: 3}, 16))
+	if err != nil {
+		t.Fatalf("readRESP returned error: %v", err)
+	}
+	if got != want {
+		t.Fatalf("readRESP returned partial or corrupted payload: got length %d want %d", len(got), len(want))
+	}
+}
+
+type chunkedReader struct {
+	data string
+	size int
+}
+
+func (r *chunkedReader) Read(p []byte) (int, error) {
+	if r.data == "" {
+		return 0, io.EOF
+	}
+	n := r.size
+	if n <= 0 || n > len(r.data) {
+		n = len(r.data)
+	}
+	if n > len(p) {
+		n = len(p)
+	}
+	copy(p, r.data[:n])
+	r.data = r.data[n:]
+	return n, nil
 }
