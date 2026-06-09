@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../../components/AdminShell";
+import { CostSummary, EffectsPreview, LevelDescriptionsPreview, TranslationCell, TranslationMap, fetchCatalogTranslations } from "../contentDisplay";
 
 const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
 
@@ -16,9 +17,13 @@ interface Building {
   maxLevel: number;
   costBaseCredits?: number;
   costBaseMetal?: number;
+  costBaseData?: number;
   durationBaseSeconds?: number;
+  workersMin?: number;
+  workersMax?: number;
   assetId?: string;
   assetsByTier?: Record<string, string>;
+  effects?: string;
   effectsJSON?: string;
   aiAgentSlots?: number;
   isPublished?: boolean;
@@ -78,6 +83,7 @@ function parseRecord(value: unknown) {
 
 export default function BuildingsAdminPage() {
   const [items, setItems] = useState<Building[]>([]);
+  const [translations, setTranslations] = useState<TranslationMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -90,9 +96,13 @@ export default function BuildingsAdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/buildings`, { credentials: "same-origin" });
+      const [res, catalogTranslations] = await Promise.all([
+        fetch(`${API_BASE}/api/nexus-game/admin/content/buildings`, { credentials: "same-origin" }),
+        fetchCatalogTranslations(API_BASE, ["building"]),
+      ]);
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
+      setTranslations(catalogTranslations);
       setItems(Array.isArray(data.buildings) ? data.buildings : []);
     } catch (e: any) {
       setError(e.message || "Erreur chargement bâtiments");
@@ -260,10 +270,12 @@ export default function BuildingsAdminPage() {
           <tr>
             <th>Preview</th>
             <th>Content ID</th>
-            <th>Nom (key)</th>
-            <th>Description (key)</th>
+            <th>Nom</th>
+            <th>Description globale</th>
             <th>Rareté</th>
-            <th>Niv Max</th>
+            <th>Coûts</th>
+            <th>Descriptions par lvl</th>
+            <th>Apports / effets</th>
             <th>Assets</th>
             <th>Agents IA</th>
             <th>Actions</th>
@@ -290,10 +302,12 @@ export default function BuildingsAdminPage() {
                   )}
                 </td>
                 <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.contentId || <span style={{ color: '#fca5a5' }}>#{b.id} — contentId manquant</span>}</td>
-                <td>{b.nameKey || '—'}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{b.descriptionKey || '—'}</td>
+                <td><TranslationCell translations={translations} labelKey={b.nameKey} /></td>
+                <td><TranslationCell translations={translations} labelKey={b.descriptionKey} /></td>
                 <td>{b.rarity || '—'}</td>
-                <td>{b.maxLevel || '—'}</td>
+                <td><CostSummary item={b as any} kind="building" /></td>
+                <td><LevelDescriptionsPreview keys={b.levelDescriptionKeys} translations={translations} /></td>
+                <td><EffectsPreview effects={b.effects || b.effectsJSON} /></td>
                 <td style={{ fontSize: 11 }}>
                   {b.assetId && <div>main: {b.assetId}</div>}
                   {b.assetsByTier && Object.keys(b.assetsByTier).map(t => (

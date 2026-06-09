@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../../components/AdminShell";
+import { CostSummary, EffectsPreview, LevelDescriptionsPreview, TranslationCell, TranslationMap, fetchCatalogTranslations } from "../contentDisplay";
 
 const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
 
@@ -16,8 +17,13 @@ interface Unit {
   maxLevel: number;
   healthBase?: number;
   attackBase?: number;
+  defenseBase?: number;
+  speedBase?: number;
+  trainingTimeBaseSeconds?: number;
+  upkeepBase?: number;
   assetId?: string;
   assetsByTier?: Record<string, string>;
+  effects?: string;
 }
 
 const ASSET_KEYS = ["main", "tier1", "tier2", "tier3", "tier4"] as const;
@@ -64,6 +70,7 @@ function parseRecord(value: unknown) {
 
 export default function UnitsAdminPage() {
   const [items, setItems] = useState<Unit[]>([]);
+  const [translations, setTranslations] = useState<TranslationMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<'create' | 'edit' | 'delete' | null>(null);
@@ -74,9 +81,13 @@ export default function UnitsAdminPage() {
   const fetchItems = async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/units`, { credentials: "same-origin" });
+      const [res, catalogTranslations] = await Promise.all([
+        fetch(`${API_BASE}/api/nexus-game/admin/content/units`, { credentials: "same-origin" }),
+        fetchCatalogTranslations(API_BASE, ["unit"]),
+      ]);
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
+      setTranslations(catalogTranslations);
       setItems(data.units || []);
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
@@ -148,7 +159,7 @@ export default function UnitsAdminPage() {
       {error && <p style={{color:'red'}}>{error}</p>}
 
       <table className="data-table" style={{ width: '100%' }}>
-        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Description</th><th>Rareté</th><th>Niv Max</th><th>Assets</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Description globale</th><th>Rareté</th><th>Stats / coûts</th><th>Descriptions par lvl</th><th>Apports / profil</th><th>Assets</th><th>Actions</th></tr></thead>
         <tbody>
           {items.map(u => {
             const assets = collectAssets(u);
@@ -170,10 +181,12 @@ export default function UnitsAdminPage() {
                   )}
                 </td>
                 <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{u.contentId || <span style={{ color: '#fca5a5' }}>#{u.id} — contentId manquant</span>}</td>
-                <td>{u.nameKey || '—'}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{u.descriptionKey || '—'}</td>
+                <td><TranslationCell translations={translations} labelKey={u.nameKey} /></td>
+                <td><TranslationCell translations={translations} labelKey={u.descriptionKey} /></td>
                 <td>{u.rarity || '—'}</td>
-                <td>{u.maxLevel || '—'}</td>
+                <td><CostSummary item={u as any} kind="unit" /></td>
+                <td><LevelDescriptionsPreview keys={u.levelDescriptionKeys} translations={translations} /></td>
+                <td><EffectsPreview effects={u.effects} /></td>
                 <td style={{ fontSize: 11 }}>{u.assetId || (u.assetsByTier && Object.keys(u.assetsByTier).join(', '))}</td>
                 <td><button onClick={() => openEdit(u)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(u)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
               </tr>

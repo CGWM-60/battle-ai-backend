@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../../components/AdminShell";
+import { CostSummary, EffectsPreview, LevelDescriptionsPreview, TranslationCell, TranslationMap, fetchCatalogTranslations } from "../contentDisplay";
 
 // Configurable backend base for when admin static is served separately from Go API (e.g. different port or Dokploy static).
 // Set NEXT_PUBLIC_NEXUS_API_BASE=http://localhost:8080 (or prod URL) at build/dev time.
@@ -18,7 +19,9 @@ interface Research {
   tier?: number;
   rarity: string;
   costBaseCredits?: number;
+  costBaseData?: number;
   durationBaseSeconds?: number;
+  effects?: string;
   effectsJSON?: string;
   prerequisitesJSON?: string;
   assetId?: string;
@@ -69,6 +72,7 @@ function parseRecord(value: unknown) {
 
 export default function ResearchAdminPage() {
   const [items, setItems] = useState<Research[]>([]);
+  const [translations, setTranslations] = useState<TranslationMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<'create' | 'edit' | 'delete' | null>(null);
@@ -79,9 +83,13 @@ export default function ResearchAdminPage() {
   const fetchItems = async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/research`, { credentials: "same-origin" });
+      const [res, catalogTranslations] = await Promise.all([
+        fetch(`${API_BASE}/api/nexus-game/admin/content/research`, { credentials: "same-origin" }),
+        fetchCatalogTranslations(API_BASE, ["research"]),
+      ]);
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
+      setTranslations(catalogTranslations);
       setItems(data.research || []);
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
@@ -153,7 +161,7 @@ export default function ResearchAdminPage() {
       {error && <p style={{color:'red'}}>{error}</p>}
 
       <table className="data-table" style={{ width: '100%' }}>
-        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Description</th><th>Branche</th><th>Tier</th><th>Rareté</th><th>Assets</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Description globale</th><th>Branche</th><th>Tier</th><th>Coûts</th><th>Descriptions par lvl</th><th>Apports / effet</th><th>Assets</th><th>Actions</th></tr></thead>
         <tbody>
           {items.map(r => {
             const assets = collectAssets(r);
@@ -175,11 +183,13 @@ export default function ResearchAdminPage() {
                   )}
                 </td>
                 <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.contentId || <span style={{ color: '#fca5a5' }}>#{r.id} — contentId manquant</span>}</td>
-                <td>{r.nameKey || '—'}</td>
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.descriptionKey || '—'}</td>
+                <td><TranslationCell translations={translations} labelKey={r.nameKey} /></td>
+                <td><TranslationCell translations={translations} labelKey={r.descriptionKey} /></td>
                 <td>{r.branch || '—'}</td>
                 <td>{r.tier || '—'}</td>
-                <td>{r.rarity || '—'}</td>
+                <td><CostSummary item={r as any} kind="research" /></td>
+                <td><LevelDescriptionsPreview keys={r.levelDescriptionKeys} translations={translations} /></td>
+                <td><EffectsPreview effects={r.effects || r.effectsJSON} /></td>
                 <td style={{ fontSize: 11 }}>{r.assetId || (r.assetsByTier && Object.keys(r.assetsByTier).join(', '))}</td>
                 <td><button onClick={() => openEdit(r)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(r)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
               </tr>
