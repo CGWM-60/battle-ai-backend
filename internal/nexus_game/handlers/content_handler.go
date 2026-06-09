@@ -204,18 +204,51 @@ func (h *ContentHandler) AdminBuildingsPage(c *gin.Context) {
 }
 
 func (h *ContentHandler) AdminUnitsPage(c *gin.Context) {
-	// Stub - implement ListUnits in service + seed the 15 units from reference
-	html := `<html><body><h1>Units Admin Page (stub)</h1><p>Implement ListUnits + full CRUD same as buildings. See NEXUS REFERENCE §5 for the 15 units + per-level stats + counters table.</p><p>Upload assets to /nexus-assets/content/units/</p></body></html>`
+	list, _ := h.contentSvc.ListUnits(true)
+	html := `<html><head><title>Nexus Admin - Units</title>
+<style>body{font-family:sans-serif;margin:20px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ccc;padding:8px} form{margin:10px 0}</style>
+</head><body>
+<h1>Units CRUD (Backend Admin Page)</h1>
+<p>See NEXUS REFERENCE §5 for the 15 units + per-level stats 1-30 + counters table. Upload assets via /admin/content/upload-asset (domain=unit).</p>
+
+<h2>JSON API</h2>
+<p>Full CRUD at /admin/content/units (GET list, POST create, etc.). Use curl or Next.js for now.</p>
+
+<h2>Existing Units</h2>
+<table><tr><th>contentId</th><th>nameKey</th><th>rarity</th><th>Actions</th></tr>`
+	for _, u := range list {
+		html += `<tr><td>` + u.ContentID + `</td><td>` + u.NameKey + `</td><td>` + u.Rarity + `</td><td>
+		<a href="/admin/content/units/` + u.ContentID + `">View</a>
+		</td></tr>`
+	}
+	html += `</table>
+<p>Note: Seed more from reference. This is dev page.</p>
+</body></html>`
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }
 
 func (h *ContentHandler) AdminResearchPage(c *gin.Context) {
-	html := `<html><body><h1>Research Admin Page (stub)</h1><p>11 branches × 7 tiers. Implement ListResearch + dependencies. See REFERENCE §6.</p></body></html>`
+	list, _ := h.contentSvc.ListResearch(true)
+	html := `<html><head><title>Nexus Admin - Research</title>
+<style>body{font-family:sans-serif;margin:20px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ccc;padding:8px}</style>
+</head><body>
+<h1>Research CRUD (Backend Admin Page)</h1>
+<p>11 branches, 7 tiers each per NEXUS REFERENCE §6. Dependencies, effects, per-level costs.</p>
+
+<h2>JSON API</h2>
+<p>Full at /admin/content/research</p>
+
+<h2>Existing Research Nodes</h2>
+<table><tr><th>contentId</th><th>nameKey</th><th>branch</th><th>tier</th><th>Actions</th></tr>`
+	for _, r := range list {
+		html += `<tr><td>` + r.ContentID + `</td><td>` + r.NameKey + `</td><td>` + r.Branch + `</td><td>` + strconv.Itoa(r.Tier) + `</td><td>
+		<a href="/admin/content/research/` + r.ContentID + `">View</a>
+		</td></tr>`
+	}
+	html += `</table>
+</body></html>`
 	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
 }
-
-// Stub CRUD for units and research (copy the buildings pattern for full impl).
-// For now the /page gives the table placeholder. Extend ListUnits etc in service + add real methods here.
 
 func (h *ContentHandler) ListUnits(c *gin.Context) {
 	list, _ := h.contentSvc.ListUnits(true)
@@ -227,7 +260,57 @@ func (h *ContentHandler) ListResearch(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"research": list})
 }
 
-// Note: The Admin*Page methods for units/research are the simple HTML stub pages defined above.
-// They provide a basic "table + CRUD" view in the backend (browser accessible).
-// Extend with real data from the content reference (seed the 15 units + 11 research branches).
-// Full JSON CRUD is available at /admin/content/units and /admin/content/research.
+func (h *ContentHandler) CreateOrUpdateUnit(c *gin.Context) {
+	var def models.UnitDefinition
+	if err := c.ShouldBindJSON(&def); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
+		return
+	}
+	if def.ContentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "contentId required"})
+		return
+	}
+	if err := h.contentSvc.CreateOrUpdateUnit(&def); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "contentId": def.ContentID})
+}
+
+func (h *ContentHandler) CreateOrUpdateResearch(c *gin.Context) {
+	var def models.ResearchDefinition
+	if err := c.ShouldBindJSON(&def); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
+		return
+	}
+	if def.ContentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "contentId required"})
+		return
+	}
+	if err := h.contentSvc.CreateOrUpdateResearch(&def); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "contentId": def.ContentID})
+}
+
+func (h *ContentHandler) DeleteUnit(c *gin.Context) {
+	id := c.Param("contentId")
+	if err := h.contentSvc.DeleteUnit(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *ContentHandler) DeleteResearch(c *gin.Context) {
+	id := c.Param("contentId")
+	if err := h.contentSvc.DeleteResearch(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// Note: Admin pages now render real tables from DB for all three (buildings full, units/research basic).
+// Seed the full catalogs from the reference to populate. Full CRUD (POST/PUT/DELETE) available for units and research too.

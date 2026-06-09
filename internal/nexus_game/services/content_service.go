@@ -53,6 +53,9 @@ func (s *ContentService) GetBuilding(contentID string) (*models.BuildingDefiniti
 }
 
 func (s *ContentService) CreateOrUpdateBuilding(def *models.BuildingDefinition) error {
+	if def.EffectsJSON == "" {
+		def.EffectsJSON = "[]"
+	}
 	def.UpdatedAt = time.Now()
 	if def.CreatedAt.IsZero() {
 		def.CreatedAt = time.Now()
@@ -103,7 +106,36 @@ func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename s
 		}
 		b.AssetsByTier[key] = safeName
 		return safeName, s.CreateOrUpdateBuilding(b)
-	// TODO: units, research similar
+	case "unit":
+		u, err := s.GetUnit(contentID)
+		if err != nil {
+			return "", err
+		}
+		if u.AssetsByTier == nil {
+			u.AssetsByTier = map[string]string{}
+		}
+		key := "tier" + tier
+		if tier == "" {
+			key = "main"
+			u.AssetID = safeName
+		}
+		u.AssetsByTier[key] = safeName
+		return safeName, s.CreateOrUpdateUnit(u)
+	case "research":
+		r, err := s.GetResearch(contentID)
+		if err != nil {
+			return "", err
+		}
+		if r.AssetsByTier == nil {
+			r.AssetsByTier = map[string]string{}
+		}
+		key := "tier" + tier
+		if tier == "" {
+			key = "main"
+			r.AssetID = safeName
+		}
+		r.AssetsByTier[key] = safeName
+		return safeName, s.CreateOrUpdateResearch(r)
 	default:
 		return safeName, nil
 	}
@@ -169,7 +201,23 @@ func (s *ContentService) CompleteConstructionIfReady(pb *models.PlayerBuilding) 
 	if err := s.db.Save(pb).Error; err != nil {
 		return false, err
 	}
-	// TODO: apply effects to profile (pop capacity, energy prod etc), notify
+	// Basic effect application (expand with full formulas/effects from reference)
+	// For demo: bump some profile stats based on known buildings
+	var p models.ProfileGamer
+	if err := s.db.First(&p, pb.ProfileGamerID).Error; err == nil {
+		switch pb.ContentID {
+		case "building_modular_habitat":
+			p.PopulationCapacity += 50
+			p.Morale = min(p.Morale+2, 100)
+		case "building_solar_plant":
+			p.EnergyProduction += 80
+			p.EnergyBalance += 80
+		case "building_vertical_farm":
+			// food etc.
+		}
+		s.db.Save(&p)
+	}
+	// TODO: notify, full effects from EffectsJSON, prerequisites check in Start
 	return true, nil
 }
 
@@ -180,21 +228,74 @@ func (s *ContentService) ListPlayerBuildings(profileID uint) ([]models.PlayerBui
 	return list, err
 }
 
-// === Units (stub for now - full catalog from reference §5 to be seeded/CRUD'ed) ===
+// === Units (full CRUD + catalog from reference §5) ===
 func (s *ContentService) ListUnits(publishedOnly bool) ([]models.UnitDefinition, error) {
-	// TODO: full impl + seed the 15 units with stats per level 1-30, counters etc.
-	return []models.UnitDefinition{}, nil
+	var list []models.UnitDefinition
+	q := s.db.Model(&models.UnitDefinition{})
+	if publishedOnly {
+		q = q.Where("is_published = ?", true)
+	}
+	if err := q.Order("content_id").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func (s *ContentService) GetUnit(contentID string) (*models.UnitDefinition, error) {
-	return nil, errors.New("not implemented - use CRUD pattern from buildings")
+	var u models.UnitDefinition
+	if err := s.db.Where("content_id = ?", contentID).First(&u).Error; err != nil {
+		return nil, err
+	}
+	return &u, nil
 }
 
-// === Research (stub - 11 branches, 7 tiers per §6) ===
+func (s *ContentService) CreateOrUpdateUnit(def *models.UnitDefinition) error {
+	if def.EffectsJSON == "" {
+		def.EffectsJSON = "[]"
+	}
+	def.UpdatedAt = time.Now()
+	if def.CreatedAt.IsZero() {
+		def.CreatedAt = time.Now()
+	}
+	return s.db.Save(def).Error
+}
+
+func (s *ContentService) DeleteUnit(contentID string) error {
+	return s.db.Where("content_id = ?", contentID).Delete(&models.UnitDefinition{}).Error
+}
+
+// === Research (full CRUD + 11 branches x 7 tiers per §6) ===
 func (s *ContentService) ListResearch(publishedOnly bool) ([]models.ResearchDefinition, error) {
-	return []models.ResearchDefinition{}, nil
+	var list []models.ResearchDefinition
+	q := s.db.Model(&models.ResearchDefinition{})
+	if publishedOnly {
+		q = q.Where("is_published = ?", true)
+	}
+	if err := q.Order("content_id").Find(&list).Error; err != nil {
+		return nil, err
+	}
+	return list, nil
 }
 
 func (s *ContentService) GetResearch(contentID string) (*models.ResearchDefinition, error) {
-	return nil, errors.New("not implemented")
+	var r models.ResearchDefinition
+	if err := s.db.Where("content_id = ?", contentID).First(&r).Error; err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (s *ContentService) CreateOrUpdateResearch(def *models.ResearchDefinition) error {
+	if def.EffectsJSON == "" {
+		def.EffectsJSON = "[]"
+	}
+	def.UpdatedAt = time.Now()
+	if def.CreatedAt.IsZero() {
+		def.CreatedAt = time.Now()
+	}
+	return s.db.Save(def).Error
+}
+
+func (s *ContentService) DeleteResearch(contentID string) error {
+	return s.db.Where("content_id = ?", contentID).Delete(&models.ResearchDefinition{}).Error
 }

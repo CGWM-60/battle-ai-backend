@@ -13,6 +13,7 @@ type ResearchDefinition struct {
 	NameKey        string `json:"nameKey"`
 	DescriptionKey string `json:"descriptionKey"`
 	AssetID        string `json:"assetId"`
+	AssetsByTier   map[string]string `gorm:"serializer:json" json:"assetsByTier"`
 
 	Tier     int    `json:"tier"` // 1-7 per branch
 	Rarity   string `json:"rarity"`

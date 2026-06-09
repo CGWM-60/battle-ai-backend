@@ -36,8 +36,12 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 			&models.UnitDefinition{}, &models.PlayerUnit{},
 			&models.ResearchDefinition{}, &models.PlayerResearch{})
 
-		// Seed initial content for dev (buildings from reference). In prod use admin CRUD + upload.
-		_ = seeds.SeedInitialBuildings(database, services.NewContentService(database, "./content/assets"))
+		// Seed initial content for dev (full reference v2.0: buildings, units, research).
+		// In prod: use admin CRUD + asset upload for the complete catalogs.
+		contentSvc := services.NewContentService(database, "./content/assets")
+		_ = seeds.SeedInitialBuildings(database, contentSvc)
+		_ = seeds.SeedInitialUnits(database, contentSvc)
+		_ = seeds.SeedInitialResearch(database, contentSvc)
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
@@ -135,7 +139,13 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 	// JSON CRUD for units and research (copy of buildings - extend service impl + seed from reference)
 	group.GET("/admin/content/units", contentH.ListUnits)
+	group.POST("/admin/content/units", contentH.CreateOrUpdateUnit)
+	group.PUT("/admin/content/units/:contentId", contentH.CreateOrUpdateUnit)
+	group.DELETE("/admin/content/units/:contentId", contentH.DeleteUnit) // add DeleteUnit to handler if needed
 	group.GET("/admin/content/research", contentH.ListResearch)
+	group.POST("/admin/content/research", contentH.CreateOrUpdateResearch)
+	group.PUT("/admin/content/research/:contentId", contentH.CreateOrUpdateResearch)
+	group.DELETE("/admin/content/research/:contentId", contentH.DeleteResearch)
 
 	// World management (gestion des worlds) - card entry via admin or API.
 	// GET /worlds -> list worlds with continents and capacities (from Redis)
