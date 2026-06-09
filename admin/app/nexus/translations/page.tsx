@@ -18,17 +18,57 @@ type AIProvider = {
   configured: boolean;
 };
 
-type TranslationTableRow = {
-  id: string;
-  valueId: number | null;
+type LocaleOption = {
+  code: string;
+  label: string;
+  group: string;
+};
+
+type TranslationGridRow = {
   keyId: number;
   domain: string;
   key: string;
   description: string;
-  locale: string;
-  value: string;
-  missing: boolean;
+  sourceValue: string;
+  values: Record<string, TranslationValue | undefined>;
+  missingLocales: string[];
+  state: "complete" | "partial" | "missing";
 };
+
+const ISO_LOCALES: LocaleOption[] = [
+  { code: "fr", label: "Français source", group: "Base" },
+  { code: "fr-FR", label: "Français France", group: "Europe" },
+  { code: "en-GB", label: "English UK", group: "Europe" },
+  { code: "en-US", label: "English US", group: "US" },
+  { code: "es-US", label: "Español US", group: "US" },
+  { code: "de-DE", label: "Deutsch", group: "Europe" },
+  { code: "es-ES", label: "Español España", group: "Europe" },
+  { code: "it-IT", label: "Italiano", group: "Europe" },
+  { code: "pt-PT", label: "Português Portugal", group: "Europe" },
+  { code: "nl-NL", label: "Nederlands", group: "Europe" },
+  { code: "sv-SE", label: "Svenska", group: "Europe" },
+  { code: "da-DK", label: "Dansk", group: "Europe" },
+  { code: "fi-FI", label: "Suomi", group: "Europe" },
+  { code: "no-NO", label: "Norsk", group: "Europe" },
+  { code: "pl-PL", label: "Polski", group: "Europe" },
+  { code: "cs-CZ", label: "Čeština", group: "Europe" },
+  { code: "sk-SK", label: "Slovenčina", group: "Europe" },
+  { code: "sl-SI", label: "Slovenščina", group: "Europe" },
+  { code: "hr-HR", label: "Hrvatski", group: "Europe" },
+  { code: "hu-HU", label: "Magyar", group: "Europe" },
+  { code: "ro-RO", label: "Română", group: "Europe" },
+  { code: "bg-BG", label: "Български", group: "Europe" },
+  { code: "el-GR", label: "Ελληνικά", group: "Europe" },
+  { code: "et-EE", label: "Eesti", group: "Europe" },
+  { code: "lv-LV", label: "Latviešu", group: "Europe" },
+  { code: "lt-LT", label: "Lietuvių", group: "Europe" },
+  { code: "ga-IE", label: "Gaeilge", group: "Europe" },
+  { code: "mt-MT", label: "Malti", group: "Europe" },
+  { code: "is-IS", label: "Íslenska", group: "Europe" },
+  { code: "uk-UA", label: "Українська", group: "Europe" },
+];
+
+const DEFAULT_VISIBLE_LOCALES = ["fr", "en-US", "en-GB", "de-DE", "es-ES", "it-IT"];
 
 export default function TranslationsPage() {
   const [domains, setDomains] = useState<TranslationDomain[]>([]);
@@ -36,21 +76,29 @@ export default function TranslationsPage() {
   const [values, setValues] = useState<TranslationValue[]>([]);
   const [missing, setMissing] = useState<TranslationMissingLog[]>([]);
   const [providers, setProviders] = useState<AIProvider[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [localeCatalog, setLocaleCatalog] = useState<LocaleOption[]>(ISO_LOCALES);
+
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  const [search, setSearch] = useState("");
+  const [visibleLocales, setVisibleLocales] = useState<string[]>(DEFAULT_VISIBLE_LOCALES);
   const [domainFilter, setDomainFilter] = useState("");
-  const [locale, setLocale] = useState("fr");
+  const [keyFilter, setKeyFilter] = useState("");
+  const [sourceFilter, setSourceFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState<"" | TranslationGridRow["state"]>("");
+  const [localeFilters, setLocaleFilters] = useState<Record<string, string>>({});
+
   const [sourceLocale, setSourceLocale] = useState("fr");
-  const [targetLocale, setTargetLocale] = useState("en");
+  const [lineTargetLocale, setLineTargetLocale] = useState("en-US");
   const [provider, setProvider] = useState("");
   const [model, setModel] = useState("");
-  const [limit, setLimit] = useState(25);
+  const [batchLimit, setBatchLimit] = useState(50);
 
-  const [editingRow, setEditingRow] = useState<string | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageSize, setPageSize] = useState(25);
+  const [editingCell, setEditingCell] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
 
   const reload = () => {
@@ -61,18 +109,22 @@ export default function TranslationsPage() {
       loadAdminData<any>("translations/keys"),
       loadAdminData<any>("translations/values"),
       loadAdminData<any>("translations/missing"),
+      loadAdminData<any>("translations/locales/catalog"),
       loadAdminData<any>("translations/ai/providers"),
     ])
-      .then(([d, k, v, m, p]) => {
+      .then(([d, k, v, m, catalog, p]) => {
         setDomains(d?.domains || d || []);
         setKeys(k?.keys || k || []);
         setValues(v?.values || v || []);
         setMissing(m?.missing || m || []);
+        const nextLocales = catalog?.locales || catalog || [];
+        if (nextLocales.length) {
+          setLocaleCatalog(nextLocales);
+        }
         const nextProviders = p?.providers || [];
         setProviders(nextProviders);
         if (!provider && nextProviders.length) {
-          const configured = nextProviders.find((item: AIProvider) => item.configured);
-          const selected = configured || nextProviders[0];
+          const selected = nextProviders.find((item: AIProvider) => item.configured) || nextProviders[0];
           setProvider(selected.providerType);
           setModel(selected.defaultModel || "");
         }
@@ -86,76 +138,120 @@ export default function TranslationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const locales = useMemo(() => {
-    const all = new Set<string>(["fr", locale, sourceLocale, targetLocale]);
-    values.forEach((value) => all.add(value.Locale));
-    missing.forEach((item) => all.add(item.Locale));
-    return Array.from(all).filter(Boolean).sort();
-  }, [locale, missing, sourceLocale, targetLocale, values]);
+  useEffect(() => {
+    setPageIndex(0);
+  }, [domainFilter, keyFilter, sourceFilter, stateFilter, localeFilters, visibleLocales, pageSize]);
 
-  const tableRows = useMemo<TranslationTableRow[]>(() => {
-    const needle = search.trim().toLowerCase();
-    return keys
-      .map((item) => {
-        const domain = item.Domain?.Code || String(item.DomainID);
-        const existing = values.find((value) => value.KeyID === item.ID && value.Locale === locale);
-        return {
-          id: existing ? `value-${existing.ID}` : `missing-${item.ID}-${locale}`,
-          valueId: existing?.ID ?? null,
-          keyId: item.ID,
-          domain,
-          key: item.Key,
-          description: item.Description || "",
-          locale,
-          value: existing?.Value || "",
-          missing: !existing || !existing.Value,
-        };
-      })
-      .filter((row) => !domainFilter || row.domain === domainFilter)
-      .filter((row) => {
-        if (!needle) return true;
-        return [row.domain, row.key, row.description, row.locale, row.value]
-          .some((value) => value.toLowerCase().includes(needle));
+  const localeOptions = useMemo(() => {
+    const known = new Map(localeCatalog.map((item) => [item.code, item]));
+    values.forEach((value) => {
+      if (!known.has(value.Locale)) {
+        known.set(value.Locale, { code: value.Locale, label: value.Locale, group: "Base" });
+      }
+    });
+    return Array.from(known.values()).sort((a, b) => {
+      if (a.group !== b.group) return a.group.localeCompare(b.group);
+      return a.code.localeCompare(b.code);
+    });
+  }, [localeCatalog, values]);
+
+  const gridRows = useMemo<TranslationGridRow[]>(() => {
+    const valuesByKeyLocale = new Map<string, TranslationValue>();
+    values.forEach((value) => valuesByKeyLocale.set(`${value.KeyID}:${value.Locale}`, value));
+
+    return keys.map((item) => {
+      const domain = item.Domain?.Code || String(item.DomainID);
+      const rowValues: Record<string, TranslationValue | undefined> = {};
+      visibleLocales.forEach((locale) => {
+        rowValues[locale] = valuesByKeyLocale.get(`${item.ID}:${locale}`);
       });
-  }, [domainFilter, keys, locale, search, values]);
+      const sourceValue = valuesByKeyLocale.get(`${item.ID}:${sourceLocale}`)?.Value || "";
+      const missingLocales = visibleLocales.filter((locale) => !(rowValues[locale]?.Value || "").trim());
+      const state = missingLocales.length === 0 ? "complete" : missingLocales.length === visibleLocales.length ? "missing" : "partial";
+      return {
+        keyId: item.ID,
+        domain,
+        key: item.Key,
+        description: item.Description || "",
+        sourceValue,
+        values: rowValues,
+        missingLocales,
+        state,
+      };
+    });
+  }, [keys, sourceLocale, values, visibleLocales]);
 
-  const visibleRows = tableRows.slice(0, 250);
-  const missingCount = tableRows.filter((row) => row.missing).length;
+  const filteredRows = useMemo(() => {
+    const domainNeedle = domainFilter.trim().toLowerCase();
+    const keyNeedle = keyFilter.trim().toLowerCase();
+    const sourceNeedle = sourceFilter.trim().toLowerCase();
+    return gridRows.filter((row) => {
+      if (domainNeedle && !row.domain.toLowerCase().includes(domainNeedle)) return false;
+      if (keyNeedle && !`${row.key} ${row.description}`.toLowerCase().includes(keyNeedle)) return false;
+      if (sourceNeedle && !row.sourceValue.toLowerCase().includes(sourceNeedle)) return false;
+      if (stateFilter && row.state !== stateFilter) return false;
+      for (const locale of visibleLocales) {
+        const filter = (localeFilters[locale] || "").trim().toLowerCase();
+        if (filter && !(row.values[locale]?.Value || "").toLowerCase().includes(filter)) return false;
+      }
+      return true;
+    });
+  }, [domainFilter, gridRows, keyFilter, localeFilters, sourceFilter, stateFilter, visibleLocales]);
 
-  const saveRow = async (row: TranslationTableRow) => {
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safePageIndex = Math.min(pageIndex, totalPages - 1);
+  const pageRows = filteredRows.slice(safePageIndex * pageSize, safePageIndex * pageSize + pageSize);
+
+  const summary = useMemo(() => {
+    const complete = filteredRows.filter((row) => row.state === "complete").length;
+    const partial = filteredRows.filter((row) => row.state === "partial").length;
+    const missingRows = filteredRows.filter((row) => row.state === "missing").length;
+    const missingCells = filteredRows.reduce((count, row) => count + row.missingLocales.length, 0);
+    return { complete, partial, missingRows, missingCells };
+  }, [filteredRows]);
+
+  const toggleLocale = (locale: string) => {
+    setVisibleLocales((current) => {
+      if (current.includes(locale)) {
+        if (current.length === 1) return current;
+        return current.filter((item) => item !== locale);
+      }
+      return [...current, locale];
+    });
+  };
+
+  const setEuropeLocales = () => {
+    setVisibleLocales(localeOptions.filter((item) => item.group === "Europe" || item.code === "fr").map((item) => item.code));
+  };
+
+  const saveCell = async (row: TranslationGridRow, locale: string) => {
     const value = editingValue.trim();
     if (!value) {
       setError("Valeur vide refusée.");
       return;
     }
+    const existing = row.values[locale];
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
-      const response = row.valueId
-        ? await fetch(`/admin/api/translations/values/${row.valueId}`, {
+      const response = existing
+        ? await fetch(`/admin/api/translations/values/${existing.ID}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
-            body: JSON.stringify({ KeyID: row.keyId, Locale: row.locale, Value: value }),
+            body: JSON.stringify({ KeyID: row.keyId, Locale: locale, Value: value }),
           })
         : await fetch("/admin/api/translations/batch-update", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "same-origin",
-            body: JSON.stringify([
-              {
-                domain: row.domain,
-                key: row.key,
-                locale: row.locale,
-                value,
-              },
-            ]),
+            body: JSON.stringify([{ domain: row.domain, key: row.key, locale, value }]),
           });
       if (!response.ok) throw new Error(await response.text());
-      setEditingRow(null);
+      setEditingCell(null);
       setEditingValue("");
-      setNotice("Valeur enregistrée côté Go.");
+      setNotice(`Valeur ${locale} enregistrée pour ${row.key}.`);
       reload();
     } catch (e: any) {
       setError(e.message || "Erreur de sauvegarde.");
@@ -164,53 +260,35 @@ export default function TranslationsPage() {
     }
   };
 
-  const exportLocale = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const data = await loadAdminData<Record<string, string>>(
-        `translations/export?locale=${encodeURIComponent(locale)}`,
-      );
-      const blob = new Blob([JSON.stringify(data, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `nexus-translations.${locale}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-    } catch (e: any) {
-      setError(e.message || "Export impossible.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const translateMissing = async () => {
+  const translateKeys = async (keysToTranslate: string[], targets: string[], limit: number) => {
     setBusy(true);
     setError(null);
     setNotice(null);
+    let translated = 0;
+    let errors = 0;
     try {
-      const response = await fetch("/admin/api/translations/ai/translate-missing", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({
-          sourceLocale,
-          targetLocale,
-          provider,
-          model,
-          limit,
-          domains: domainFilter ? [domainFilter] : undefined,
-        }),
-      });
-      if (!response.ok) throw new Error(await response.text());
-      const result = await response.json();
-      setLocale(targetLocale);
-      setNotice(
-        `Traduction IA terminée : ${result.translated || 0} valeur(s), ${result.errors || 0} erreur(s).`,
-      );
+      for (const targetLocale of targets) {
+        if (!targetLocale || targetLocale === sourceLocale) continue;
+        const response = await fetch("/admin/api/translations/ai/translate-missing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "same-origin",
+          body: JSON.stringify({
+            sourceLocale,
+            targetLocale,
+            provider,
+            model,
+            limit,
+            keys: keysToTranslate.length ? keysToTranslate : undefined,
+            domains: domainFilter ? [domainFilter] : undefined,
+          }),
+        });
+        if (!response.ok) throw new Error(await response.text());
+        const result = await response.json();
+        translated += result.translated || 0;
+        errors += result.errors || 0;
+      }
+      setNotice(`Traduction IA terminée : ${translated} valeur(s), ${errors} erreur(s).`);
       reload();
     } catch (e: any) {
       setError(e.message || "Traduction IA impossible.");
@@ -219,73 +297,66 @@ export default function TranslationsPage() {
     }
   };
 
+  const exportVisible = async () => {
+    const exportRows = filteredRows.map((row) => ({
+      domain: row.domain,
+      key: row.key,
+      source: row.sourceValue,
+      values: Object.fromEntries(visibleLocales.map((locale) => [locale, row.values[locale]?.Value || ""])),
+      state: row.state,
+    }));
+    const blob = new Blob([JSON.stringify(exportRows, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "nexus-translations-table.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <AdminShell
       title="Traductions Nexus"
-      description="Tableau Domaine / Clé / Description / Locale / Valeur. Next.js appelle uniquement les APIs Go."
+      description="Tableau type Lexik: domaines, clés, locales dynamiques, filtres par colonne, pagination et traduction IA via Go."
     >
       {error ? <ErrorState message={error} /> : null}
-      {notice ? <p className="good">{notice}</p> : null}
+      {notice ? <p className="alert ok">{notice}</p> : null}
       {loading && !error ? <LoadingState /> : null}
 
       {!loading && !error && (
         <>
-          <section className="panel">
-            <h2>Vue traduction</h2>
-            <p>
-              {domains.length} domaine(s), {keys.length} clé(s), {values.length} valeur(s),{" "}
-              {missing.length} log(s) missing. Locale affichée : <code>{locale}</code>.
-            </p>
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-              <label>
-                Recherche
-                <input
-                  type="text"
-                  placeholder="Domaine, clé, description, valeur..."
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                />
-              </label>
-              <label>
-                Domaine
-                <select value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
-                  <option value="">Tous</option>
-                  {domains.map((domain) => (
-                    <option key={domain.ID} value={domain.Code}>{domain.Code}</option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Locale table
-                <input value={locale} onChange={(event) => setLocale(event.target.value.trim())} list="translation-locales" />
-              </label>
-              <datalist id="translation-locales">
-                {locales.map((item) => <option key={item} value={item} />)}
-              </datalist>
+          <section className="translation-hero">
+            <div>
+              <p className="eyebrow">Lexik-style translation grid</p>
+              <h2>Catalogue serveur</h2>
+              <p>
+                {keys.length} clé(s), {values.length} valeur(s), {missing.length} log(s) missing. Toutes les actions passent par les APIs Go.
+              </p>
             </div>
-            <p className={missingCount ? "bad" : "good"}>
-              {missingCount} valeur(s) manquante(s) dans la vue filtrée.
-            </p>
-            <p>
-              <a href="/nexus/translations/import">Import / Preview / Commit</a>{" · "}
-              <a href="/nexus/translations/missing">Logs clés manquantes</a>{" · "}
-              <a href="/nexus/translations/logs">Logs imports</a>
-            </p>
+            <div className="translation-kpis">
+              <div><span>Complètes</span><strong>{summary.complete}</strong></div>
+              <div><span>Partielles</span><strong>{summary.partial}</strong></div>
+              <div><span>Lignes vides</span><strong>{summary.missingRows}</strong></div>
+              <div><span>Cellules à traduire</span><strong>{summary.missingCells}</strong></div>
+            </div>
           </section>
 
           <section className="panel">
-            <h2>Outil de traduction IA backend</h2>
-            <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
+            <div className="translation-toolbar">
               <label>
                 Source
-                <input value={sourceLocale} onChange={(event) => setSourceLocale(event.target.value.trim())} />
+                <select value={sourceLocale} onChange={(event) => setSourceLocale(event.target.value)}>
+                  {localeOptions.map((item) => <option key={item.code} value={item.code}>{item.code} · {item.label}</option>)}
+                </select>
               </label>
               <label>
-                Cible
-                <input value={targetLocale} onChange={(event) => setTargetLocale(event.target.value.trim())} />
+                Locale ligne
+                <select value={lineTargetLocale} onChange={(event) => setLineTargetLocale(event.target.value)}>
+                  {localeOptions.map((item) => <option key={item.code} value={item.code}>{item.code} · {item.label}</option>)}
+                </select>
               </label>
               <label>
-                Provider backend
+                Provider IA
                 <select
                   value={provider}
                   onChange={(event) => {
@@ -306,88 +377,162 @@ export default function TranslationsPage() {
                 <input value={model} onChange={(event) => setModel(event.target.value)} />
               </label>
               <label>
-                Limite
+                Batch
                 <input
                   type="number"
                   min={1}
                   max={100}
-                  value={limit}
-                  onChange={(event) => setLimit(Number(event.target.value))}
+                  value={batchLimit}
+                  onChange={(event) => setBatchLimit(Number(event.target.value))}
                 />
               </label>
             </div>
-            <p>
-              <button onClick={translateMissing} disabled={busy || !targetLocale || sourceLocale === targetLocale}>
-                Traduire les valeurs manquantes via Go
-              </button>{" "}
-              <button onClick={exportLocale} disabled={busy}>Exporter locale affichée</button>{" "}
-              <button onClick={reload} disabled={busy}>Rafraîchir</button>
-            </p>
+            <div className="translation-actions">
+              <button className="primary" onClick={() => translateKeys([], visibleLocales, batchLimit)} disabled={busy}>
+                Traduction globale par batch
+              </button>
+              <button className="secondary" onClick={() => translateKeys([], [lineTargetLocale], batchLimit)} disabled={busy || lineTargetLocale === sourceLocale}>
+                Traduire locale ligne sélectionnée
+              </button>
+              <button className="secondary" onClick={exportVisible} disabled={busy}>Exporter vue</button>
+              <button className="secondary" onClick={reload} disabled={busy}>Rafraîchir</button>
+            </div>
           </section>
 
           <section className="panel">
-            <h2>Tableau Flutter</h2>
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Domaine</th>
-                  <th>Clé</th>
-                  <th>Description</th>
-                  <th>Locale</th>
-                  <th>Valeur</th>
-                  <th>État</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.domain}</td>
-                    <td><code>{row.key}</code></td>
-                    <td>{row.description || "-"}</td>
-                    <td><code>{row.locale}</code></td>
-                    <td>
-                      {editingRow === row.id ? (
-                        <textarea
-                          value={editingValue}
-                          onChange={(event) => setEditingValue(event.target.value)}
-                          rows={3}
-                          style={{ width: "100%" }}
-                        />
-                      ) : row.value ? (
-                        row.value
-                      ) : (
-                        <span className="muted">Valeur manquante</span>
-                      )}
-                    </td>
-                    <td className={row.missing ? "bad" : "good"}>
-                      {row.missing ? "missing" : "ok"}
-                    </td>
-                    <td>
-                      {editingRow === row.id ? (
-                        <>
-                          <button onClick={() => saveRow(row)} disabled={busy}>Enregistrer</button>{" "}
-                          <button onClick={() => setEditingRow(null)} disabled={busy}>Annuler</button>
-                        </>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            setEditingRow(row.id);
-                            setEditingValue(row.value);
-                          }}
-                        >
-                          Modifier
-                        </button>
-                      )}
-                    </td>
+            <h2>Locales ISO préparées</h2>
+            <div className="locale-toolbar">
+              <button className="secondary" onClick={() => setVisibleLocales(DEFAULT_VISIBLE_LOCALES)}>Défaut</button>
+              <button className="secondary" onClick={setEuropeLocales}>Europe</button>
+              <button className="secondary" onClick={() => setVisibleLocales(localeOptions.filter((item) => item.group === "US" || item.code === "fr").map((item) => item.code))}>US</button>
+              <button className="secondary" onClick={() => setVisibleLocales(localeOptions.map((item) => item.code))}>Toutes</button>
+            </div>
+            <div className="locale-checkbox-grid">
+              {localeOptions.map((item) => (
+                <label key={item.code} className="locale-check">
+                  <input
+                    type="checkbox"
+                    checked={visibleLocales.includes(item.code)}
+                    onChange={() => toggleLocale(item.code)}
+                  />
+                  <span><strong>{item.code}</strong>{item.label}<em>{item.group}</em></span>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel translation-table-panel">
+            <div className="translation-table-header">
+              <h2>Tableau des traductions</h2>
+              <div className="pagination-controls">
+                <span>{filteredRows.length} ligne(s)</span>
+                <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                  {[10, 25, 50, 100].map((size) => <option key={size} value={size}>{size} / page</option>)}
+                </select>
+                <button className="secondary" onClick={() => setPageIndex(Math.max(0, safePageIndex - 1))} disabled={safePageIndex === 0}>Précédent</button>
+                <strong>{safePageIndex + 1} / {totalPages}</strong>
+                <button className="secondary" onClick={() => setPageIndex(Math.min(totalPages - 1, safePageIndex + 1))} disabled={safePageIndex + 1 >= totalPages}>Suivant</button>
+              </div>
+            </div>
+
+            <div className="table-wrap translation-grid-wrap">
+              <table className="translation-grid-table">
+                <thead>
+                  <tr>
+                    <th className="sticky-col domain-col">Domaine</th>
+                    <th className="sticky-col key-col">Clé</th>
+                    <th>Valeur source</th>
+                    {visibleLocales.map((locale) => <th key={locale}>{locale}</th>)}
+                    <th>État</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {!visibleRows.length ? <p className="muted">Aucune clé à afficher.</p> : null}
-            {tableRows.length > visibleRows.length ? (
-              <p>... et {tableRows.length - visibleRows.length} autre(s) ligne(s). Affine la recherche pour éditer.</p>
-            ) : null}
+                  <tr className="filter-row">
+                    <th className="sticky-col domain-col">
+                      <input value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)} placeholder="Filtrer domaine" />
+                    </th>
+                    <th className="sticky-col key-col">
+                      <input value={keyFilter} onChange={(event) => setKeyFilter(event.target.value)} placeholder="Filtrer clé" />
+                    </th>
+                    <th>
+                      <input value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} placeholder="Filtrer valeur" />
+                    </th>
+                    {visibleLocales.map((locale) => (
+                      <th key={locale}>
+                        <input
+                          value={localeFilters[locale] || ""}
+                          onChange={(event) => setLocaleFilters((current) => ({ ...current, [locale]: event.target.value }))}
+                          placeholder={`Filtrer ${locale}`}
+                        />
+                      </th>
+                    ))}
+                    <th>
+                      <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value as "" | TranslationGridRow["state"])}>
+                        <option value="">Tous</option>
+                        <option value="complete">OK</option>
+                        <option value="partial">Partiel</option>
+                        <option value="missing">Missing</option>
+                      </select>
+                    </th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map((row) => (
+                    <tr key={row.key}>
+                      <td className="sticky-col domain-col"><span className="status">{row.domain}</span></td>
+                      <td className="sticky-col key-col">
+                        <code>{row.key}</code>
+                        {row.description ? <small>{row.description}</small> : null}
+                      </td>
+                      <td className="source-cell">{row.sourceValue || <span className="muted-panel">-</span>}</td>
+                      {visibleLocales.map((locale) => {
+                        const cell = row.values[locale];
+                        const cellId = `${row.key}:${locale}`;
+                        const isEditing = editingCell === cellId;
+                        return (
+                          <td key={locale} className={cell?.Value ? "translation-cell ok" : "translation-cell missing"}>
+                            {isEditing ? (
+                              <>
+                                <textarea value={editingValue} onChange={(event) => setEditingValue(event.target.value)} />
+                                <div className="cell-actions">
+                                  <button className="primary" onClick={() => saveCell(row, locale)} disabled={busy}>OK</button>
+                                  <button className="secondary" onClick={() => setEditingCell(null)} disabled={busy}>Annuler</button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <p>{cell?.Value || "Valeur manquante"}</p>
+                                <button
+                                  className="link-button"
+                                  onClick={() => {
+                                    setEditingCell(cellId);
+                                    setEditingValue(cell?.Value || "");
+                                  }}
+                                >
+                                  Éditer
+                                </button>
+                              </>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td><span className={`status ${row.state}`}>{row.state}</span></td>
+                      <td>
+                        <div className="row-actions">
+                          <button className="secondary" onClick={() => translateKeys([row.key], [lineTargetLocale], 1)} disabled={busy || lineTargetLocale === sourceLocale}>
+                            Traduire ligne
+                          </button>
+                          <button className="secondary" onClick={() => translateKeys([row.key], visibleLocales, visibleLocales.length)} disabled={busy}>
+                            Toutes locales
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!pageRows.length ? <p className="hint">Aucune traduction ne correspond aux filtres.</p> : null}
           </section>
         </>
       )}

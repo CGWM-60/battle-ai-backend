@@ -66,6 +66,7 @@ type TranslationService interface {
 	GetMissing(ctx context.Context) ([]models.TranslationMissingLog, error)
 	ExportTranslations(ctx context.Context, lang string) (map[string]string, error)
 	BatchUpdate(ctx context.Context, entries []TranslationEntry) error
+	GetSupportedLocaleCatalog(ctx context.Context) ([]TranslationLocaleOption, error)
 	GetAITranslationProviders(ctx context.Context) ([]TranslationAIProviderStatus, error)
 	AITranslateMissing(ctx context.Context, req AITranslateMissingRequest) (*AITranslateMissingResult, error)
 }
@@ -80,6 +81,12 @@ type TranslationAIProviderStatus struct {
 	DisplayName  string `json:"displayName"`
 	DefaultModel string `json:"defaultModel"`
 	Configured   bool   `json:"configured"`
+}
+
+type TranslationLocaleOption struct {
+	Code  string `json:"code"`
+	Label string `json:"label"`
+	Group string `json:"group"`
 }
 
 type AITranslateMissingRequest struct {
@@ -694,6 +701,33 @@ var DefaultFrenchFallback = map[string]string{
 	"nexus_game.city.security":                    "Sécurité",
 	"nexus_game.loading":                          "Chargement du Nexus...",
 	"nexus_game.offline":                          "Mode hors-ligne • données locales",
+
+	// MmoProfileCreationScreen + provider (traduction serveur - domaine nexus_game)
+	"nexus_game.profile.creation.title":                   "CRÉATION DU PROFIL GAMER",
+	"nexus_game.profile.creation.subtitle":                "Choisis ton apparence, ton allégeance et ton agent IA. Ces choix sont stockés côté serveur (ProfileGamer).",
+	"nexus_game.profile.section.avatar":                   "AVATAR",
+	"nexus_game.profile.section.faction":                  "FACTION",
+	"nexus_game.profile.section.companion":                "COMPAGNON IA",
+	"nexus_game.profile.pseudo_label":                     "PSEUDO EN JEU",
+	"nexus_game.profile.city_label":                       "NOM DE TA VILLE",
+	"nexus_game.profile.pseudo_hint":                      "Ton pseudo",
+	"nexus_game.profile.city_hint":                        "Ex: Neon Spire",
+	"nexus_game.profile.create_button":                    "CRÉER LE PROFIL & ENTRER DANS NEXUS",
+	"nexus_game.profile.error.load_choices":               "Impossible de charger les choix (avatars/factions/compagnons). Vérifie que le backend Go est lancé et que les seeds/admin ont créé des entrées.",
+	"nexus_game.profile.validation.missing_choices":       "Choisis un avatar, une faction et un compagnon IA.",
+	"nexus_game.profile.validation.missing_pseudo_city":   "Pseudo et nom de ville sont obligatoires.",
+	"nexus_game.profile.error.save":                       "Échec de la sauvegarde du profil: {error}",
+	"nexus_game.profile.no_items":                         "Aucun élément disponible (crée via admin ou seeds)",
+	"nexus_game.profile.footer":                           "User #{id} • Le serveur reste la source de vérité",
+	"nexus_game.profile.retry":                            "Réessayer",
+	"nexus_game.profile.role.armee":                       "ARMÉE",
+	"nexus_game.profile.role.ville":                       "VILLE",
+	"nexus_game.profile.role.diplomatie":                  "DIPLOMATIE",
+	"nexus_game.profile.role.espionnage":                  "ESPIONNAGE",
+	"nexus_game.profile.role.commerce":                    "COMMERCE",
+	"nexus_game.profile.role.recherche":                   "RECHERCHE",
+	"nexus_game.profile.agent.default_personality":        "Impulsif, loyal à la faction, méprise les diplomates, parle comme un soldat de rue...",
+	"nexus_game.profile.agent.budget_limit":               "MAX 5 000 ₦ / mois",
 	"profile.action.logout_network":               "Quitter le réseau",
 	"profile.form.confirm_password":               "Confirmer le mot de passe",
 	"profile.form.new_password":                   "Nouveau mot de passe",
@@ -1057,6 +1091,41 @@ func (s *dbTranslationService) ExportTranslations(ctx context.Context, lang stri
 
 func (s *dbTranslationService) BatchUpdate(ctx context.Context, entries []TranslationEntry) error {
 	return s.UpsertBatch(ctx, entries)
+}
+
+func (s *dbTranslationService) GetSupportedLocaleCatalog(ctx context.Context) ([]TranslationLocaleOption, error) {
+	return []TranslationLocaleOption{
+		{Code: "fr", Label: "Français source", Group: "Base"},
+		{Code: "fr-FR", Label: "Français France", Group: "Europe"},
+		{Code: "en-GB", Label: "English UK", Group: "Europe"},
+		{Code: "en-US", Label: "English US", Group: "US"},
+		{Code: "es-US", Label: "Español US", Group: "US"},
+		{Code: "de-DE", Label: "Deutsch", Group: "Europe"},
+		{Code: "es-ES", Label: "Español España", Group: "Europe"},
+		{Code: "it-IT", Label: "Italiano", Group: "Europe"},
+		{Code: "pt-PT", Label: "Português Portugal", Group: "Europe"},
+		{Code: "nl-NL", Label: "Nederlands", Group: "Europe"},
+		{Code: "sv-SE", Label: "Svenska", Group: "Europe"},
+		{Code: "da-DK", Label: "Dansk", Group: "Europe"},
+		{Code: "fi-FI", Label: "Suomi", Group: "Europe"},
+		{Code: "no-NO", Label: "Norsk", Group: "Europe"},
+		{Code: "pl-PL", Label: "Polski", Group: "Europe"},
+		{Code: "cs-CZ", Label: "Čeština", Group: "Europe"},
+		{Code: "sk-SK", Label: "Slovenčina", Group: "Europe"},
+		{Code: "sl-SI", Label: "Slovenščina", Group: "Europe"},
+		{Code: "hr-HR", Label: "Hrvatski", Group: "Europe"},
+		{Code: "hu-HU", Label: "Magyar", Group: "Europe"},
+		{Code: "ro-RO", Label: "Română", Group: "Europe"},
+		{Code: "bg-BG", Label: "Български", Group: "Europe"},
+		{Code: "el-GR", Label: "Ελληνικά", Group: "Europe"},
+		{Code: "et-EE", Label: "Eesti", Group: "Europe"},
+		{Code: "lv-LV", Label: "Latviešu", Group: "Europe"},
+		{Code: "lt-LT", Label: "Lietuvių", Group: "Europe"},
+		{Code: "ga-IE", Label: "Gaeilge", Group: "Europe"},
+		{Code: "mt-MT", Label: "Malti", Group: "Europe"},
+		{Code: "is-IS", Label: "Íslenska", Group: "Europe"},
+		{Code: "uk-UA", Label: "Українська", Group: "Europe"},
+	}, nil
 }
 
 func (s *dbTranslationService) GetAITranslationProviders(ctx context.Context) ([]TranslationAIProviderStatus, error) {

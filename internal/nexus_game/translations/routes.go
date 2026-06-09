@@ -67,6 +67,14 @@ func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 		}
 		c.JSON(http.StatusOK, gin.H{"languages": languages})
 	})
+	r.GET("/api/translations/locales/catalog", func(c *gin.Context) {
+		locales, err := svc.GetSupportedLocaleCatalog(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"locales": locales})
+	})
 
 	// Traductions pour un domaine spécifique
 	r.GET("/api/translations/domain/:domain", func(c *gin.Context) {
@@ -331,6 +339,14 @@ func RegisterAdminRoutes(adminGroup *gin.RouterGroup, database *gorm.DB) {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "updated"})
+	})
+	adminGroup.GET("/translations/locales/catalog", func(c *gin.Context) {
+		locales, err := svc.GetSupportedLocaleCatalog(c.Request.Context())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"locales": locales})
 	})
 	adminGroup.GET("/translations/ai/providers", func(c *gin.Context) {
 		providers, err := svc.GetAITranslationProviders(c.Request.Context())
