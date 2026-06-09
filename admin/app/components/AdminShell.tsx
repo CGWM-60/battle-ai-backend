@@ -3,7 +3,9 @@
 import Link from "next/link";
 import {
   Activity,
+  BookOpen,
   BrainCircuit,
+  Building2,
   Coins,
   Gauge,
   ListChecks,
@@ -11,6 +13,7 @@ import {
   Radio,
   Shield,
   Users,
+  Zap,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -25,6 +28,9 @@ const navItems = [
   { href: "/live/", path: "/admin/live/", label: "Live", icon: Radio },
   { href: "/nexus/translations/", path: "/admin/nexus/translations/", label: "Traductions", icon: ListChecks },
   { href: "/nexus/mmo/", path: "/admin/nexus/mmo/", label: "Nexus MMO", icon: Users },
+  { href: "/nexus/mmo/buildings", path: "/admin/nexus/mmo/buildings", label: "Bâtiments", icon: Building2 },
+  { href: "/nexus/mmo/units", path: "/admin/nexus/mmo/units", label: "Unités", icon: Zap },
+  { href: "/nexus/mmo/research", path: "/admin/nexus/mmo/research", label: "Recherches", icon: BookOpen },
 ];
 
 export function AdminShell({

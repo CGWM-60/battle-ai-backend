@@ -594,6 +594,40 @@ export default function NexusMmoPage() {
                 <button style={{ marginTop: 8, width: '100%' }}>Ouvrir Page IA Outputs →</button>
               </div>
 
+              {/* NEW: Content CRUD Cards per reference v2.0 */}
+              <div 
+                className="card" 
+                style={{ border: '1px solid #f59e0b', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => window.location.href = '/nexus/mmo/buildings'}
+              >
+                <h3>Bâtiments (Catalogue 1-30)</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#f59e0b' }}>🏗️</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>CRUD complet + upload images tier 1-4 (Habitat, Solaire, Ferme, Mine, Centre IA...)</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Gérer les Bâtiments →</button>
+              </div>
+
+              <div 
+                className="card" 
+                style={{ border: '1px solid #3b82f6', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => window.location.href = '/nexus/mmo/units'}
+              >
+                <h3>Unités (Catalogue 1-30)</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#3b82f6' }}>⚔️</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>CRUD + assets + stats (Milicien, Drones, Éclaireurs, Titan...)</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Gérer les Unités →</button>
+              </div>
+
+              <div 
+                className="card" 
+                style={{ border: '1px solid #8b5cf6', padding: 16, borderRadius: 8, cursor: 'pointer' }}
+                onClick={() => window.location.href = '/nexus/mmo/research'}
+              >
+                <h3>Arbre de Recherches</h3>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#8b5cf6' }}>🔬</div>
+                <p style={{ fontSize: 13, color: '#64748b' }}>11 branches × 7 tiers, dépendances, effets, upload assets</p>
+                <button style={{ marginTop: 8, width: '100%' }}>Gérer les Recherches →</button>
+              </div>
+
             </div>
           </section>
         </>
