@@ -8,6 +8,7 @@ import { AdminShell } from "../../../components/AdminShell";
 const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
 
 interface Research {
+  id: number;
   contentId: string;
   nameKey?: string;
   branch?: string;
@@ -19,6 +20,28 @@ interface Research {
   prerequisitesJSON?: string;
   assetId?: string;
   assetsByTier?: Record<string, string>;
+}
+
+const ASSET_KEYS = ["main", "tier1", "tier2", "tier3", "tier4"] as const;
+
+function buildAssetUrl(folder: string, fileName?: string) {
+  if (!fileName) return null;
+  return `${API_BASE}/nexus-assets/content/${folder}/${encodeURIComponent(fileName)}`;
+}
+
+function collectAssets(item: Pick<Research, "assetId" | "assetsByTier">) {
+  const assetsByTier = item.assetsByTier && typeof item.assetsByTier === "object"
+    ? item.assetsByTier
+    : {};
+
+  return ASSET_KEYS.map((key) => {
+    const fileName = key === "main" ? (item.assetId || assetsByTier.main) : assetsByTier[key];
+    return { key, fileName, url: buildAssetUrl("research", fileName) };
+  }).filter((asset) => Boolean(asset.fileName));
+}
+
+function hasMeaningfulResearchData(item: Research) {
+  return Boolean(item.contentId || item.nameKey || item.branch || item.assetId || (item.assetsByTier && Object.keys(item.assetsByTier).length > 0));
 }
 
 export default function ResearchAdminPage() {
@@ -62,7 +85,10 @@ export default function ResearchAdminPage() {
     if (!current) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/research/${current.contentId}`, { method: 'DELETE', credentials: 'same-origin' });
+      const target = current.contentId
+        ? `${API_BASE}/api/nexus-game/admin/content/research/${encodeURIComponent(current.contentId)}`
+        : `${API_BASE}/api/nexus-game/admin/content/research/by-id/${current.id}`;
+      const res = await fetch(target, { method: 'DELETE', credentials: 'same-origin' });
       if (!res.ok) throw new Error(await res.text());
       closeModal(); await fetchItems();
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
@@ -87,6 +113,8 @@ export default function ResearchAdminPage() {
     } catch(e:any){ setError(e.message); } finally { setUploading(null); }
   };
 
+  const invalidItems = items.filter((item) => !item.contentId && hasMeaningfulResearchData(item));
+
   return (
     <AdminShell title="Recherches — Arbre Nexus v2.0" description="11 branches × 7 tiers. CRUD + upload assets + dépendances (prerequisitesJSON).">
       <button onClick={() => window.location.href = '/admin/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour Nexus MMO</button>
@@ -95,6 +123,8 @@ export default function ResearchAdminPage() {
         <button onClick={openCreate} style={{ background: '#8b5cf6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>+ Créer Nœud</button>
       </div>
 
+      {invalidItems.length > 0 && <p style={{ marginBottom: 12, color: '#fca5a5', fontSize: 13 }}>{invalidItems.length} entrée(s) invalide(s) sans <code>contentId</code> détectée(s).</p>}
+
       {loading && <p>Chargement...</p>}
       {error && <p style={{color:'red'}}>{error}</p>}
 
@@ -102,22 +132,29 @@ export default function ResearchAdminPage() {
         <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Branche</th><th>Tier</th><th>Rareté</th><th>Assets</th><th>Actions</th></tr></thead>
         <tbody>
           {items.map(r => {
-            const mainAsset = r.assetId || (r.assetsByTier && (r.assetsByTier.tier1 || r.assetsByTier.main));
-            const previewUrl = mainAsset ? `/nexus-assets/content/research/${mainAsset}` : null;
+            const assets = collectAssets(r);
+            const previewAssets = assets.slice(0, 4);
             return (
-              <tr key={r.contentId} style={{ borderTop: '1px solid #334155' }}>
+              <tr key={r.contentId || `research-${r.id}`} style={{ borderTop: '1px solid #334155' }}>
                 <td style={{ padding: 4 }}>
-                  {previewUrl ? (
-                    <img src={previewUrl} alt={r.contentId} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  {previewAssets.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 48px)', gap: 4 }}>
+                      {previewAssets.map((asset) => (
+                        <div key={asset.key} style={{ position: 'relative' }}>
+                          <img src={asset.url!} alt={`${r.contentId || `research-${r.id}`}-${asset.key}`} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155', background: '#0f172a' }} onError={(e) => (e.currentTarget.style.opacity = '0.18')} />
+                          <span style={{ position: 'absolute', left: 2, bottom: 2, fontSize: 9, padding: '1px 3px', borderRadius: 3, background: 'rgba(15,23,42,0.82)', color: '#cbd5e1' }}>{asset.key}</span>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <div style={{ width: 48, height: 48, background: '#1e2937', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>no img</div>
                   )}
                 </td>
-                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.contentId}</td>
-                <td>{r.nameKey}</td>
-                <td>{r.branch}</td>
-                <td>{r.tier}</td>
-                <td>{r.rarity}</td>
+                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.contentId || <span style={{ color: '#fca5a5' }}>#{r.id} — contentId manquant</span>}</td>
+                <td>{r.nameKey || '—'}</td>
+                <td>{r.branch || '—'}</td>
+                <td>{r.tier || '—'}</td>
+                <td>{r.rarity || '—'}</td>
                 <td style={{ fontSize: 11 }}>{r.assetId || (r.assetsByTier && Object.keys(r.assetsByTier).join(', '))}</td>
                 <td><button onClick={() => openEdit(r)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(r)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
               </tr>
@@ -133,7 +170,7 @@ export default function ResearchAdminPage() {
             <h3>{modal === 'create' ? 'Créer Nœud Recherche' : modal === 'edit' ? 'Éditer Nœud' : 'Supprimer Nœud'}</h3>
 
             {modal === 'delete' && current ? (
-              <><p>Supprimer <strong>{current.contentId}</strong> ?</p><button onClick={doDelete} style={{ background: '#ef4444', color: 'white', padding: '8px 16px' }}>Confirmer</button> <button onClick={closeModal}>Annuler</button></>
+              <><p>Supprimer <strong>{current.contentId || `#${current.id}`}</strong> ?</p><button onClick={doDelete} style={{ background: '#ef4444', color: 'white', padding: '8px 16px' }}>Confirmer</button> <button onClick={closeModal}>Annuler</button></>
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>

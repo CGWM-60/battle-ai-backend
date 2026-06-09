@@ -75,6 +75,10 @@ func (s *ContentService) DeleteBuilding(contentID string) error {
 	return s.db.Where("content_id = ?", contentID).Delete(&models.BuildingDefinition{}).Error
 }
 
+func (s *ContentService) DeleteBuildingByID(id uint) error {
+	return s.db.Delete(&models.BuildingDefinition{}, id).Error
+}
+
 // UploadAsset saves the file for a content item and updates the definition's asset fields.
 // Called from handler (multipart form "file", "tier" optional "tier1|2|3|4", "assetId").
 // Images served later via static /nexus-assets/content/buildings/{filename}
@@ -289,6 +293,10 @@ func (s *ContentService) DeleteUnit(contentID string) error {
 	return s.db.Where("content_id = ?", contentID).Delete(&models.UnitDefinition{}).Error
 }
 
+func (s *ContentService) DeleteUnitByID(id uint) error {
+	return s.db.Delete(&models.UnitDefinition{}, id).Error
+}
+
 // === Research (full CRUD + 11 branches x 7 tiers per §6) ===
 func (s *ContentService) ListResearch(publishedOnly bool) ([]models.ResearchDefinition, error) {
 	var list []models.ResearchDefinition
@@ -331,4 +339,8 @@ func (s *ContentService) CreateOrUpdateResearch(def *models.ResearchDefinition) 
 
 func (s *ContentService) DeleteResearch(contentID string) error {
 	return s.db.Where("content_id = ?", contentID).Delete(&models.ResearchDefinition{}).Error
+}
+
+func (s *ContentService) DeleteResearchByID(id uint) error {
+	return s.db.Delete(&models.ResearchDefinition{}, id).Error
 }

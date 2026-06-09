@@ -6,6 +6,7 @@ import { AdminShell } from "../../../components/AdminShell";
 const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
 
 interface Building {
+  id: number;
   contentId: string;
   nameKey?: string;
   descriptionKey?: string;
@@ -19,6 +20,38 @@ interface Building {
   effectsJSON?: string;
   aiAgentSlots?: number;
   isPublished?: boolean;
+}
+
+const ASSET_KEYS = ["main", "tier1", "tier2", "tier3", "tier4"] as const;
+
+function buildAssetUrl(folder: string, fileName?: string) {
+  if (!fileName) return null;
+  return `${API_BASE}/nexus-assets/content/${folder}/${encodeURIComponent(fileName)}`;
+}
+
+function collectAssets(item: Pick<Building, "assetId" | "assetsByTier">) {
+  const assetsByTier = item.assetsByTier && typeof item.assetsByTier === "object"
+    ? item.assetsByTier
+    : {};
+
+  return ASSET_KEYS.map((key) => {
+    const fileName = key === "main" ? (item.assetId || assetsByTier.main) : assetsByTier[key];
+    return {
+      key,
+      fileName,
+      url: buildAssetUrl("buildings", fileName),
+    };
+  }).filter((asset) => Boolean(asset.fileName));
+}
+
+function hasMeaningfulBuildingData(item: Building) {
+  return Boolean(
+    item.contentId ||
+      item.nameKey ||
+      item.descriptionKey ||
+      item.assetId ||
+      (item.assetsByTier && Object.keys(item.assetsByTier).length > 0),
+  );
 }
 
 export default function BuildingsAdminPage() {
@@ -38,7 +71,7 @@ export default function BuildingsAdminPage() {
       const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/buildings`, { credentials: "same-origin" });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      setItems(data.buildings || []);
+      setItems(Array.isArray(data.buildings) ? data.buildings : []);
     } catch (e: any) {
       setError(e.message || "Erreur chargement bâtiments");
     } finally {
@@ -101,7 +134,10 @@ export default function BuildingsAdminPage() {
     if (!current) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/buildings/${current.contentId}`, {
+      const target = current.contentId
+        ? `${API_BASE}/api/nexus-game/admin/content/buildings/${encodeURIComponent(current.contentId)}`
+        : `${API_BASE}/api/nexus-game/admin/content/buildings/by-id/${current.id}`;
+      const res = await fetch(target, {
         method: 'DELETE',
         credentials: 'same-origin',
       });
@@ -174,6 +210,8 @@ export default function BuildingsAdminPage() {
     }
   };
 
+  const invalidItems = items.filter((item) => !item.contentId && hasMeaningfulBuildingData(item));
+
   return (
     <AdminShell title="Bâtiments — Catalogue Nexus v2.0" description="CRUD complet des 20 bâtiments (niveaux 1-30). Upload images par tier (tier1-4). Données master pour construction / IA / équilibrage.">
       <button onClick={() => window.location.href = '/admin/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour Nexus MMO</button>
@@ -184,6 +222,12 @@ export default function BuildingsAdminPage() {
           + Créer Bâtiment
         </button>
       </div>
+
+      {invalidItems.length > 0 && (
+        <p style={{ marginBottom: 12, color: '#fca5a5', fontSize: 13 }}>
+          {invalidItems.length} entrée(s) invalide(s) sans <code>contentId</code> détectée(s). Elles restent supprimables via leur ID interne.
+        </p>
+      )}
 
       {loading && <p>Chargement...</p>}
       {error && <p style={{ color: 'red' }}>{error}</p>}
@@ -203,21 +247,28 @@ export default function BuildingsAdminPage() {
         </thead>
         <tbody>
           {items.map((b) => {
-            const mainAsset = b.assetId || (b.assetsByTier && (b.assetsByTier.tier1 || b.assetsByTier.main));
-            const previewUrl = mainAsset ? `/nexus-assets/content/buildings/${mainAsset}` : null;
+            const assets = collectAssets(b);
+            const previewAssets = assets.slice(0, 4);
             return (
-              <tr key={b.contentId} style={{ borderTop: '1px solid #334155' }}>
+              <tr key={b.contentId || `building-${b.id}`} style={{ borderTop: '1px solid #334155' }}>
                 <td style={{ padding: 4 }}>
-                  {previewUrl ? (
-                    <img src={previewUrl} alt={b.contentId} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  {previewAssets.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 48px)', gap: 4 }}>
+                      {previewAssets.map((asset) => (
+                        <div key={asset.key} style={{ position: 'relative' }}>
+                          <img src={asset.url!} alt={`${b.contentId || `building-${b.id}`}-${asset.key}`} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155', background: '#0f172a' }} onError={(e) => (e.currentTarget.style.opacity = '0.18')} />
+                          <span style={{ position: 'absolute', left: 2, bottom: 2, fontSize: 9, padding: '1px 3px', borderRadius: 3, background: 'rgba(15,23,42,0.82)', color: '#cbd5e1' }}>{asset.key}</span>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <div style={{ width: 48, height: 48, background: '#1e2937', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>no img</div>
                   )}
                 </td>
-                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.contentId}</td>
-                <td>{b.nameKey}</td>
-                <td>{b.rarity}</td>
-                <td>{b.maxLevel}</td>
+                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.contentId || <span style={{ color: '#fca5a5' }}>#{b.id} — contentId manquant</span>}</td>
+                <td>{b.nameKey || '—'}</td>
+                <td>{b.rarity || '—'}</td>
+                <td>{b.maxLevel || '—'}</td>
                 <td style={{ fontSize: 11 }}>
                   {b.assetId && <div>main: {b.assetId}</div>}
                   {b.assetsByTier && Object.keys(b.assetsByTier).map(t => (
@@ -244,7 +295,7 @@ export default function BuildingsAdminPage() {
 
             {modal === 'delete' && current ? (
               <>
-                <p>Supprimer <strong>{current.contentId}</strong> ? Cette action est définitive pour le catalogue master.</p>
+                <p>Supprimer <strong>{current.contentId || `#${current.id}`}</strong> ? Cette action est définitive pour le catalogue master.</p>
                 <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
                   <button onClick={doDelete} style={{ background: '#ef4444', color: 'white', padding: '8px 16px' }}>Confirmer Suppression</button>
                   <button onClick={closeModal}>Annuler</button>

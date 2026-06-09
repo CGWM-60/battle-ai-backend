@@ -81,6 +81,19 @@ func (h *ContentHandler) DeleteBuilding(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *ContentHandler) DeleteBuildingByID(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.contentSvc.DeleteBuildingByID(uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 // UploadAsset for a building (or other domain).
 // Form: file (multipart), contentId, domain="building", tier="1"|"2"|"3"|"4" (optional)
 func (h *ContentHandler) UploadAsset(c *gin.Context) {
@@ -363,6 +376,32 @@ func (h *ContentHandler) CreateOrUpdateResearch(c *gin.Context) {
 func (h *ContentHandler) DeleteUnit(c *gin.Context) {
 	id := c.Param("contentId")
 	if err := h.contentSvc.DeleteUnit(id); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *ContentHandler) DeleteUnitByID(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.contentSvc.DeleteUnitByID(uint(id)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *ContentHandler) DeleteResearchByID(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	if err := h.contentSvc.DeleteResearchByID(uint(id)); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

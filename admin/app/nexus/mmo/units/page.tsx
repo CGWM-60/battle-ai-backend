@@ -6,6 +6,7 @@ import { AdminShell } from "../../../components/AdminShell";
 const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
 
 interface Unit {
+  id: number;
   contentId: string;
   nameKey?: string;
   rarity: string;
@@ -14,6 +15,28 @@ interface Unit {
   attackBase?: number;
   assetId?: string;
   assetsByTier?: Record<string, string>;
+}
+
+const ASSET_KEYS = ["main", "tier1", "tier2", "tier3", "tier4"] as const;
+
+function buildAssetUrl(folder: string, fileName?: string) {
+  if (!fileName) return null;
+  return `${API_BASE}/nexus-assets/content/${folder}/${encodeURIComponent(fileName)}`;
+}
+
+function collectAssets(item: Pick<Unit, "assetId" | "assetsByTier">) {
+  const assetsByTier = item.assetsByTier && typeof item.assetsByTier === "object"
+    ? item.assetsByTier
+    : {};
+
+  return ASSET_KEYS.map((key) => {
+    const fileName = key === "main" ? (item.assetId || assetsByTier.main) : assetsByTier[key];
+    return { key, fileName, url: buildAssetUrl("units", fileName) };
+  }).filter((asset) => Boolean(asset.fileName));
+}
+
+function hasMeaningfulUnitData(item: Unit) {
+  return Boolean(item.contentId || item.nameKey || item.assetId || (item.assetsByTier && Object.keys(item.assetsByTier).length > 0));
 }
 
 export default function UnitsAdminPage() {
@@ -57,7 +80,10 @@ export default function UnitsAdminPage() {
     if (!current) return;
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/units/${current.contentId}`, { method: 'DELETE', credentials: 'same-origin' });
+      const target = current.contentId
+        ? `${API_BASE}/api/nexus-game/admin/content/units/${encodeURIComponent(current.contentId)}`
+        : `${API_BASE}/api/nexus-game/admin/content/units/by-id/${current.id}`;
+      const res = await fetch(target, { method: 'DELETE', credentials: 'same-origin' });
       if (!res.ok) throw new Error(await res.text());
       closeModal(); await fetchItems();
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
@@ -82,6 +108,8 @@ export default function UnitsAdminPage() {
     } catch(e:any){ setError(e.message); } finally { setUploading(null); }
   };
 
+  const invalidItems = items.filter((item) => !item.contentId && hasMeaningfulUnitData(item));
+
   return (
     <AdminShell title="Unités — Catalogue Nexus v2.0" description="CRUD des 15 unités (niveaux 1-30). Upload images tierées. Stats de base + assets.">
       <button onClick={() => window.location.href = '/admin/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour Nexus MMO</button>
@@ -90,6 +118,8 @@ export default function UnitsAdminPage() {
         <button onClick={openCreate} style={{ background: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>+ Créer Unité</button>
       </div>
 
+      {invalidItems.length > 0 && <p style={{ marginBottom: 12, color: '#fca5a5', fontSize: 13 }}>{invalidItems.length} entrée(s) invalide(s) sans <code>contentId</code> détectée(s).</p>}
+
       {loading && <p>Chargement...</p>}
       {error && <p style={{color:'red'}}>{error}</p>}
 
@@ -97,21 +127,28 @@ export default function UnitsAdminPage() {
         <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Rareté</th><th>Niv Max</th><th>Assets</th><th>Actions</th></tr></thead>
         <tbody>
           {items.map(u => {
-            const mainAsset = u.assetId || (u.assetsByTier && (u.assetsByTier.tier1 || u.assetsByTier.main));
-            const previewUrl = mainAsset ? `/nexus-assets/content/units/${mainAsset}` : null;
+            const assets = collectAssets(u);
+            const previewAssets = assets.slice(0, 4);
             return (
-              <tr key={u.contentId} style={{ borderTop: '1px solid #334155' }}>
+              <tr key={u.contentId || `unit-${u.id}`} style={{ borderTop: '1px solid #334155' }}>
                 <td style={{ padding: 4 }}>
-                  {previewUrl ? (
-                    <img src={previewUrl} alt={u.contentId} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  {previewAssets.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 48px)', gap: 4 }}>
+                      {previewAssets.map((asset) => (
+                        <div key={asset.key} style={{ position: 'relative' }}>
+                          <img src={asset.url!} alt={`${u.contentId || `unit-${u.id}`}-${asset.key}`} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155', background: '#0f172a' }} onError={(e) => (e.currentTarget.style.opacity = '0.18')} />
+                          <span style={{ position: 'absolute', left: 2, bottom: 2, fontSize: 9, padding: '1px 3px', borderRadius: 3, background: 'rgba(15,23,42,0.82)', color: '#cbd5e1' }}>{asset.key}</span>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <div style={{ width: 48, height: 48, background: '#1e2937', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>no img</div>
                   )}
                 </td>
-                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{u.contentId}</td>
-                <td>{u.nameKey}</td>
-                <td>{u.rarity}</td>
-                <td>{u.maxLevel}</td>
+                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{u.contentId || <span style={{ color: '#fca5a5' }}>#{u.id} — contentId manquant</span>}</td>
+                <td>{u.nameKey || '—'}</td>
+                <td>{u.rarity || '—'}</td>
+                <td>{u.maxLevel || '—'}</td>
                 <td style={{ fontSize: 11 }}>{u.assetId || (u.assetsByTier && Object.keys(u.assetsByTier).join(', '))}</td>
                 <td><button onClick={() => openEdit(u)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(u)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
               </tr>
@@ -127,7 +164,7 @@ export default function UnitsAdminPage() {
             <h3>{modal === 'create' ? 'Créer Unité' : modal === 'edit' ? 'Éditer Unité' : 'Supprimer Unité'}</h3>
 
             {modal === 'delete' && current ? (
-              <><p>Supprimer <strong>{current.contentId}</strong> ?</p><button onClick={doDelete} style={{ background: '#ef4444', color: 'white', padding: '8px 16px' }}>Confirmer</button> <button onClick={closeModal}>Annuler</button></>
+              <><p>Supprimer <strong>{current.contentId || `#${current.id}`}</strong> ?</p><button onClick={doDelete} style={{ background: '#ef4444', color: 'white', padding: '8px 16px' }}>Confirmer</button> <button onClick={closeModal}>Annuler</button></>
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>

@@ -131,6 +131,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/admin/content/research/page", contentH.AdminResearchPage)
 
 	group.GET("/admin/content/buildings", contentH.ListBuildings)
+	group.DELETE("/admin/content/buildings/by-id/:id", contentH.DeleteBuildingByID)
 	group.GET("/admin/content/buildings/:contentId", contentH.GetBuilding)
 	group.POST("/admin/content/buildings", contentH.CreateOrUpdateBuilding)
 	group.PUT("/admin/content/buildings/:contentId", contentH.CreateOrUpdateBuilding)
@@ -151,12 +152,14 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 	// JSON CRUD for units and research (copy of buildings - extend service impl + seed from reference)
 	group.GET("/admin/content/units", contentH.ListUnits)
+	group.DELETE("/admin/content/units/by-id/:id", contentH.DeleteUnitByID)
 	group.GET("/admin/content/units/:contentId", contentH.GetUnit)
 	group.POST("/admin/content/units", contentH.CreateOrUpdateUnit)
 	group.PUT("/admin/content/units/:contentId", contentH.CreateOrUpdateUnit)
 	group.DELETE("/admin/content/units/:contentId", contentH.DeleteUnit)
 	group.POST("/admin/content/units/:contentId/delete", contentH.DeleteUnit)
 	group.GET("/admin/content/research", contentH.ListResearch)
+	group.DELETE("/admin/content/research/by-id/:id", contentH.DeleteResearchByID)
 	group.GET("/admin/content/research/:contentId", contentH.GetResearch)
 	group.POST("/admin/content/research", contentH.CreateOrUpdateResearch)
 	group.PUT("/admin/content/research/:contentId", contentH.CreateOrUpdateResearch)
