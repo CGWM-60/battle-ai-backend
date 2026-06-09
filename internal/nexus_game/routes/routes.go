@@ -4,6 +4,8 @@ import (
 	"cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/nexus_game/handlers"
 	"cgwm/battle/internal/nexus_game/models"
+	"cgwm/battle/internal/nexus_game/seeds"
+	"cgwm/battle/internal/nexus_game/services"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -29,7 +31,11 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
-		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{}, &models.MmoIAAgent{}, &models.DailyPlan{})
+		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{}, &models.MmoIAAgent{}, &models.DailyPlan{},
+			&models.BuildingDefinition{}, &models.PlayerBuilding{})
+
+		// Seed initial content for dev (buildings from reference). In prod use admin CRUD + upload.
+		_ = seeds.SeedInitialBuildings(database, services.NewContentService(database, "./content/assets"))
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
@@ -94,6 +100,25 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/profile/:id/daily-plan", profileH.GetDailyPlan)
 	group.POST("/profile/:id/daily-plan/recommendations", profileH.SaveDailyPlanRecommendations)
 	group.POST("/profile/:id/daily-plan/apply", profileH.ApplyDailyPlan)
+
+	// Content system (Buildings first, extensible to Units/Research per NEXUS GAME CONTENT REFERENCE v2.0).
+	// Admin CRUD + asset upload (images served by this server after upload).
+	// Player construction endpoints (queues, completion).
+	// Each major item (buildings/units/research) will have its table + CRUD here.
+	contentH := handlers.NewContentHandler(services.NewContentService(database, "./content/assets"))
+
+	// Admin / catalog
+	group.GET("/admin/content/buildings", contentH.ListBuildings)
+	group.GET("/admin/content/buildings/:contentId", contentH.GetBuilding)
+	group.POST("/admin/content/buildings", contentH.CreateOrUpdateBuilding)
+	group.PUT("/admin/content/buildings/:contentId", contentH.CreateOrUpdateBuilding)
+	group.DELETE("/admin/content/buildings/:contentId", contentH.DeleteBuilding)
+	group.POST("/admin/content/upload-asset", contentH.UploadAsset) // multipart: file + contentId + domain + tier
+
+	// Player constructions (used by Flutter mmo construction flows)
+	group.GET("/profile/:profileId/buildings", contentH.ListPlayerBuildings)
+	group.POST("/profile/:profileId/construction/start", contentH.StartConstruction)
+	group.POST("/profile/:profileId/construction/complete-ready", contentH.CompleteReadyConstructions)
 
 	// World management (gestion des worlds) - card entry via admin or API.
 	// GET /worlds -> list worlds with continents and capacities (from Redis)
