@@ -29,7 +29,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
-		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{})
+		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{}, &models.MmoIAAgent{})
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
@@ -77,6 +77,12 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// Server truth. Flutter calls after creation or on load check.
 	group.GET("/profile", profileH.GetProfile)
 	group.POST("/profile", profileH.SaveProfile)
+
+	// IA Agents & Companions for Nexus (MmoCreationAgentIAScreen)
+	// Multiple agents per profile, only 1 companion.
+	// Avatar support for agents. Companion linked to profile creation choice.
+	group.POST("/profile/ia-agents", profileH.SaveIAAgent)
+	group.GET("/profile/:id/ia-agents", profileH.ListIAAgents)
 
 	// World management (gestion des worlds) - card entry via admin or API.
 	// GET /worlds -> list worlds with continents and capacities (from Redis)

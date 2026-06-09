@@ -240,3 +240,77 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 		"faction_name": factionName,
 	})
 }
+
+// SaveIAAgent creates an IA agent or companion for a ProfileGamer.
+// Rules: multiple agents OK, but only 1 companion (is_companion=true) per profile.
+// The companion can reference the IA companion chosen at profile creation (ProfileGamer.IACompanionID).
+// Supports avatar for agents.
+// Endpoint used by MmoCreationAgentIAScreen.
+func (h *ProfileHandler) SaveIAAgent(c *gin.Context) {
+	var req struct {
+		ProfileGamerID uint   `json:"profile_gamer_id"`
+		Name           string `json:"name"`
+		Role           string `json:"role"`
+		Personality    string `json:"personality"`
+		Provider       string `json:"provider"`
+		Model          string `json:"model"`
+		AvatarID       uint   `json:"avatar_id"`
+		IsCompanion    bool   `json:"is_companion"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+		return
+	}
+	if req.ProfileGamerID == 0 || req.Name == "" || req.Role == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "profile_gamer_id, name and role are required"})
+		return
+	}
+
+	// Enforce only 1 companion per profile
+	if req.IsCompanion {
+		var count int64
+		h.db.Model(&models.MmoIAAgent{}).Where("profile_gamer_id = ? AND is_companion = ?", req.ProfileGamerID, true).Count(&count)
+		if count > 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "only one companion IA allowed per profile"})
+			return
+		}
+	}
+
+	agent := models.MmoIAAgent{
+		ProfileGamerID: req.ProfileGamerID,
+		Name:           req.Name,
+		Role:           req.Role,
+		Personality:    req.Personality,
+		Provider:       req.Provider,
+		Model:          req.Model,
+		AvatarID:       req.AvatarID,
+		IsCompanion:    req.IsCompanion,
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+	}
+
+	if err := h.db.Create(&agent).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save ia agent"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"agent": agent, "message": "ia agent/companion saved"})
+}
+
+// ListIAAgents for a profile (used for sync on load)
+func (h *ProfileHandler) ListIAAgents(c *gin.Context) {
+	profileIDStr := c.Param("id")
+	profileID, err := strconv.ParseUint(profileIDStr, 10, 64)
+	if err != nil || profileID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile id"})
+		return
+	}
+
+	var agents []models.MmoIAAgent
+	if err := h.db.Where("profile_gamer_id = ?", uint(profileID)).Order("created_at desc").Find(&agents).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"agents": agents})
+}
