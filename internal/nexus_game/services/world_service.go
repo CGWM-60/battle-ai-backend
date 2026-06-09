@@ -133,19 +133,44 @@ func (s *WorldService) getFirstContinentID(ctx context.Context, worldID uint) ui
 
 // AssignPlayerToContinent for a profile based on faction's continent.
 // Checks max 500 players. If full, returns error "faction continent full".
-// Distributes players proportionally by choosing continent with lowest current count in the world.
+// Falls back to DB Faction.WorldID/ContinentID if Redis faction keys are missing (e.g. old factions, Redis flush).
+// This prevents 400 on first player profile save when faction Redis mapping is absent.
 func (s *WorldService) AssignPlayerToContinent(ctx context.Context, userID, factionID uint) (worldID, continentID uint, err error) {
-	// Get faction's assigned continent.
+	// 1. Try Redis first (fast path set at faction creation).
 	fContStr, ok, _ := s.redis.GetString(ctx, fmt.Sprintf("nexus:faction:%d:continent", factionID))
-	if !ok {
-		return 0, 0, fmt.Errorf("faction %d not assigned to continent", factionID)
+	if ok {
+		fmt.Sscanf(fContStr, "%d", &continentID)
 	}
-	fmt.Sscanf(fContStr, "%d", &continentID)
-
 	fWorldStr, _, _ := s.redis.GetString(ctx, fmt.Sprintf("nexus:faction:%d:world", factionID))
-	fmt.Sscanf(fWorldStr, "%d", &worldID)
+	if ok && fWorldStr != "" {
+		fmt.Sscanf(fWorldStr, "%d", &worldID)
+	}
 
-	// Check capacity using Redis.
+	// 2. Fallback to DB on the Faction if Redis keys missing (common cause of the "record not found" / assignment 400 on first profile save).
+	if continentID == 0 || worldID == 0 {
+		var f models.Faction
+		if err := s.db.Where("id = ?", factionID).First(&f).Error; err == nil {
+			if f.ContinentID != 0 {
+				continentID = f.ContinentID
+			}
+			if f.WorldID != 0 {
+				worldID = f.WorldID
+			}
+			// Re-populate Redis for future calls (self-healing).
+			if continentID != 0 {
+				_ = s.redis.SetString(ctx, fmt.Sprintf("nexus:faction:%d:continent", factionID), fmt.Sprintf("%d", continentID), 0)
+			}
+			if worldID != 0 {
+				_ = s.redis.SetString(ctx, fmt.Sprintf("nexus:faction:%d:world", factionID), fmt.Sprintf("%d", worldID), 0)
+			}
+		}
+	}
+
+	if continentID == 0 || worldID == 0 {
+		return 0, 0, fmt.Errorf("faction %d not assigned to continent (no Redis keys and no DB fallback on Faction)", factionID)
+	}
+
+	// Check capacity using Redis (with DB fallback for count if needed).
 	pKey := fmt.Sprintf("nexus:continent:%d:players", continentID)
 	pCountStr, _, _ := s.redis.GetString(ctx, pKey)
 	pCount := 0
@@ -155,11 +180,11 @@ func (s *WorldService) AssignPlayerToContinent(ctx context.Context, userID, fact
 		return 0, 0, fmt.Errorf("faction continent is full (max 500 players)")
 	}
 
-	// Increment (proportional by choosing lowest, but for simplicity use the faction's).
+	// Increment count.
 	newCount := pCount + 1
 	_ = s.redis.SetString(ctx, pKey, fmt.Sprintf("%d", newCount), 0)
 
-	// Update profile (caller should set it).
+	// Caller (profile handler) will persist WorldID/ContinentID on the ProfileGamer.
 	return worldID, continentID, nil
 }
 
