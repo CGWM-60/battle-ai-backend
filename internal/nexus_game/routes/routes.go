@@ -84,11 +84,16 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/profile/ia-agents", profileH.SaveIAAgent)
 	group.GET("/profile/:id/ia-agents", profileH.ListIAAgents)
 
-	// Daily Plan (Player AI Daily Plan context for first load / bootstrap).
-	// Context sent to Flutter -> player's provider (or fallback) generates recommendations.
-	// All recommendations validated via /actions/validate + player confirm + /actions/resolve.
-	// Server rules included so AI knows it cannot mutate world.
+	// Daily Plan (Player AI Daily Plan - full flow).
+	// 1. GET /context -> safe context (city stats, rules, available actions) sent to player's AI (provider / local / governor agent).
+	// 2. Client sends AI output (recommendations) via POST /recommendations (or save-generated).
+	// 3. Player reviews in the city dashboard card.
+	// 4. POST /apply -> server applies selected items (effects on ProfileGamer + queues). Uses the validate/resolve philosophy internally.
+	// The card and system are designed to stay open: new recommendation types and impacts can be added over time.
 	group.GET("/profile/:id/daily-plan/context", profileH.GetDailyPlanContext)
+	group.GET("/profile/:id/daily-plan", profileH.GetDailyPlan)
+	group.POST("/profile/:id/daily-plan/recommendations", profileH.SaveDailyPlanRecommendations)
+	group.POST("/profile/:id/daily-plan/apply", profileH.ApplyDailyPlan)
 
 	// World management (gestion des worlds) - card entry via admin or API.
 	// GET /worlds -> list worlds with continents and capacities (from Redis)

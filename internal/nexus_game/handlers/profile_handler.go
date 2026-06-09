@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -442,4 +443,228 @@ func buildDailyPlanContext(p models.ProfileGamer) map[string]interface{} {
 }
 
 // Note: generate/accept etc. will be added next. For now the context retrieval is the first load data sent to Flutter.
+
+// GetDailyPlan returns (or initializes) the DailyPlan for today for this player.
+// Used by the city dashboard card to show the current plan + recommendations.
+func (h *ProfileHandler) GetDailyPlan(c *gin.Context) {
+	profileIDStr := c.Param("id")
+	profileID, err := strconv.ParseUint(profileIDStr, 10, 64)
+	if err != nil || profileID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile id"})
+		return
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+
+	var plan models.DailyPlan
+	err = h.db.Where("profile_gamer_id = ? AND DATE(generated_at) = ?", profileID, today).First(&plan).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Create a shell plan with fresh context for today
+			ctx := h.buildDailyPlanContextForID(uint(profileID))
+			ctxBytes, _ := json.Marshal(ctx)
+			plan = models.DailyPlan{
+				ProfileGamerID: uint(profileID),
+				Context:        string(ctxBytes),
+				Recommendations: "[]",
+				GeneratedAt:    time.Now().UTC(),
+			}
+			_ = h.db.Create(&plan).Error
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	// Parse for response
+	var recs []models.DailyPlanRecommendation
+	_ = json.Unmarshal([]byte(plan.Recommendations), &recs)
+
+	c.JSON(http.StatusOK, gin.H{
+		"plan":            plan,
+		"recommendations": recs,
+		"today":           today,
+	})
+}
+
+// SaveDailyPlanRecommendations saves the AI-generated recommendations for the day.
+// Called by Flutter after the player's companion / provider processed the context.
+func (h *ProfileHandler) SaveDailyPlanRecommendations(c *gin.Context) {
+	profileIDStr := c.Param("id")
+	profileID, err := strconv.ParseUint(profileIDStr, 10, 64)
+	if err != nil || profileID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile id"})
+		return
+	}
+
+	var body struct {
+		Recommendations []models.DailyPlanRecommendation `json:"recommendations"`
+		GeneratedBy     string                           `json:"generated_by"` // "player_provider", "governor_agent", ...
+		Summary         string                           `json:"summary"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+		return
+	}
+
+	recsJSON, _ := json.Marshal(body.Recommendations)
+
+	today := time.Now().UTC().Format("2006-01-02")
+
+	var plan models.DailyPlan
+	if err := h.db.Where("profile_gamer_id = ? AND DATE(generated_at) = ?", profileID, today).First(&plan).Error; err != nil {
+		// create new
+		ctx := h.buildDailyPlanContextForID(uint(profileID))
+		ctxBytes, _ := json.Marshal(ctx)
+		plan = models.DailyPlan{
+			ProfileGamerID:  uint(profileID),
+			Context:         string(ctxBytes),
+			Recommendations: string(recsJSON),
+			Summary:         body.Summary,
+			GeneratedBy:     body.GeneratedBy,
+			GeneratedAt:     time.Now().UTC(),
+		}
+		h.db.Create(&plan)
+	} else {
+		plan.Recommendations = string(recsJSON)
+		plan.GeneratedBy = body.GeneratedBy
+		plan.Summary = body.Summary
+		plan.UpdatedAt = time.Now().UTC()
+		h.db.Save(&plan)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "plan_id": plan.ID})
+}
+
+// ApplyDailyPlan applies selected recommendations from the daily plan.
+// This is the "Appliquer le plan" action from the city dashboard.
+// It performs the effects server-side (local + persisted) and returns the updated stats.
+// Design is kept open: new types are easy to add in the switch.
+func (h *ProfileHandler) ApplyDailyPlan(c *gin.Context) {
+	profileIDStr := c.Param("id")
+	profileID, err := strconv.ParseUint(profileIDStr, 10, 64)
+	if err != nil || profileID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile id"})
+		return
+	}
+
+	var body struct {
+		Indices []int `json:"indices"` // which recommendations from the saved plan to apply
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body, expected indices"})
+		return
+	}
+
+	var p models.ProfileGamer
+	if err := h.db.First(&p, profileID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
+		return
+	}
+
+	today := time.Now().UTC().Format("2006-01-02")
+	var plan models.DailyPlan
+	if err := h.db.Where("profile_gamer_id = ? AND DATE(generated_at) = ?", profileID, today).First(&plan).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "no daily plan for today"})
+		return
+	}
+
+	var recs []models.DailyPlanRecommendation
+	if err := json.Unmarshal([]byte(plan.Recommendations), &recs); err != nil {
+		recs = []models.DailyPlanRecommendation{}
+	}
+
+	applied := []map[string]interface{}{}
+	impacts := map[string]interface{}{}
+
+	for _, idx := range body.Indices {
+		if idx < 0 || idx >= len(recs) {
+			continue
+		}
+		rec := recs[idx]
+
+		// Apply effect based on type. This is the server application.
+		// Later this should delegate to a central ActionResolver that also handles queues, costs, validation.
+		switch rec.Type {
+		case "train_unit", "train":
+			// Simple effect: increase power / "trained" feeling + small security
+			p.Power += 8
+			p.Security = min(100, p.Security+3)
+			impacts["power"] = p.Power
+			impacts["security"] = p.Security
+
+		case "upgrade", "build":
+			// Building/upgrade effect on city
+			p.EnergyProduction += 12
+			p.EnergyBalance += 8
+			p.Morale = min(100, p.Morale+2)
+			p.PopulationCapacity += 5
+			impacts["energyProduction"] = p.EnergyProduction
+			impacts["morale"] = p.Morale
+			impacts["populationCapacity"] = p.PopulationCapacity
+
+		case "start_research", "research":
+			p.Morale = min(100, p.Morale+4)
+			p.Power += 3
+			impacts["morale"] = p.Morale
+
+		case "collect":
+			p.EnergyStored += 25
+			impacts["energyStored"] = p.EnergyStored
+
+		default:
+			// Generic positive nudge so the feature is always useful while we add more types
+			p.Morale = min(100, p.Morale+1)
+			p.Security = min(100, p.Security+1)
+		}
+
+		applied = append(applied, map[string]interface{}{
+			"priority": rec.Priority,
+			"type":     rec.Type,
+			"title":    rec.Title,
+			"reason":   rec.Reason,
+		})
+	}
+
+	// Persist profile changes
+	if err := h.db.Save(&p).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist profile after apply"})
+		return
+	}
+
+	// Mark applied in the plan (simple: append to a field or just return the list)
+	// For openness we just return what was applied; full history can be added later.
+	plan.UpdatedAt = time.Now().UTC()
+	h.db.Save(&plan)
+
+	c.JSON(http.StatusOK, gin.H{
+		"ok":      true,
+		"applied": applied,
+		"impacts": impacts,
+		"profile_snapshot": gin.H{
+			"level":              p.Level,
+			"power":              p.Power,
+			"population":         p.Population,
+			"populationCapacity": p.PopulationCapacity,
+			"morale":             p.Morale,
+			"security":           p.Security,
+			"energyProduction":   p.EnergyProduction,
+			"energyBalance":      p.EnergyBalance,
+			"energyStored":       p.EnergyStored,
+		},
+	})
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func (h *ProfileHandler) buildDailyPlanContextForID(profileID uint) map[string]interface{} {
+	var p models.ProfileGamer
+	h.db.First(&p, profileID)
+	return buildDailyPlanContext(p)
+}
 

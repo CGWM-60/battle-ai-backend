@@ -77,9 +77,156 @@ func (s *WorldTickService) RunWorldTick(ctx context.Context, worldID uint) error
 		// In real: persist event, notify via notifications.
 	}
 
+	// Evolve evolutionary base stats for player profiles (population, morale, energy, security)
+	// per the detailed rules (growth/decline formulas, factors, priorities, relations, paliers).
+	var profiles []models.ProfileGamer
+	if err := s.db.Where("world_id = ?", worldID).Find(&profiles).Error; err == nil {
+		for i := range profiles {
+			s.evolveCityStats(&profiles[i])
+			s.db.Save(&profiles[i])
+		}
+	}
+
 	// Persist log or update world.
 	// TODO: full production/consumption using existing engines if integrated.
 
 	fmt.Printf("[WORLD_TICK] Tick for world %d completed.\n", worldID)
 	return nil
+}
+
+// evolveCityStats applies the evolutionary rules for Population, Morale, Energy, Security.
+// Formulas from spec: growth with factors, decline, deltas, clamp, priorities, relations.
+// Called per tick for profiles in the world.
+func (s *WorldTickService) evolveCityStats(p *models.ProfileGamer) {
+	if p.PopulationCapacity > 0 {
+		baseGrowth := 10
+		housingFactor := 1.0
+		if p.PopulationCapacity > 0 {
+			free := float64(p.PopulationCapacity-p.Population) / float64(p.PopulationCapacity)
+			if free > 0.5 {
+				housingFactor = 1.2
+			} else if free < 0.1 {
+				housingFactor = 0.2
+			} else if free <= 0 {
+				housingFactor = 0
+			}
+		}
+		foodFactor := 1.0
+		if p.Morale < 25 {
+			foodFactor = -1.0
+		} else if p.Morale < 50 {
+			foodFactor = 0.5
+		}
+		moraleFactor := 1.0
+		if p.Morale >= 80 {
+			moraleFactor = 1.2
+		} else if p.Morale < 25 {
+			moraleFactor = -0.8
+		} else if p.Morale < 50 {
+			moraleFactor = 0.4
+		}
+		securityFactor := 1.0
+		if p.Security >= 80 {
+			securityFactor = 1.1
+		} else if p.Security < 25 {
+			securityFactor = -1.0
+		} else if p.Security < 50 {
+			securityFactor = 0.5
+		}
+		energyFactor := 1.0
+		if p.EnergyBalance < 0 {
+			energyFactor = 0.6
+		}
+		if p.EnergyBalance < -20 {
+			energyFactor = -0.7
+		}
+		weatherFactor := 1.0 // stub, integrate real weather later
+
+		growth := int(float64(baseGrowth) * housingFactor * foodFactor * moraleFactor * securityFactor * energyFactor * weatherFactor)
+
+		decline := 0
+		if p.Morale < 25 {
+			decline += 5
+		}
+		if p.Security < 25 {
+			decline += 5
+		}
+		if p.EnergyBalance < -10 {
+			decline += 3
+		}
+
+		newPop := p.Population + growth - decline
+		if newPop < 0 {
+			newPop = 0
+		}
+		if newPop > p.PopulationCapacity {
+			newPop = p.PopulationCapacity
+		}
+		p.Population = newPop
+	}
+
+	// Morale delta
+	moraleDelta := 0
+	if p.EnergyBalance >= 0 {
+		moraleDelta += 2
+	} else {
+		moraleDelta -= 4
+	}
+	if p.Security >= 70 {
+		moraleDelta += 2
+	} else if p.Security < 30 {
+		moraleDelta -= 5
+	}
+	if p.Population > p.PopulationCapacity {
+		moraleDelta -= 3
+	}
+	p.Morale = clamp(p.Morale+moraleDelta, 0, 100)
+
+	// Energy - simple evolution (production/consumption stub; full from buildings later)
+	if p.EnergyProduction > 0 {
+		p.EnergyConsumption += 1 // stub consumption growth
+		p.EnergyBalance = p.EnergyProduction - p.EnergyConsumption
+		if p.EnergyBalance < 0 && p.EnergyStored > 0 {
+			drain := -p.EnergyBalance
+			if drain > p.EnergyStored {
+				drain = p.EnergyStored
+			}
+			p.EnergyStored -= drain
+			p.EnergyBalance = 0
+		}
+	}
+
+	// Security delta
+	secDelta := 0
+	if p.Morale >= 70 {
+		secDelta += 1
+	}
+	if p.EnergyBalance >= 0 {
+		secDelta += 1
+	} else {
+		secDelta -= 2
+	}
+	if p.Population > p.PopulationCapacity*2/3 {
+		secDelta -= 1
+	}
+	p.Security = clamp(p.Security+secDelta, 0, 100)
+
+	// Relations example (energy low affects others)
+	if p.EnergyBalance < -10 {
+		p.Morale = clamp(p.Morale-3, 0, 100)
+		p.Security = clamp(p.Security-2, 0, 100)
+		if p.Population > 0 {
+			p.Population = clamp(p.Population-1, 0, p.PopulationCapacity)
+		}
+	}
+}
+
+func clamp(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
 }
