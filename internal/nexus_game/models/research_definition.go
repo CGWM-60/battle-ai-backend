@@ -12,14 +12,17 @@ type ResearchDefinition struct {
 
 	NameKey        string `json:"nameKey"`
 	DescriptionKey string `json:"descriptionKey"`
-	AssetID        string `json:"assetId"`
-	AssetsByTier   map[string]string `gorm:"serializer:json" json:"assetsByTier"`
+	FlavorTextKey  string `json:"flavorTextKey,omitempty"`
+	// Maps level numbers ("1".."30") to i18n keys for level-specific descriptions.
+	LevelDescriptionKeys map[string]string `gorm:"serializer:json" json:"levelDescriptionKeys"`
+	AssetID              string            `json:"assetId"`
+	AssetsByTier         map[string]string `gorm:"serializer:json" json:"assetsByTier"`
 
-	Tier     int    `json:"tier"` // 1-7 per branch
-	Rarity   string `json:"rarity"`
+	Tier   int    `json:"tier"` // 1-7 per branch
+	Rarity string `json:"rarity"`
 
-	CostBaseCredits int `json:"costBaseCredits"`
-	CostBaseData    int `json:"costBaseData"`
+	CostBaseCredits     int `json:"costBaseCredits"`
+	CostBaseData        int `json:"costBaseData"`
 	DurationBaseSeconds int `json:"durationBaseSeconds"`
 
 	EffectsJSON string `gorm:"type:text" json:"effects"` // unlocks, bonuses

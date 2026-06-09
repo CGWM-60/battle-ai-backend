@@ -9,6 +9,9 @@ interface Unit {
   id: number;
   contentId: string;
   nameKey?: string;
+  descriptionKey?: string;
+  flavorTextKey?: string;
+  levelDescriptionKeys?: Record<string, string>;
   rarity: string;
   maxLevel: number;
   healthBase?: number;
@@ -38,7 +41,25 @@ function collectAssets(item: Pick<Unit, "assetId" | "assetsByTier">) {
 }
 
 function hasMeaningfulUnitData(item: Unit) {
-  return Boolean(item.contentId || item.nameKey || item.assetId || (item.assetsByTier && Object.keys(item.assetsByTier).length > 0));
+  return Boolean(item.contentId || item.nameKey || item.descriptionKey || item.flavorTextKey || item.assetId || (item.levelDescriptionKeys && Object.keys(item.levelDescriptionKeys).length > 0) || (item.assetsByTier && Object.keys(item.assetsByTier).length > 0));
+}
+
+function stringifyRecord(value: unknown) {
+  if (!value) return "{}";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function parseRecord(value: unknown) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    throw new Error("levelDescriptionKeys doit être un objet JSON valide");
+  }
 }
 
 export default function UnitsAdminPage() {
@@ -61,8 +82,8 @@ export default function UnitsAdminPage() {
   };
   useEffect(() => { fetchItems(); }, []);
 
-  const openCreate = () => { setCurrent(null); setForm({ contentId: '', nameKey: '', rarity: 'common', maxLevel: 30, healthBase: 100, attackBase: 20 }); setModal('create'); };
-  const openEdit = (item: Unit) => { setCurrent(item); setForm({ ...item }); setModal('edit'); };
+  const openCreate = () => { setCurrent(null); setForm({ contentId: '', nameKey: '', descriptionKey: '', flavorTextKey: '', levelDescriptionKeys: '{}', rarity: 'common', maxLevel: 30, healthBase: 100, attackBase: 20 }); setModal('create'); };
+  const openEdit = (item: Unit) => { setCurrent(item); setForm({ ...item, levelDescriptionKeys: stringifyRecord(item.levelDescriptionKeys) }); setModal('edit'); };
   const openDelete = (item: Unit) => { setCurrent(item); setModal('delete'); };
   const closeModal = () => { setModal(null); setCurrent(null); setForm({}); setError(null); };
 
@@ -72,7 +93,8 @@ export default function UnitsAdminPage() {
     const method = isEdit ? 'PUT' : 'POST';
     setLoading(true);
     try {
-      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(form) });
+      const payload = { ...form, levelDescriptionKeys: parseRecord(form.levelDescriptionKeys) };
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(payload) });
       if (!res.ok) throw new Error(await res.text());
       closeModal(); await fetchItems();
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
@@ -126,7 +148,7 @@ export default function UnitsAdminPage() {
       {error && <p style={{color:'red'}}>{error}</p>}
 
       <table className="data-table" style={{ width: '100%' }}>
-        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Rareté</th><th>Niv Max</th><th>Assets</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Description</th><th>Rareté</th><th>Niv Max</th><th>Assets</th><th>Actions</th></tr></thead>
         <tbody>
           {items.map(u => {
             const assets = collectAssets(u);
@@ -149,6 +171,7 @@ export default function UnitsAdminPage() {
                 </td>
                 <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{u.contentId || <span style={{ color: '#fca5a5' }}>#{u.id} — contentId manquant</span>}</td>
                 <td>{u.nameKey || '—'}</td>
+                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{u.descriptionKey || '—'}</td>
                 <td>{u.rarity || '—'}</td>
                 <td>{u.maxLevel || '—'}</td>
                 <td style={{ fontSize: 11 }}>{u.assetId || (u.assetsByTier && Object.keys(u.assetsByTier).join(', '))}</td>
@@ -172,12 +195,19 @@ export default function UnitsAdminPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
                   <input placeholder="contentId" value={form.contentId || ''} onChange={e=>setForm({...form, contentId:e.target.value})} />
                   <input placeholder="nameKey" value={form.nameKey || ''} onChange={e=>setForm({...form, nameKey:e.target.value})} />
+                  <input placeholder="descriptionKey" value={form.descriptionKey || ''} onChange={e=>setForm({...form, descriptionKey:e.target.value})} />
+                  <input placeholder="flavorTextKey (optionnel)" value={form.flavorTextKey || ''} onChange={e=>setForm({...form, flavorTextKey:e.target.value})} />
                   <select value={form.rarity || 'common'} onChange={e=>setForm({...form, rarity:e.target.value})}>
                     <option>common</option><option>uncommon</option><option>rare</option><option>epic</option><option>legendary</option><option>nexus</option>
                   </select>
                   <input type="number" placeholder="maxLevel" value={form.maxLevel || 30} onChange={e=>setForm({...form, maxLevel:parseInt(e.target.value)})} />
                   <input type="number" placeholder="healthBase" value={form.healthBase || ''} onChange={e=>setForm({...form, healthBase:parseInt(e.target.value)})} />
                   <input type="number" placeholder="attackBase" value={form.attackBase || ''} onChange={e=>setForm({...form, attackBase:parseInt(e.target.value)})} />
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 12, color: '#94a3b8' }}>Descriptions par niveau (clés i18n JSON, ex: niveau 1 → nexus_game.unit.xxx.level_1.description)</label>
+                  <textarea placeholder='{"1":"nexus_game.unit.example.level_1.description","2":"nexus_game.unit.example.level_2.description"}' value={stringifyRecord(form.levelDescriptionKeys)} onChange={e=>setForm({...form, levelDescriptionKeys:e.target.value})} style={{ width: '100%', height: 110, marginTop: 6, fontFamily: 'monospace', fontSize: 12 }} />
                 </div>
 
                 <div style={{ marginTop: 12 }}>

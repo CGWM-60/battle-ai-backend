@@ -16,8 +16,10 @@ type BuildingDefinition struct {
 	NameKey        string `json:"nameKey"`
 	DescriptionKey string `json:"descriptionKey"`
 	FlavorTextKey  string `json:"flavorTextKey,omitempty"`
+	// Maps level numbers ("1".."30") to i18n keys for level-specific descriptions.
+	LevelDescriptionKeys map[string]string `gorm:"serializer:json" json:"levelDescriptionKeys"`
 
-	AssetID     string            `json:"assetId"`
+	AssetID      string            `json:"assetId"`
 	AssetsByTier map[string]string `gorm:"serializer:json" json:"assetsByTier"` // tier1, tier2...
 
 	MaxLevel int    `json:"maxLevel"`
@@ -54,11 +56,11 @@ type BuildingDefinition struct {
 
 // PlayerBuilding is the player-owned instance in their city.
 type PlayerBuilding struct {
-	ID            uint      `gorm:"primaryKey" json:"id"`
-	ProfileGamerID uint     `json:"profileGamerId" gorm:"index"`
-	ContentID      string   `json:"contentId"`
-	Level          int      `json:"level" gorm:"default:1"`
-	IsConstructing bool     `json:"isConstructing"`
+	ID                    uint       `gorm:"primaryKey" json:"id"`
+	ProfileGamerID        uint       `json:"profileGamerId" gorm:"index"`
+	ContentID             string     `json:"contentId"`
+	Level                 int        `json:"level" gorm:"default:1"`
+	IsConstructing        bool       `json:"isConstructing"`
 	ConstructionStartedAt *time.Time `json:"constructionStartedAt"`
 	ConstructionEndsAt    *time.Time `json:"constructionEndsAt"`
 

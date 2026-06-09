@@ -97,6 +97,34 @@ func (h *ContentHandler) DeleteBuildingByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func (h *ContentHandler) TranslationStatus(c *gin.Context) {
+	localesParam := strings.TrimSpace(c.DefaultQuery("locales", "fr,en,de"))
+	locales := []string{}
+	for _, locale := range strings.Split(localesParam, ",") {
+		locale = strings.TrimSpace(locale)
+		if locale != "" {
+			locales = append(locales, locale)
+		}
+	}
+	rows, err := h.contentSvc.TranslationStatus(locales)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	missing := 0
+	for _, row := range rows {
+		if row.Key == "" || !row.Exists || len(row.MissingLocales) > 0 {
+			missing++
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"rows":         rows,
+		"count":        len(rows),
+		"missingCount": missing,
+		"locales":      locales,
+	})
+}
+
 func requestBaseURL(c *gin.Context, publicPath string) string {
 	scheme := c.GetHeader("X-Forwarded-Proto")
 	if scheme == "" {

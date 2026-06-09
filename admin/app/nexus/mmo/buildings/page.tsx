@@ -10,6 +10,8 @@ interface Building {
   contentId: string;
   nameKey?: string;
   descriptionKey?: string;
+  flavorTextKey?: string;
+  levelDescriptionKeys?: Record<string, string>;
   rarity: string;
   maxLevel: number;
   costBaseCredits?: number;
@@ -56,6 +58,24 @@ function hasMeaningfulBuildingData(item: Building) {
   );
 }
 
+function stringifyRecord(value: unknown) {
+  if (!value) return "{}";
+  if (typeof value === "string") return value;
+  return JSON.stringify(value, null, 2);
+}
+
+function parseRecord(value: unknown) {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  if (typeof value !== "string") return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    throw new Error("levelDescriptionKeys doit être un objet JSON valide");
+  }
+}
+
 export default function BuildingsAdminPage() {
   const [items, setItems] = useState<Building[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,13 +105,13 @@ export default function BuildingsAdminPage() {
 
   const openCreate = () => {
     setCurrent(null);
-    setForm({ contentId: '', nameKey: '', descriptionKey: '', rarity: 'common', maxLevel: 30, costBaseCredits: 100, costBaseMetal: 200, durationBaseSeconds: 60, aiAgentSlots: 0, isPublished: true, effectsJSON: '[]' });
+    setForm({ contentId: '', nameKey: '', descriptionKey: '', flavorTextKey: '', levelDescriptionKeys: '{}', rarity: 'common', maxLevel: 30, costBaseCredits: 100, costBaseMetal: 200, durationBaseSeconds: 60, aiAgentSlots: 0, isPublished: true, effectsJSON: '[]' });
     setModal('create');
   };
 
   const openEdit = (item: Building) => {
     setCurrent(item);
-    setForm({ ...item });
+    setForm({ ...item, levelDescriptionKeys: stringifyRecord(item.levelDescriptionKeys) });
     setModal('edit');
   };
 
@@ -116,11 +136,12 @@ export default function BuildingsAdminPage() {
 
     setLoading(true);
     try {
+      const payload = { ...form, levelDescriptionKeys: parseRecord(form.levelDescriptionKeys) };
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(await res.text());
       closeModal();
@@ -240,6 +261,7 @@ export default function BuildingsAdminPage() {
             <th>Preview</th>
             <th>Content ID</th>
             <th>Nom (key)</th>
+            <th>Description (key)</th>
             <th>Rareté</th>
             <th>Niv Max</th>
             <th>Assets</th>
@@ -269,6 +291,7 @@ export default function BuildingsAdminPage() {
                 </td>
                 <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.contentId || <span style={{ color: '#fca5a5' }}>#{b.id} — contentId manquant</span>}</td>
                 <td>{b.nameKey || '—'}</td>
+                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{b.descriptionKey || '—'}</td>
                 <td>{b.rarity || '—'}</td>
                 <td>{b.maxLevel || '—'}</td>
                 <td style={{ fontSize: 11 }}>
@@ -309,6 +332,7 @@ export default function BuildingsAdminPage() {
                   <input placeholder="contentId (ex: building_modular_habitat)" value={form.contentId || ''} onChange={e => setForm({ ...form, contentId: e.target.value })} />
                   <input placeholder="nameKey" value={form.nameKey || ''} onChange={e => setForm({ ...form, nameKey: e.target.value })} />
                   <input placeholder="descriptionKey" value={form.descriptionKey || ''} onChange={e => setForm({ ...form, descriptionKey: e.target.value })} />
+                  <input placeholder="flavorTextKey (optionnel)" value={form.flavorTextKey || ''} onChange={e => setForm({ ...form, flavorTextKey: e.target.value })} />
                   <select value={form.rarity || 'common'} onChange={e => setForm({ ...form, rarity: e.target.value })}>
                     <option value="common">common</option><option value="uncommon">uncommon</option><option value="rare">rare</option>
                     <option value="epic">epic</option><option value="legendary">legendary</option><option value="nexus">nexus</option>
@@ -333,6 +357,11 @@ export default function BuildingsAdminPage() {
                       );
                     })}
                   </div>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <label style={{ fontSize: 12, color: '#94a3b8' }}>Descriptions par niveau (clés i18n JSON, ex: niveau 1 → nexus_game.building.xxx.level_1.description)</label>
+                  <textarea placeholder='{"1":"nexus_game.building.example.level_1.description","2":"nexus_game.building.example.level_2.description"}' value={stringifyRecord(form.levelDescriptionKeys)} onChange={e => setForm({ ...form, levelDescriptionKeys: e.target.value })} style={{ width: '100%', height: 110, marginTop: 6, fontFamily: 'monospace', fontSize: 12 }} />
                 </div>
 
                 <div style={{ marginTop: 12 }}>

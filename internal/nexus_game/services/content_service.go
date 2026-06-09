@@ -23,6 +23,16 @@ type ContentService struct {
 	assetsBaseDir string // e.g. /nexus_game/assets/content
 }
 
+type ContentTranslationStatusRow struct {
+	ContentType    string   `json:"contentType"`
+	ContentID      string   `json:"contentId"`
+	Field          string   `json:"field"`
+	Key            string   `json:"key"`
+	Exists         bool     `json:"exists"`
+	Locales        []string `json:"locales"`
+	MissingLocales []string `json:"missingLocales"`
+}
+
 func NewContentService(db *gorm.DB, assetsBaseDir string) *ContentService {
 	if assetsBaseDir == "" {
 		assetsBaseDir = filepath.Join(os.Getenv("NEXUS_ASSETS_BASE_DIR"), "content")
@@ -32,6 +42,129 @@ func NewContentService(db *gorm.DB, assetsBaseDir string) *ContentService {
 	}
 	_ = os.MkdirAll(assetsBaseDir, 0755)
 	return &ContentService{db: db, assetsBaseDir: assetsBaseDir}
+}
+
+func (s *ContentService) TranslationStatus(locales []string) ([]ContentTranslationStatusRow, error) {
+	if len(locales) == 0 {
+		locales = []string{"fr", "en", "de"}
+	}
+
+	rows := []ContentTranslationStatusRow{}
+	seen := map[string]bool{}
+	addKey := func(contentType, contentID, field, key string, required bool) {
+		if key == "" && !required {
+			return
+		}
+		rowID := contentType + "\x00" + contentID + "\x00" + field
+		if seen[rowID] {
+			return
+		}
+		seen[rowID] = true
+		rows = append(rows, ContentTranslationStatusRow{
+			ContentType: contentType,
+			ContentID:   contentID,
+			Field:       field,
+			Key:         key,
+		})
+	}
+	addLevelKeys := func(contentType, contentID string, maxLevel int, keys map[string]string) {
+		if maxLevel <= 0 {
+			maxLevel = 30
+		}
+		for level := 1; level <= maxLevel; level++ {
+			levelKey := fmt.Sprintf("%d", level)
+			addKey(contentType, contentID, "levelDescriptionKeys."+levelKey, keys[levelKey], true)
+		}
+	}
+
+	buildings, err := s.ListBuildings(false)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range buildings {
+		addKey("building", item.ContentID, "nameKey", item.NameKey, true)
+		addKey("building", item.ContentID, "descriptionKey", item.DescriptionKey, true)
+		addKey("building", item.ContentID, "flavorTextKey", item.FlavorTextKey, false)
+		addLevelKeys("building", item.ContentID, item.MaxLevel, item.LevelDescriptionKeys)
+	}
+
+	units, err := s.ListUnits(false)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range units {
+		addKey("unit", item.ContentID, "nameKey", item.NameKey, true)
+		addKey("unit", item.ContentID, "descriptionKey", item.DescriptionKey, true)
+		addKey("unit", item.ContentID, "flavorTextKey", item.FlavorTextKey, false)
+		addLevelKeys("unit", item.ContentID, item.MaxLevel, item.LevelDescriptionKeys)
+	}
+
+	research, err := s.ListResearch(false)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range research {
+		addKey("research", item.ContentID, "nameKey", item.NameKey, true)
+		addKey("research", item.ContentID, "descriptionKey", item.DescriptionKey, true)
+		addKey("research", item.ContentID, "flavorTextKey", item.FlavorTextKey, false)
+		addLevelKeys("research", item.ContentID, 30, item.LevelDescriptionKeys)
+	}
+
+	keySet := map[string]bool{}
+	keys := []string{}
+	for _, row := range rows {
+		if row.Key == "" || keySet[row.Key] {
+			continue
+		}
+		keySet[row.Key] = true
+		keys = append(keys, row.Key)
+	}
+	if len(keys) == 0 {
+		return rows, nil
+	}
+
+	type foundRow struct {
+		Key    string
+		Locale string
+	}
+	found := []foundRow{}
+	if err := s.db.Table("nexus_translation_keys as k").
+		Select("k.`key` as `key`, v.locale as locale").
+		Joins("LEFT JOIN nexus_translation_values as v ON v.key_id = k.id").
+		Where("k.`key` IN ?", keys).
+		Scan(&found).Error; err != nil {
+		return nil, err
+	}
+
+	existing := map[string]bool{}
+	availableLocales := map[string]map[string]bool{}
+	for _, item := range found {
+		existing[item.Key] = true
+		if item.Locale == "" {
+			continue
+		}
+		if availableLocales[item.Key] == nil {
+			availableLocales[item.Key] = map[string]bool{}
+		}
+		availableLocales[item.Key][item.Locale] = true
+	}
+
+	for i := range rows {
+		if rows[i].Key == "" {
+			rows[i].MissingLocales = append([]string{}, locales...)
+			continue
+		}
+		rows[i].Exists = existing[rows[i].Key]
+		for _, locale := range locales {
+			if availableLocales[rows[i].Key][locale] {
+				rows[i].Locales = append(rows[i].Locales, locale)
+			} else {
+				rows[i].MissingLocales = append(rows[i].MissingLocales, locale)
+			}
+		}
+	}
+
+	return rows, nil
 }
 
 // === Building Definitions CRUD (example for "chaque grand item") ===

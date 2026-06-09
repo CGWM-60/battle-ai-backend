@@ -192,6 +192,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/admin/content/buildings/page", contentH.AdminBuildingsPage)
 	group.GET("/admin/content/units/page", contentH.AdminUnitsPage)
 	group.GET("/admin/content/research/page", contentH.AdminResearchPage)
+	group.GET("/admin/content/translations/status", contentH.TranslationStatus)
 
 	group.GET("/admin/content/buildings", contentH.ListBuildings)
 	group.DELETE("/admin/content/buildings/by-id/:id", contentH.DeleteBuildingByID)

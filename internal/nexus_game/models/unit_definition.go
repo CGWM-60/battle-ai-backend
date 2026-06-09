@@ -12,19 +12,22 @@ type UnitDefinition struct {
 
 	NameKey        string `json:"nameKey"`
 	DescriptionKey string `json:"descriptionKey"`
-	AssetID        string `json:"assetId"`
-	AssetsByTier   map[string]string `gorm:"serializer:json" json:"assetsByTier"`
+	FlavorTextKey  string `json:"flavorTextKey,omitempty"`
+	// Maps level numbers ("1".."30") to i18n keys for level-specific descriptions.
+	LevelDescriptionKeys map[string]string `gorm:"serializer:json" json:"levelDescriptionKeys"`
+	AssetID              string            `json:"assetId"`
+	AssetsByTier         map[string]string `gorm:"serializer:json" json:"assetsByTier"`
 
 	MaxLevel int    `json:"maxLevel"`
 	Rarity   string `json:"rarity"`
 
 	// Base for formulas
-	HealthBase    int `json:"healthBase"`
-	AttackBase    int `json:"attackBase"`
-	DefenseBase   int `json:"defenseBase"`
-	SpeedBase     int `json:"speedBase"`
+	HealthBase              int `json:"healthBase"`
+	AttackBase              int `json:"attackBase"`
+	DefenseBase             int `json:"defenseBase"`
+	SpeedBase               int `json:"speedBase"`
 	TrainingTimeBaseSeconds int `json:"trainingTimeBaseSeconds"`
-	UpkeepBase    int `json:"upkeepBase"`
+	UpkeepBase              int `json:"upkeepBase"`
 
 	EffectsJSON string `gorm:"type:text" json:"effects"`
 
@@ -36,8 +39,8 @@ type UnitDefinition struct {
 
 // PlayerUnit - owned units (for army, training queues etc.)
 type PlayerUnit struct {
-	ID             uint `gorm:"primaryKey" json:"id"`
-	ProfileGamerID uint `json:"profileGamerId"`
+	ID             uint   `gorm:"primaryKey" json:"id"`
+	ProfileGamerID uint   `json:"profileGamerId"`
 	ContentID      string `json:"contentId"`
 	Count          int    `json:"count" gorm:"default:0"`
 	// For training queue etc.
