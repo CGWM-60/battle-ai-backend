@@ -52,6 +52,7 @@ func TestRegisterRoutesMountsContentCRUDRoutes(t *testing.T) {
 
 	expected := []string{
 		"GET /api/nexus-game/admin/content/buildings",
+		"GET /api/nexus-game/admin/content/assets/status",
 		"GET /api/nexus-game/admin/content/buildings/page",
 		"GET /api/nexus-game/admin/content/buildings/:contentId",
 		"GET /api/nexus-game/admin/content/translations/status",

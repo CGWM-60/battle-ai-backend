@@ -125,6 +125,26 @@ func (h *ContentHandler) TranslationStatus(c *gin.Context) {
 	})
 }
 
+func (h *ContentHandler) AssetStatus(c *gin.Context) {
+	publicContentBaseURL := requestBaseURL(c, path.Join(assetsBaseURL(), "content"))
+	rows, err := h.contentSvc.AssetStatus(publicContentBaseURL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	missing := 0
+	for _, row := range rows {
+		if !row.Exists {
+			missing++
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"rows":         rows,
+		"count":        len(rows),
+		"missingCount": missing,
+	})
+}
+
 func requestBaseURL(c *gin.Context, publicPath string) string {
 	scheme := c.GetHeader("X-Forwarded-Proto")
 	if scheme == "" {

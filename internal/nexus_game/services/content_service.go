@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +32,15 @@ type ContentTranslationStatusRow struct {
 	Exists         bool     `json:"exists"`
 	Locales        []string `json:"locales"`
 	MissingLocales []string `json:"missingLocales"`
+}
+
+type ContentAssetStatusRow struct {
+	ContentType string `json:"contentType"`
+	ContentID   string `json:"contentId"`
+	Field       string `json:"field"`
+	Reference   string `json:"reference"`
+	PublicURL   string `json:"publicUrl"`
+	Exists      bool   `json:"exists"`
 }
 
 func NewContentService(db *gorm.DB, assetsBaseDir string) *ContentService {
@@ -165,6 +175,76 @@ func (s *ContentService) TranslationStatus(locales []string) ([]ContentTranslati
 	}
 
 	return rows, nil
+}
+
+func (s *ContentService) AssetStatus(publicContentBaseURL string) ([]ContentAssetStatusRow, error) {
+	rows := []ContentAssetStatusRow{}
+	addRef := func(contentType, contentID, folder, field, ref string) {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			return
+		}
+		filename := assetFilenameFromReference(ref)
+		publicURL := strings.TrimRight(publicContentBaseURL, "/") + "/" + folder + "/" + filename
+		fullPath := filepath.Join(s.assetsBaseDir, folder, filename)
+		_, err := os.Stat(fullPath)
+		rows = append(rows, ContentAssetStatusRow{
+			ContentType: contentType,
+			ContentID:   contentID,
+			Field:       field,
+			Reference:   ref,
+			PublicURL:   publicURL,
+			Exists:      err == nil,
+		})
+	}
+
+	buildings, err := s.ListBuildings(false)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range buildings {
+		addRef("building", item.ContentID, "buildings", "assetId", item.AssetID)
+		for key, ref := range item.AssetsByTier {
+			addRef("building", item.ContentID, "buildings", "assetsByTier."+key, ref)
+		}
+	}
+
+	units, err := s.ListUnits(false)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range units {
+		addRef("unit", item.ContentID, "units", "assetId", item.AssetID)
+		for key, ref := range item.AssetsByTier {
+			addRef("unit", item.ContentID, "units", "assetsByTier."+key, ref)
+		}
+	}
+
+	research, err := s.ListResearch(false)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range research {
+		addRef("research", item.ContentID, "research", "assetId", item.AssetID)
+		for key, ref := range item.AssetsByTier {
+			addRef("research", item.ContentID, "research", "assetsByTier."+key, ref)
+		}
+	}
+
+	return rows, nil
+}
+
+func assetFilenameFromReference(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if parsed, err := url.Parse(ref); err == nil && parsed.Path != "" {
+		ref = parsed.Path
+	}
+	ref = strings.TrimPrefix(ref, "/")
+	parts := strings.Split(ref, "/")
+	if len(parts) == 0 {
+		return ref
+	}
+	return parts[len(parts)-1]
 }
 
 // === Building Definitions CRUD (example for "chaque grand item") ===
