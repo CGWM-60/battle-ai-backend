@@ -46,13 +46,18 @@ func RouterApp(database *gorm.DB) {
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
-	admin.Register(router, database)
 
-	// IMPORTANT: Register the Nexus admin static (/admin) **very early**, before any /api groups.
-	// This prevents Gin's catch-all conflict: "wildcard '*filepath' in /admin/*filepath conflicts with 'api' in prefix '/api'".
-	// The nexus_game package provides the helper so the built Next.js admin (with its /admin basePath)
-	// + all /api/nexus-game handlers + /nexus-assets live on the same origin.
+	// Register the Nexus admin static (/admin + /nexus-assets) as early as possible.
+	// This must happen BEFORE admin.Register (which has a side-effect that registers a route under /api/v1)
+	// and before any other /api groups, to prevent Gin's catch-all '*filepath' panic:
+	// "wildcard '*filepath' in new path '/admin/*filepath' conflicts with existing path segment 'api' in existing prefix '/api'".
+	//
+	// We insert the /admin/*filepath catch-all early (when the only root children are /assets and /ping).
+	// Later specific routes (including the legacy /admin/login etc. and the /api side-effect inside admin.Register)
+	// are added after.
 	nexusroutes.RegisterAdminStatic(router)
+
+	admin.Register(router, database)
 
 	api := router.Group("/api/v1")
 	api.POST("/auth/login", login(database))

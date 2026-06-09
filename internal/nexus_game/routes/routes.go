@@ -20,12 +20,17 @@ func getEnv(key, def string) string {
 	return def
 }
 
-// RegisterAdminStatic must be called **early** (right after creating the gin.Engine, before any
-// router.Group("/api/...") or other routes that create children under "/api").
+// RegisterAdminStatic must be called **very early** — before admin.Register (the legacy admin
+// package) and before any router.Group("/api/...").
 //
-// Gin has a strict radix tree and panics with "catch-all wildcard '*filepath' ... conflicts with
-// existing path segment 'api' in existing prefix '/api'" if you register a StaticFS (which uses
-// a *filepath catch-all) after concrete segments under a sibling prefix like /api have been added.
+// Reason: admin.Register has a side-effect `router.GET("/api/v1/nexus-coin/plans", ...)` plus
+// many /admin specific routes + a final NoRoute. Inserting the /admin/*filepath catch-all
+// (via StaticFS) *after* any /api route exists in the tree triggers the Gin panic you saw:
+//
+//   "catch-all wildcard '*filepath' in new path '/admin/*filepath' conflicts with existing
+//    path segment 'api' in existing prefix '/api'"
+//
+// Call it right after gin creation + first few top-level statics/ping, before admin.Register.
 //
 // We also register the /nexus-assets static here for the same reason (game content images for
 // buildings/units/research uploaded via the admin CRUD).
