@@ -42,6 +42,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 		_ = seeds.SeedInitialBuildings(database, contentSvc)
 		_ = seeds.SeedInitialUnits(database, contentSvc)
 		_ = seeds.SeedInitialResearch(database, contentSvc)
+		// Full catalogue from reference v2.0 seeded for buildings (20), units (15), research (11 branches x7). Use admin to add/update images and data.
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)

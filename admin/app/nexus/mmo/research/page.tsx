@@ -92,19 +92,30 @@ export default function ResearchAdminPage() {
       {error && <p style={{color:'red'}}>{error}</p>}
 
       <table className="data-table" style={{ width: '100%' }}>
-        <thead><tr><th>contentId</th><th>Nom</th><th>Branche</th><th>Tier</th><th>Rareté</th><th>Assets</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Branche</th><th>Tier</th><th>Rareté</th><th>Assets</th><th>Actions</th></tr></thead>
         <tbody>
-          {items.map(r => (
-            <tr key={r.contentId} style={{ borderTop: '1px solid #334155' }}>
-              <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.contentId}</td>
-              <td>{r.nameKey}</td>
-              <td>{r.branch}</td>
-              <td>{r.tier}</td>
-              <td>{r.rarity}</td>
-              <td style={{ fontSize: 11 }}>{r.assetId || (r.assetsByTier && Object.keys(r.assetsByTier).join(', '))}</td>
-              <td><button onClick={() => openEdit(r)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(r)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
-            </tr>
-          ))}
+          {items.map(r => {
+            const mainAsset = r.assetId || (r.assetsByTier && (r.assetsByTier.tier1 || r.assetsByTier.main));
+            const previewUrl = mainAsset ? `/nexus-assets/content/research/${mainAsset}` : null;
+            return (
+              <tr key={r.contentId} style={{ borderTop: '1px solid #334155' }}>
+                <td style={{ padding: 4 }}>
+                  {previewUrl ? (
+                    <img src={previewUrl} alt={r.contentId} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  ) : (
+                    <div style={{ width: 48, height: 48, background: '#1e2937', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>no img</div>
+                  )}
+                </td>
+                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.contentId}</td>
+                <td>{r.nameKey}</td>
+                <td>{r.branch}</td>
+                <td>{r.tier}</td>
+                <td>{r.rarity}</td>
+                <td style={{ fontSize: 11 }}>{r.assetId || (r.assetsByTier && Object.keys(r.assetsByTier).join(', '))}</td>
+                <td><button onClick={() => openEdit(r)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(r)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 

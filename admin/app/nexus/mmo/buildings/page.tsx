@@ -189,6 +189,7 @@ export default function BuildingsAdminPage() {
       <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
+            <th>Preview</th>
             <th>Content ID</th>
             <th>Nom (key)</th>
             <th>Rareté</th>
@@ -199,25 +200,36 @@ export default function BuildingsAdminPage() {
           </tr>
         </thead>
         <tbody>
-          {items.map((b) => (
-            <tr key={b.contentId} style={{ borderTop: '1px solid #334155' }}>
-              <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.contentId}</td>
-              <td>{b.nameKey}</td>
-              <td>{b.rarity}</td>
-              <td>{b.maxLevel}</td>
-              <td style={{ fontSize: 11 }}>
-                {b.assetId && <div>main: {b.assetId}</div>}
-                {b.assetsByTier && Object.keys(b.assetsByTier).map(t => (
-                  <div key={t}>{t}: {b.assetsByTier![t]}</div>
-                ))}
-              </td>
-              <td>{b.aiAgentSlots ?? 0}</td>
-              <td>
-                <button onClick={() => openEdit(b)} style={{ marginRight: 6, fontSize: 12 }}>Éditer</button>
-                <button onClick={() => openDelete(b)} style={{ color: '#f87171', fontSize: 12 }}>Suppr</button>
-              </td>
-            </tr>
-          ))}
+          {items.map((b) => {
+            const mainAsset = b.assetId || (b.assetsByTier && (b.assetsByTier.tier1 || b.assetsByTier.main));
+            const previewUrl = mainAsset ? `/nexus-assets/content/buildings/${mainAsset}` : null;
+            return (
+              <tr key={b.contentId} style={{ borderTop: '1px solid #334155' }}>
+                <td style={{ padding: 4 }}>
+                  {previewUrl ? (
+                    <img src={previewUrl} alt={b.contentId} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  ) : (
+                    <div style={{ width: 48, height: 48, background: '#1e2937', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>no img</div>
+                  )}
+                </td>
+                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.contentId}</td>
+                <td>{b.nameKey}</td>
+                <td>{b.rarity}</td>
+                <td>{b.maxLevel}</td>
+                <td style={{ fontSize: 11 }}>
+                  {b.assetId && <div>main: {b.assetId}</div>}
+                  {b.assetsByTier && Object.keys(b.assetsByTier).map(t => (
+                    <div key={t}>{t}: {b.assetsByTier![t]}</div>
+                  ))}
+                </td>
+                <td>{b.aiAgentSlots ?? 0}</td>
+                <td>
+                  <button onClick={() => openEdit(b)} style={{ marginRight: 6, fontSize: 12 }}>Éditer</button>
+                  <button onClick={() => openDelete(b)} style={{ color: '#f87171', fontSize: 12 }}>Suppr</button>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 

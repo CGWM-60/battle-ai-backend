@@ -89,18 +89,29 @@ export default function UnitsAdminPage() {
       {error && <p style={{color:'red'}}>{error}</p>}
 
       <table className="data-table" style={{ width: '100%' }}>
-        <thead><tr><th>contentId</th><th>Nom</th><th>Rareté</th><th>Niv Max</th><th>Assets</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Rareté</th><th>Niv Max</th><th>Assets</th><th>Actions</th></tr></thead>
         <tbody>
-          {items.map(u => (
-            <tr key={u.contentId} style={{ borderTop: '1px solid #334155' }}>
-              <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{u.contentId}</td>
-              <td>{u.nameKey}</td>
-              <td>{u.rarity}</td>
-              <td>{u.maxLevel}</td>
-              <td style={{ fontSize: 11 }}>{u.assetId || (u.assetsByTier && Object.keys(u.assetsByTier).join(', '))}</td>
-              <td><button onClick={() => openEdit(u)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(u)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
-            </tr>
-          ))}
+          {items.map(u => {
+            const mainAsset = u.assetId || (u.assetsByTier && (u.assetsByTier.tier1 || u.assetsByTier.main));
+            const previewUrl = mainAsset ? `/nexus-assets/content/units/${mainAsset}` : null;
+            return (
+              <tr key={u.contentId} style={{ borderTop: '1px solid #334155' }}>
+                <td style={{ padding: 4 }}>
+                  {previewUrl ? (
+                    <img src={previewUrl} alt={u.contentId} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155' }} onError={(e) => (e.currentTarget.style.display = 'none')} />
+                  ) : (
+                    <div style={{ width: 48, height: 48, background: '#1e2937', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>no img</div>
+                  )}
+                </td>
+                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{u.contentId}</td>
+                <td>{u.nameKey}</td>
+                <td>{u.rarity}</td>
+                <td>{u.maxLevel}</td>
+                <td style={{ fontSize: 11 }}>{u.assetId || (u.assetsByTier && Object.keys(u.assetsByTier).join(', '))}</td>
+                <td><button onClick={() => openEdit(u)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(u)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
 
