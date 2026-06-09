@@ -249,15 +249,21 @@ func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}
 				Limit(25).
 				Find(&profiles)
 			playerList := []map[string]interface{}{}
+			factionNames, err := s.factionNamesByID(ctx, profiles)
+			if err != nil {
+				return nil, err
+			}
 			for _, pr := range profiles {
 				playerList = append(playerList, map[string]interface{}{
-					"profile_id":  pr.ID,
-					"user_id":     pr.UserID,
-					"pseudo":      pr.Pseudo,
-					"city_name":   pr.CityName,
-					"level":       pr.Level,
-					"power":       pr.Power,
-					"assigned_at": pr.CreatedAt.Format("2006-01-02 15:04"),
+					"profile_id":   pr.ID,
+					"user_id":      pr.UserID,
+					"pseudo":       pr.Pseudo,
+					"city_name":    pr.CityName,
+					"level":        pr.Level,
+					"power":        pr.Power,
+					"faction_id":   pr.FactionID,
+					"faction_name": factionNames[pr.FactionID],
+					"assigned_at":  pr.CreatedAt.Format("2006-01-02 15:04"),
 				})
 			}
 			contSummary = append(contSummary, map[string]interface{}{

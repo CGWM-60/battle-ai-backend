@@ -69,6 +69,8 @@ export default function NexusMmoPage() {
     world: string;
     worldId: number | string;
     continent: string;
+    faction_id?: string | number;
+    faction_name?: string;
     user_id: string | number;
     pseudo: string;
     assigned_at: string;
@@ -84,6 +86,8 @@ export default function NexusMmoPage() {
             world: w.name || `Monde ${w.id}`,
             worldId: w.id,
             continent: c.name,
+            faction_id: '-',
+            faction_name: '-',
             user_id: '-',
             pseudo: pl,
             assigned_at: '-'
@@ -93,6 +97,8 @@ export default function NexusMmoPage() {
             world: w.name || `Monde ${w.id}`,
             worldId: w.id,
             continent: c.name,
+            faction_id: pl.faction_id || '-',
+            faction_name: pl.faction_name || (pl.faction_id ? `Faction #${pl.faction_id}` : '-'),
             user_id: pl.user_id || '-',
             pseudo: pl.pseudo || pl,
             assigned_at: pl.assigned_at || '-'
@@ -1053,6 +1059,7 @@ export default function NexusMmoPage() {
               <tr>
                 <th style={{ textAlign: 'left', padding: 8 }}>Monde</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Continent</th>
+                <th style={{ textAlign: 'left', padding: 8 }}>Faction</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>User ID</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Pseudo (Joueur)</th>
                 <th style={{ textAlign: 'left', padding: 8 }}>Date Assignation</th>
@@ -1060,12 +1067,13 @@ export default function NexusMmoPage() {
             </thead>
             <tbody>
               {filteredPlayers.length === 0 && (
-                <tr><td colSpan={5} style={{ padding: 8, color: '#64748b' }}>Aucun joueur assigné pour ce filtre. (Les assignations se font auto à la création de profil via la faction.)</td></tr>
+                <tr><td colSpan={6} style={{ padding: 8, color: '#64748b' }}>Aucun joueur assigné pour ce filtre. (Les assignations se font auto à la création de profil via la faction.)</td></tr>
               )}
               {filteredPlayers.map((p, i) => (
                 <tr key={i} style={{ borderTop: '1px solid #334155' }}>
                   <td style={{ padding: 8 }}>{p.world}</td>
                   <td style={{ padding: 8 }}>{p.continent}</td>
+                  <td style={{ padding: 8 }}>{p.faction_name || '-'}</td>
                   <td style={{ padding: 8 }}>{p.user_id || '-'}</td>
                   <td style={{ padding: 8, fontWeight: 500 }}>{p.pseudo}</td>
                   <td style={{ padding: 8, fontSize: 12 }}>{p.assigned_at || '-'}</td>
