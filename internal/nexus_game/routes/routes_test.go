@@ -15,7 +15,12 @@ func TestRegisterRoutesMountsHealthAndDebug(t *testing.T) {
 	router := gin.New()
 	RegisterRoutes(router, nil)
 
-	for _, path := range []string{"/api/nexus-game/health", "/api/nexus-game/debug/status"} {
+	for _, path := range []string{
+		"/api/nexus-game/health",
+		"/api/nexus-game/debug/status",
+		"/api/nexus-game/worlds/1",
+		"/api/nexus-game/worlds/1/players",
+	} {
 		recorder := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		router.ServeHTTP(recorder, req)

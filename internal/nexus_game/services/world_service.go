@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/cache"
@@ -16,6 +18,13 @@ import (
 type WorldService struct {
 	db    *gorm.DB
 	redis *cache.RedisService
+}
+
+type WorldPlayersQuery struct {
+	Limit       int
+	Offset      int
+	Search      string
+	ContinentID uint
 }
 
 func NewWorldService(db *gorm.DB, redis *cache.RedisService) *WorldService {
@@ -190,25 +199,52 @@ func (s *WorldService) AssignPlayerToContinent(ctx context.Context, userID, fact
 
 // ListWorlds returns worlds with continent summary (capacities from Redis).
 func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}, error) {
+	if s.db == nil {
+		return nil, errors.New("database unavailable")
+	}
+
 	var worlds []models.World
-	s.db.Find(&worlds)
+	if err := s.db.WithContext(ctx).Order("id asc").Find(&worlds).Error; err != nil {
+		return nil, err
+	}
 
 	result := []map[string]interface{}{}
 	for _, w := range worlds {
 		var conts []models.Continent
-		s.db.Where("world_id = ?", w.ID).Find(&conts)
+		if err := s.db.WithContext(ctx).Where("world_id = ?", w.ID).Order("id asc").Find(&conts).Error; err != nil {
+			return nil, err
+		}
 		contSummary := []map[string]interface{}{}
+		worldPlayersCount := int64(0)
 		for _, c := range conts {
 			pStr, _, _ := s.redis.GetString(ctx, fmt.Sprintf("nexus:continent:%d:players", c.ID))
 			fStr, _, _ := s.redis.GetString(ctx, fmt.Sprintf("nexus:continent:%d:factions", c.ID))
+			dbPlayersCount := int64(0)
+			_ = s.db.WithContext(ctx).
+				Model(&models.ProfileGamer{}).
+				Where("world_id = ? AND continent_id = ?", w.ID, c.ID).
+				Count(&dbPlayersCount).Error
+			worldPlayersCount += dbPlayersCount
+			if pStr == "" {
+				pStr = fmt.Sprintf("%d", dbPlayersCount)
+			}
+
 			// Liste des joueurs pour la gestion (from DB ProfileGamer)
 			var profiles []models.ProfileGamer
-			s.db.Where("continent_id = ?", c.ID).Find(&profiles)
+			s.db.WithContext(ctx).
+				Where("world_id = ? AND continent_id = ?", w.ID, c.ID).
+				Order("created_at desc").
+				Limit(25).
+				Find(&profiles)
 			playerList := []map[string]interface{}{}
 			for _, pr := range profiles {
 				playerList = append(playerList, map[string]interface{}{
+					"profile_id":  pr.ID,
 					"user_id":     pr.UserID,
 					"pseudo":      pr.Pseudo,
+					"city_name":   pr.CityName,
+					"level":       pr.Level,
+					"power":       pr.Power,
 					"assigned_at": pr.CreatedAt.Format("2006-01-02 15:04"),
 				})
 			}
@@ -216,6 +252,7 @@ func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}
 				"id":            c.ID,
 				"name":          c.Name,
 				"players":       pStr,
+				"players_count": dbPlayersCount,
 				"factions":      fStr,
 				"max_players":   c.MaxPlayers,
 				"max_factions":  c.MaxFactions,
@@ -223,13 +260,173 @@ func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}
 			})
 		}
 		result = append(result, map[string]interface{}{
-			"id":         w.ID,
-			"name":       w.Name,
-			"continents": contSummary,
-			"is_active":  w.IsActive,
+			"id":            w.ID,
+			"name":          w.Name,
+			"continents":    contSummary,
+			"is_active":     w.IsActive,
+			"players_count": worldPlayersCount,
 		})
 	}
 	return result, nil
+}
+
+func (s *WorldService) GetWorldDetail(ctx context.Context, worldID uint) (map[string]interface{}, error) {
+	if s.db == nil {
+		return nil, errors.New("database unavailable")
+	}
+
+	var world models.World
+	if err := s.db.WithContext(ctx).First(&world, worldID).Error; err != nil {
+		return nil, err
+	}
+
+	worlds, err := s.ListWorlds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range worlds {
+		if id, ok := item["id"].(uint); ok && id == world.ID {
+			return item, nil
+		}
+	}
+	return map[string]interface{}{
+		"id":        world.ID,
+		"name":      world.Name,
+		"is_active": world.IsActive,
+	}, nil
+}
+
+func (s *WorldService) ListPlayersByWorld(ctx context.Context, worldID uint, query WorldPlayersQuery) (map[string]interface{}, error) {
+	if s.db == nil {
+		return nil, errors.New("database unavailable")
+	}
+
+	if query.Limit <= 0 || query.Limit > 200 {
+		query.Limit = 50
+	}
+	if query.Offset < 0 {
+		query.Offset = 0
+	}
+	query.Search = strings.TrimSpace(query.Search)
+
+	var world models.World
+	if err := s.db.WithContext(ctx).First(&world, worldID).Error; err != nil {
+		return nil, err
+	}
+
+	var continents []models.Continent
+	if err := s.db.WithContext(ctx).Where("world_id = ?", worldID).Order("id asc").Find(&continents).Error; err != nil {
+		return nil, err
+	}
+	continentNames := make(map[uint]string, len(continents))
+	continentSummary := make([]map[string]interface{}, 0, len(continents))
+	for _, continent := range continents {
+		continentNames[continent.ID] = continent.Name
+		var count int64
+		_ = s.db.WithContext(ctx).
+			Model(&models.ProfileGamer{}).
+			Where("world_id = ? AND continent_id = ?", worldID, continent.ID).
+			Count(&count).Error
+		continentSummary = append(continentSummary, map[string]interface{}{
+			"id":            continent.ID,
+			"name":          continent.Name,
+			"players_count": count,
+			"max_players":   continent.MaxPlayers,
+		})
+	}
+
+	base := s.db.WithContext(ctx).Model(&models.ProfileGamer{}).Where("world_id = ?", worldID)
+	if query.ContinentID != 0 {
+		base = base.Where("continent_id = ?", query.ContinentID)
+	}
+	if query.Search != "" {
+		like := "%" + query.Search + "%"
+		base = base.Where("pseudo LIKE ? OR city_name LIKE ?", like, like)
+	}
+
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	var profiles []models.ProfileGamer
+	if err := base.Order("created_at desc").Limit(query.Limit).Offset(query.Offset).Find(&profiles).Error; err != nil {
+		return nil, err
+	}
+
+	factionNames, err := s.factionNamesByID(ctx, profiles)
+	if err != nil {
+		return nil, err
+	}
+
+	players := make([]map[string]interface{}, 0, len(profiles))
+	for _, profile := range profiles {
+		players = append(players, map[string]interface{}{
+			"profile_id":      profile.ID,
+			"user_id":         profile.UserID,
+			"pseudo":          profile.Pseudo,
+			"city_name":       profile.CityName,
+			"level":           profile.Level,
+			"power":           profile.Power,
+			"world_id":        profile.WorldID,
+			"continent_id":    profile.ContinentID,
+			"continent_name":  continentNames[profile.ContinentID],
+			"faction_id":      profile.FactionID,
+			"faction_name":    factionNames[profile.FactionID],
+			"avatar_id":       profile.AvatarID,
+			"ia_companion_id": profile.IACompanionID,
+			"profile_created": profile.CreatedAt,
+			"profile_updated": profile.UpdatedAt,
+			"assigned_at":     profile.CreatedAt.Format("2006-01-02 15:04"),
+		})
+	}
+
+	return map[string]interface{}{
+		"world": map[string]interface{}{
+			"id":        world.ID,
+			"name":      world.Name,
+			"is_active": world.IsActive,
+		},
+		"continents": continentSummary,
+		"players":    players,
+		"pagination": map[string]interface{}{
+			"limit":  query.Limit,
+			"offset": query.Offset,
+			"total":  total,
+		},
+		"filters": map[string]interface{}{
+			"continent_id": query.ContinentID,
+			"search":       query.Search,
+		},
+	}, nil
+}
+
+func (s *WorldService) factionNamesByID(ctx context.Context, profiles []models.ProfileGamer) (map[uint]string, error) {
+	ids := make([]uint, 0)
+	seen := make(map[uint]struct{})
+	for _, profile := range profiles {
+		if profile.FactionID == 0 {
+			continue
+		}
+		if _, exists := seen[profile.FactionID]; exists {
+			continue
+		}
+		seen[profile.FactionID] = struct{}{}
+		ids = append(ids, profile.FactionID)
+	}
+	if len(ids) == 0 {
+		return map[uint]string{}, nil
+	}
+
+	var factions []models.Faction
+	if err := s.db.WithContext(ctx).Where("id IN ?", ids).Find(&factions).Error; err != nil {
+		return nil, err
+	}
+	names := make(map[uint]string, len(factions))
+	for _, faction := range factions {
+		names[faction.ID] = faction.Name
+	}
+	return names, nil
 }
 
 func (s *WorldService) listActiveWorlds(ctx context.Context) ([]models.World, error) {

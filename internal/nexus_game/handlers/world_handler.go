@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -56,9 +57,52 @@ func (h *WorldHandler) CreateWorld(c *gin.Context) {
 
 // GetWorld detail.
 func (h *WorldHandler) GetWorld(c *gin.Context) {
-	id, _ := strconv.Atoi(c.Param("id"))
-	// For demo, return basic; extend with Redis capacities.
-	c.JSON(http.StatusOK, gin.H{"world_id": id, "message": "extend with capacities from Redis"})
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid world id"})
+		return
+	}
+	world, err := h.svc.GetWorldDetail(c.Request.Context(), uint(id))
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"world": world})
+}
+
+func (h *WorldHandler) ListPlayersByWorld(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid world id"})
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	continentID, _ := strconv.Atoi(c.DefaultQuery("continent_id", "0"))
+	if continentID < 0 {
+		continentID = 0
+	}
+
+	payload, err := h.svc.ListPlayersByWorld(c.Request.Context(), uint(id), services.WorldPlayersQuery{
+		Limit:       limit,
+		Offset:      offset,
+		Search:      c.Query("search"),
+		ContinentID: uint(continentID),
+	})
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 // ListContinents - for management.
