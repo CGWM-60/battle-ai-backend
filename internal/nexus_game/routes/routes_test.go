@@ -18,6 +18,7 @@ func TestRegisterRoutesMountsHealthAndDebug(t *testing.T) {
 	for _, path := range []string{
 		"/api/nexus-game/health",
 		"/api/nexus-game/debug/status",
+		"/api/nexus-game/world-players",
 		"/api/nexus-game/worlds/1",
 		"/api/nexus-game/worlds/1/players",
 	} {
@@ -27,5 +28,12 @@ func TestRegisterRoutesMountsHealthAndDebug(t *testing.T) {
 		if recorder.Code == http.StatusNotFound {
 			t.Fatalf("%s was not mounted", path)
 		}
+	}
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/nexus-game/worlds/repair-player-assignments", nil)
+	router.ServeHTTP(recorder, req)
+	if recorder.Code == http.StatusNotFound {
+		t.Fatal("/api/nexus-game/worlds/repair-player-assignments was not mounted")
 	}
 }

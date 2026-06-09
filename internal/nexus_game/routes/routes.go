@@ -91,8 +91,10 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// POST /factions/assign-continent (internal on faction create)
 	// POST /profiles/assign-continent (internal on profile create)
 	// Uses Redis heavily for capacities, locks, player counts, faction assignments.
+	group.GET("/world-players", worldH.ListWorldPlayers)
 	group.GET("/worlds", worldH.ListWorlds)
 	group.POST("/worlds", worldH.CreateWorld)
+	group.POST("/worlds/repair-player-assignments", worldH.RepairPlayerAssignments)
 	group.GET("/worlds/:id", worldH.GetWorld)
 	group.GET("/worlds/:id/players", worldH.ListPlayersByWorld)
 	group.GET("/continents", worldH.ListContinents)

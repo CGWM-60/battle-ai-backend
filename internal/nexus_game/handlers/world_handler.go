@@ -105,6 +105,41 @@ func (h *WorldHandler) ListPlayersByWorld(c *gin.Context) {
 	c.JSON(http.StatusOK, payload)
 }
 
+func (h *WorldHandler) ListWorldPlayers(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	worldID, _ := strconv.Atoi(c.DefaultQuery("world_id", "0"))
+	continentID, _ := strconv.Atoi(c.DefaultQuery("continent_id", "0"))
+	if worldID < 0 {
+		worldID = 0
+	}
+	if continentID < 0 {
+		continentID = 0
+	}
+
+	payload, err := h.svc.ListWorldPlayers(c.Request.Context(), services.WorldPlayersQuery{
+		Limit:       limit,
+		Offset:      offset,
+		Search:      c.Query("search"),
+		WorldID:     uint(worldID),
+		ContinentID: uint(continentID),
+	}, c.DefaultQuery("assignment", "all"))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func (h *WorldHandler) RepairPlayerAssignments(c *gin.Context) {
+	repaired, err := h.svc.RepairMissingProfileWorldAssignments(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"repaired": repaired})
+}
+
 // ListContinents - for management.
 func (h *WorldHandler) ListContinents(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "use ListWorlds for full view with Redis capacities"})
