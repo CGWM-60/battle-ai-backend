@@ -29,7 +29,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
-		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{}, &models.MmoIAAgent{})
+		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{}, &models.MmoIAAgent{}, &models.DailyPlan{})
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
@@ -83,6 +83,12 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// Avatar support for agents. Companion linked to profile creation choice.
 	group.POST("/profile/ia-agents", profileH.SaveIAAgent)
 	group.GET("/profile/:id/ia-agents", profileH.ListIAAgents)
+
+	// Daily Plan (Player AI Daily Plan context for first load / bootstrap).
+	// Context sent to Flutter -> player's provider (or fallback) generates recommendations.
+	// All recommendations validated via /actions/validate + player confirm + /actions/resolve.
+	// Server rules included so AI knows it cannot mutate world.
+	group.GET("/profile/:id/daily-plan/context", profileH.GetDailyPlanContext)
 
 	// World management (gestion des worlds) - card entry via admin or API.
 	// GET /worlds -> list worlds with continents and capacities (from Redis)

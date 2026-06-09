@@ -65,10 +65,31 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"exists": false,
 			"profile": models.ProfileGamer{
-				UserID: uint(uid),
-				Level:  1,
-				Power:  0,
+				UserID:             uint(uid),
+				Level:              1,
+				Power:              0,
+				Population:         0,
+				PopulationCapacity: 0,
+				Morale:             50,
+				EnergyProduction:   0,
+				EnergyConsumption:  0,
+				EnergyBalance:      0,
+				EnergyStored:       0,
+				Security:           50,
 			},
+			"daily_plan_context": buildDailyPlanContext(models.ProfileGamer{
+				UserID:             uint(uid),
+				Level:              1,
+				Power:              0,
+				Population:         0,
+				PopulationCapacity: 0,
+				Morale:             50,
+				EnergyProduction:   0,
+				EnergyConsumption:  0,
+				EnergyBalance:      0,
+				EnergyStored:       0,
+				Security:           50,
+			}),
 		})
 		return
 	}
@@ -102,6 +123,8 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		"avatar_url":   avatarURL,
 		"world_name":   worldName,
 		"faction_name": factionName,
+		// Daily plan context sent on first load for player's AI (provider/local/governor > server fallback).
+		"daily_plan_context": buildDailyPlanContext(p),
 	})
 }
 
@@ -154,8 +177,18 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 			CityName:      req.CityName,
 			Level:         1,
 			Power:         0,
-			CreatedAt:     now,
-			UpdatedAt:     now,
+			// Initial evolutionary city stats (Population, Morale, Energy, Security).
+			// These will evolve via ticks, actions, events per the detailed rules.
+			Population:         5,
+			PopulationCapacity: 10,
+			Morale:             55,
+			EnergyProduction:   20,
+			EnergyConsumption:  10,
+			EnergyBalance:      10,
+			EnergyStored:       50,
+			Security:           50,
+			CreatedAt:          now,
+			UpdatedAt:          now,
 		}
 		if err := h.db.Create(&p).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create profile_gamer"})
@@ -238,6 +271,8 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 		"avatar_url":   avatarURL,
 		"world_name":   worldName,
 		"faction_name": factionName,
+		// Daily plan context sent on first load for player's AI (provider/local/governor > server fallback).
+		"daily_plan_context": buildDailyPlanContext(p),
 	})
 }
 
@@ -314,3 +349,97 @@ func (h *ProfileHandler) ListIAAgents(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"agents": agents})
 }
+
+// GetDailyPlanContext returns the safe official context for the player's AI provider (or fallback).
+// This is sent to Flutter on first load / profile bootstrap.
+// Flutter then sends it to the player's configured provider (or local model / governor agent).
+// Server rules are included so the AI knows it cannot apply changes directly.
+func (h *ProfileHandler) GetDailyPlanContext(c *gin.Context) {
+	profileIDStr := c.Param("id")
+	profileID, err := strconv.ParseUint(profileIDStr, 10, 64)
+	if err != nil || profileID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile id"})
+		return
+	}
+
+	var p models.ProfileGamer
+	if err := h.db.First(&p, profileID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
+		return
+	}
+
+	// Build safe context (use current profile stats; in full impl enrich with resources, queues from other services)
+	ctx := models.DailyPlanContext{
+		ProfileGamerID: p.ID,
+		PlayerStyle:    "balanced", // TODO: from profile prefs or default
+		City: map[string]interface{}{
+			"population":         p.Population,
+			"populationCapacity": p.PopulationCapacity,
+			"morale":             p.Morale,
+			"security":           p.Security,
+			"energyBalance":      p.EnergyBalance,
+			"foodBalance":        0, // TODO: from resources
+		},
+		Resources: map[string]interface{}{
+			"credits": 0, // TODO
+			"metal":   0,
+			"energy":  p.EnergyStored,
+			"food":    0,
+		},
+		ActiveQueues: map[string]interface{}{
+			"construction": []interface{}{},
+			"research":     []interface{}{},
+			"training":     []interface{}{},
+		},
+		AvailableActions: []string{"build", "upgrade", "train_unit", "start_research", "collect", "explore"},
+		ServerRules: []string{
+			"The AI cannot apply actions directly.",
+			"Costs and impacts are validated by the server via /actions/validate.",
+			"All changes require /actions/resolve after player confirmation.",
+			"Rewards cannot be invented by the AI.",
+		},
+		GeneratedAt: time.Now().UTC(),
+	}
+
+	c.JSON(http.StatusOK, gin.H{"context": ctx, "note": "Send this context to the player's AI provider (or local/governor fallback). Recommendations must be validated by server."})
+}
+
+// buildDailyPlanContext is the retrieval function for data sent to Flutter on first load (profile/bootstrap).
+// It prepares the safe context for the player's AI Daily Plan generation.
+// Implements the rules: Player provider > local > Governor > server fallback > algorithmic.
+func buildDailyPlanContext(p models.ProfileGamer) map[string]interface{} {
+	return map[string]interface{}{
+		"profile_gamer_id": p.ID,
+		"player_style":     "balanced", // TODO: persist per profile
+		"city": map[string]interface{}{
+			"population":         p.Population,
+			"populationCapacity": p.PopulationCapacity,
+			"morale":             p.Morale,
+			"security":           p.Security,
+			"energyBalance":      p.EnergyBalance,
+			"foodBalance":        0, // TODO from resources
+		},
+		"resources": map[string]interface{}{
+			"credits": 0,
+			"metal":   0,
+			"energy":  p.EnergyStored,
+			"food":    0,
+		},
+		"active_queues": map[string]interface{}{
+			"construction": []interface{}{},
+			"research":     []interface{}{},
+			"training":     []interface{}{},
+		},
+		"available_actions": []string{"build", "upgrade", "train_unit", "start_research", "collect", "explore"},
+		"server_rules": []string{
+			"The AI cannot apply actions directly.",
+			"Costs and impacts are validated by the server via /actions/validate.",
+			"All changes require /actions/resolve after player confirmation.",
+			"Rewards cannot be invented by the AI.",
+		},
+		"generated_at": time.Now().UTC().Format(time.RFC3339),
+	}
+}
+
+// Note: generate/accept etc. will be added next. For now the context retrieval is the first load data sent to Flutter.
+

@@ -25,6 +25,18 @@ type ProfileGamer struct {
 	Level int `json:"level" gorm:"default:1"`
 	Power int `json:"power" gorm:"default:0"`
 
+	// Evolutionary base city stats (Population, Morale, Energy, Security).
+	// These evolve on ticks, actions, events. Server is source of truth.
+	// See detailed rules in AGENTS / dev notes for growth, decline, factors, priorities, relations.
+	Population         int `json:"population" gorm:"default:0"`
+	PopulationCapacity int `json:"population_capacity" gorm:"default:0"`
+	Morale             int `json:"morale" gorm:"default:50"`
+	EnergyProduction   int `json:"energy_production" gorm:"default:0"`
+	EnergyConsumption  int `json:"energy_consumption" gorm:"default:0"`
+	EnergyBalance      int `json:"energy_balance" gorm:"default:0"`
+	EnergyStored       int `json:"energy_stored" gorm:"default:0"`
+	Security           int `json:"security" gorm:"default:50"`
+
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
