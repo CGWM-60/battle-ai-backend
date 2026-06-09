@@ -26,6 +26,8 @@ const ASSET_KEYS = ["main", "tier1", "tier2", "tier3", "tier4"] as const;
 
 function buildAssetUrl(folder: string, fileName?: string) {
   if (!fileName) return null;
+  if (/^https?:\/\//.test(fileName)) return fileName;
+  if (fileName.startsWith("/")) return `${API_BASE}${fileName}`;
   return `${API_BASE}/nexus-assets/content/${folder}/${encodeURIComponent(fileName)}`;
 }
 
@@ -173,7 +175,7 @@ export default function BuildingsAdminPage() {
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      const saved = data.savedAs || data.urlHint || '';
+      const saved = data.url || data.urlHint || data.publicPath || data.savedAs || '';
 
       // Update form or current with the asset
       const key = tier ? `tier${tier}` : 'main';

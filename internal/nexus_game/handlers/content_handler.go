@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/services"
@@ -13,7 +16,7 @@ import (
 
 // ContentHandler provides REST CRUD + asset upload for major content items (buildings first).
 // Used by admin Next.js for tables + forms, and by Flutter for catalog.
-// All images uploaded here are stored on server disk and served statically (configure router to /nexus-assets/content/* -> content/assets).
+// All images uploaded here are stored in the persistent Nexus assets volume.
 // The system is kept open: add similar methods for units/research.
 
 type ContentHandler struct {
@@ -94,6 +97,37 @@ func (h *ContentHandler) DeleteBuildingByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
+func requestBaseURL(c *gin.Context, publicPath string) string {
+	scheme := c.GetHeader("X-Forwarded-Proto")
+	if scheme == "" {
+		scheme = c.GetHeader("X-Scheme")
+	}
+	if scheme == "" {
+		scheme = "https"
+		if c.Request.TLS == nil {
+			scheme = "http"
+		}
+	}
+	host := c.GetHeader("X-Forwarded-Host")
+	if host == "" {
+		host = c.Request.Host
+	}
+	return fmt.Sprintf("%s://%s%s", strings.Split(scheme, ",")[0], strings.Split(host, ",")[0], publicPath)
+}
+
+func contentAssetFolder(domain string) string {
+	switch domain {
+	case "research":
+		return "research"
+	case "building":
+		return "buildings"
+	case "unit":
+		return "units"
+	default:
+		return domain + "s"
+	}
+}
+
 // UploadAsset for a building (or other domain).
 // Form: file (multipart), contentId, domain="building", tier="1"|"2"|"3"|"4" (optional)
 func (h *ContentHandler) UploadAsset(c *gin.Context) {
@@ -118,25 +152,20 @@ func (h *ContentHandler) UploadAsset(c *gin.Context) {
 		return
 	}
 
-	savedName, err := h.contentSvc.UploadAsset(domain, contentID, tier, header.Filename, data)
+	folder := contentAssetFolder(domain)
+	publicContentBaseURL := requestBaseURL(c, path.Join(assetsBaseURL(), "content"))
+	savedName, publicURL, err := h.contentSvc.UploadAsset(domain, contentID, tier, header.Filename, data, publicContentBaseURL)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	folder := domain + "s"
-	switch domain {
-	case "research":
-		folder = "research"
-	case "building":
-		folder = "buildings"
-	case "unit":
-		folder = "units"
-	}
 	c.JSON(http.StatusOK, gin.H{
-		"ok":      true,
-		"savedAs": savedName,
-		"urlHint": "/nexus-assets/content/" + folder + "/" + savedName,
+		"ok":         true,
+		"savedAs":    savedName,
+		"url":        publicURL,
+		"urlHint":    publicURL,
+		"publicPath": "/nexus-assets/content/" + folder + "/" + savedName,
 	})
 }
 
@@ -200,7 +229,7 @@ func (h *ContentHandler) AdminBuildingsPage(c *gin.Context) {
 <style>body{font-family:sans-serif;margin:20px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ccc;padding:8px} form{margin:10px 0}</style>
 </head><body>
 <h1>Buildings CRUD (Backend Admin Page)</h1>
-<p>Upload images via the form or the /admin/content/upload-asset endpoint. Served at /nexus-assets/content/buildings/...</p>
+<p>Upload images via the form or the /admin/content/upload-asset endpoint. Served from the persistent nexus-assets volume.</p>
 
 <h2>Create / Update</h2>
 <form method="POST" action="/api/nexus-game/admin/content/buildings">

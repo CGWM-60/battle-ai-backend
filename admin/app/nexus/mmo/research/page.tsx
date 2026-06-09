@@ -26,6 +26,8 @@ const ASSET_KEYS = ["main", "tier1", "tier2", "tier3", "tier4"] as const;
 
 function buildAssetUrl(folder: string, fileName?: string) {
   if (!fileName) return null;
+  if (/^https?:\/\//.test(fileName)) return fileName;
+  if (fileName.startsWith("/")) return `${API_BASE}${fileName}`;
   return `${API_BASE}/nexus-assets/content/${folder}/${encodeURIComponent(fileName)}`;
 }
 
@@ -105,7 +107,7 @@ export default function ResearchAdminPage() {
       const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/upload-asset`, { method: "POST", body: fd, credentials: "same-origin" });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      const saved = data.savedAs || '';
+      const saved = data.url || data.urlHint || data.publicPath || data.savedAs || '';
       const key = tier ? `tier${tier}` : 'main';
       const newAssets = { ...(form.assetsByTier || {}) };
       if (tier) newAssets[key] = saved; else setForm((f:any)=>({...f, assetId: saved}));

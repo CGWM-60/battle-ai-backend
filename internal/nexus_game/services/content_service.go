@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/content/balance"
@@ -15,16 +16,19 @@ import (
 
 // ContentService handles definitions (catalog) CRUD, level calculations, asset management, and basic player construction logic.
 // Designed to be extensible. All major items (buildings, later units/research) follow similar pattern.
-// Assets uploaded here are served statically by the main server (configure /nexus-assets/ to point to content/assets).
+// Assets uploaded here are stored under the persistent Nexus assets volume.
 
 type ContentService struct {
 	db            *gorm.DB
-	assetsBaseDir string // e.g. "./content/assets" or absolute
+	assetsBaseDir string // e.g. /nexus_game/assets/content
 }
 
 func NewContentService(db *gorm.DB, assetsBaseDir string) *ContentService {
 	if assetsBaseDir == "" {
-		assetsBaseDir = "./content/assets"
+		assetsBaseDir = filepath.Join(os.Getenv("NEXUS_ASSETS_BASE_DIR"), "content")
+		if assetsBaseDir == "content" {
+			assetsBaseDir = "/nexus_game/assets/content"
+		}
 	}
 	_ = os.MkdirAll(assetsBaseDir, 0755)
 	return &ContentService{db: db, assetsBaseDir: assetsBaseDir}
@@ -81,18 +85,23 @@ func (s *ContentService) DeleteBuildingByID(id uint) error {
 
 // UploadAsset saves the file for a content item and updates the definition's asset fields.
 // Called from handler (multipart form "file", "tier" optional "tier1|2|3|4", "assetId").
-// Images served later via static /nexus-assets/content/buildings/{filename}
+// Images are served from /nexus-assets/content/{domain}/{filename} and the
+// canonical public URL stored in DB.
 
-func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename string, data []byte) (string, error) {
+func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename string, data []byte, publicContentBaseURL string) (string, string, error) {
 	if domain == "" || contentID == "" {
-		return "", errors.New("domain and contentID required")
+		return "", "", errors.New("domain and contentID required")
 	}
 
 	ext := filepath.Ext(originalFilename)
 	if ext == "" {
 		ext = ".png"
 	}
-	safeName := fmt.Sprintf("%s_%s%s", contentID, tier, ext)
+	slot := tier
+	if slot == "" {
+		slot = "main"
+	}
+	safeName := fmt.Sprintf("%s_%s%s", safeAssetNameSegment(contentID), safeAssetNameSegment(slot), ext)
 	folder := domain + "s"
 	switch domain {
 	case "research":
@@ -105,9 +114,14 @@ func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename s
 	dir := filepath.Join(s.assetsBaseDir, folder)
 	_ = os.MkdirAll(dir, 0755)
 	fullPath := filepath.Join(dir, safeName)
+	publicURL := strings.TrimRight(publicContentBaseURL, "/") + "/" + folder + "/" + safeName
+	assetRef := publicURL
+	if strings.TrimSpace(publicContentBaseURL) == "" {
+		assetRef = safeName
+	}
 
 	if err := os.WriteFile(fullPath, data, 0644); err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	// Update definition
@@ -115,7 +129,7 @@ func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename s
 	case "building":
 		b, err := s.GetBuilding(contentID)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		if b.AssetsByTier == nil {
 			b.AssetsByTier = map[string]string{}
@@ -123,14 +137,14 @@ func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename s
 		key := "tier" + tier
 		if tier == "" {
 			key = "main"
-			b.AssetID = safeName
+			b.AssetID = assetRef
 		}
-		b.AssetsByTier[key] = safeName
-		return safeName, s.CreateOrUpdateBuilding(b)
+		b.AssetsByTier[key] = assetRef
+		return safeName, publicURL, s.CreateOrUpdateBuilding(b)
 	case "unit":
 		u, err := s.GetUnit(contentID)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		if u.AssetsByTier == nil {
 			u.AssetsByTier = map[string]string{}
@@ -138,14 +152,14 @@ func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename s
 		key := "tier" + tier
 		if tier == "" {
 			key = "main"
-			u.AssetID = safeName
+			u.AssetID = assetRef
 		}
-		u.AssetsByTier[key] = safeName
-		return safeName, s.CreateOrUpdateUnit(u)
+		u.AssetsByTier[key] = assetRef
+		return safeName, publicURL, s.CreateOrUpdateUnit(u)
 	case "research":
 		r, err := s.GetResearch(contentID)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		if r.AssetsByTier == nil {
 			r.AssetsByTier = map[string]string{}
@@ -153,13 +167,25 @@ func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename s
 		key := "tier" + tier
 		if tier == "" {
 			key = "main"
-			r.AssetID = safeName
+			r.AssetID = assetRef
 		}
-		r.AssetsByTier[key] = safeName
-		return safeName, s.CreateOrUpdateResearch(r)
+		r.AssetsByTier[key] = assetRef
+		return safeName, publicURL, s.CreateOrUpdateResearch(r)
 	default:
-		return safeName, nil
+		return safeName, publicURL, nil
 	}
+}
+
+func safeAssetNameSegment(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.ReplaceAll(value, "/", "_")
+	value = strings.ReplaceAll(value, "\\", "_")
+	value = strings.ReplaceAll(value, "..", "_")
+	value = strings.ReplaceAll(value, " ", "_")
+	if value == "" {
+		return "asset"
+	}
+	return value
 }
 
 // === Formulas usage (open for all content) ===

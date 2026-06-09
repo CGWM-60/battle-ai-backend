@@ -6,7 +6,9 @@ import (
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/seeds"
 	"cgwm/battle/internal/nexus_game/services"
+	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -19,13 +21,68 @@ func getEnv(key, def string) string {
 	return def
 }
 
+func nexusAssetsBaseDir() string {
+	return getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets")
+}
+
+func nexusAssetsBaseURL() string {
+	return getEnv("NEXUS_ASSETS_BASE_URL", "/nexus_game/assets")
+}
+
+func nexusContentAssetsDir() string {
+	return filepath.Join(nexusAssetsBaseDir(), "content")
+}
+
 // RegisterAdminStatic registers Nexus asset files only.
 // Do not mount /admin with StaticFS here: Gin's /admin/*filepath wildcard conflicts with
 // explicit admin routes such as /admin/login. The Next.js admin UI is served by
 // internal/admin via adminNoRoute + serveAdminUI, which avoids wildcard route conflicts.
 func RegisterAdminStatic(router *gin.Engine) {
-	// Game content assets (uploaded via /api/nexus-game/admin/content/upload-asset, served for Flutter + admin previews)
-	router.Static("/nexus-assets", "./content/assets")
+	// Backward-compatible public alias for all persistent Nexus assets.
+	router.Static("/nexus-assets", nexusAssetsBaseDir())
+}
+
+func copyLegacyContentAssetsToVolume(dstRoot string) {
+	legacyRoot := "./content/assets"
+	if filepath.Clean(legacyRoot) == filepath.Clean(dstRoot) {
+		return
+	}
+	info, err := os.Stat(legacyRoot)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	_ = filepath.Walk(legacyRoot, func(src string, info os.FileInfo, err error) error {
+		if err != nil || info == nil {
+			return nil
+		}
+		rel, err := filepath.Rel(legacyRoot, src)
+		if err != nil || rel == "." {
+			return nil
+		}
+		dst := filepath.Join(dstRoot, rel)
+		if info.IsDir() {
+			_ = os.MkdirAll(dst, 0755)
+			return nil
+		}
+		if _, err := os.Stat(dst); err == nil {
+			return nil
+		}
+		in, err := os.Open(src)
+		if err != nil {
+			return nil
+		}
+		defer in.Close()
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return nil
+		}
+		out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+		if err != nil {
+			return nil
+		}
+		defer out.Close()
+		_, _ = io.Copy(out, in)
+		return nil
+	})
 }
 
 func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
@@ -47,7 +104,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 		// Seed initial content for dev (full reference v2.0: buildings, units, research).
 		// In prod: use admin CRUD + asset upload for the complete catalogs.
-		contentSvc := services.NewContentService(database, "./content/assets")
+		contentSvc := services.NewContentService(database, nexusContentAssetsDir())
 		_ = seeds.SeedInitialBuildings(database, contentSvc)
 		_ = seeds.SeedInitialUnits(database, contentSvc)
 		_ = seeds.SeedInitialResearch(database, contentSvc)
@@ -55,16 +112,22 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	}
 
 	// Ensure persistent asset directories exist on startup (prevents loss on recreate if volume is attached)
-	assetsBaseDir := getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets")
+	assetsBaseDir := nexusAssetsBaseDir()
 	os.MkdirAll(assetsBaseDir, 0755)
 	os.MkdirAll(assetsBaseDir+"/avatar", 0755)
 	os.MkdirAll(assetsBaseDir+"/faction", 0755)
 	os.MkdirAll(assetsBaseDir+"/companion", 0755)
+	os.MkdirAll(assetsBaseDir+"/content/buildings", 0755)
+	os.MkdirAll(assetsBaseDir+"/content/units", 0755)
+	os.MkdirAll(assetsBaseDir+"/content/research", 0755)
+	copyLegacyContentAssetsToVolume(nexusContentAssetsDir())
 
 	// Serve persistent assets - use BASE_DIR and BASE_URL so one volume mount covers avatar, faction, companion.
 	// In Dokploy: configure Persistent Storage with Container Path = value of NEXUS_ASSETS_BASE_DIR (default /nexus_game/assets)
-	assetsBaseURL := getEnv("NEXUS_ASSETS_BASE_URL", "/nexus_game/assets")
-	router.Static(assetsBaseURL, assetsBaseDir)
+	assetsBaseURL := nexusAssetsBaseURL()
+	if assetsBaseURL != "/nexus-assets" {
+		router.Static(assetsBaseURL, assetsBaseDir)
+	}
 
 	group := router.Group("/api/nexus-game")
 	group.GET("/health", health.Health)
@@ -121,7 +184,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// Admin CRUD + asset upload (images served by this server after upload).
 	// Player construction endpoints (queues, completion).
 	// Each major item (buildings/units/research) will have its table + CRUD here.
-	contentH := handlers.NewContentHandler(services.NewContentService(database, "./content/assets"))
+	contentH := handlers.NewContentHandler(services.NewContentService(database, nexusContentAssetsDir()))
 
 	// Admin / catalog
 	// Page routes must be mounted before /:contentId routes so "/page" is not
