@@ -2,6 +2,7 @@ package models
 
 import "time"
 
+
 // DailyPlanContext is the safe, official context sent to the player's AI provider (or fallback).
 // It contains current city stats, resources, queues, available action types, and server rules.
 // Player's AI (provider > local > governor agent > server fallback) generates recommendations.
