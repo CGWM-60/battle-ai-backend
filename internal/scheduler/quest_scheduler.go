@@ -98,6 +98,21 @@ type aiProviderConfig struct {
 	Model  string
 }
 
+type providerCallError struct {
+	Provider string
+	Model    string
+	URL      string
+	Err      error
+}
+
+func (e providerCallError) Error() string {
+	return fmt.Sprintf("provider=%s model=%s url=%s err=%v", e.Provider, e.Model, e.URL, e.Err)
+}
+
+func (e providerCallError) Unwrap() error {
+	return e.Err
+}
+
 type generatedBattleQuest struct {
 	Title   string         `json:"title"`
 	Content string         `json:"content"`
@@ -592,7 +607,12 @@ func callProvider(ctx context.Context, cfg aiProviderConfig, prompt string, trac
 	response, err := ai.Chat(callCtx, []provider.ProviderMessage{{Role: "system", Content: prompt}})
 	if err != nil {
 		trace.log("provider_call", "failed", "duration_ms=%d err=%v", time.Since(startedAt).Milliseconds(), err)
-		return "", err
+		return "", providerCallError{
+			Provider: cfg.Name,
+			Model:    cfg.Model,
+			URL:      url,
+			Err:      err,
+		}
 	}
 	trace.log("provider_call", "completed", "duration_ms=%d response_chars=%d", time.Since(startedAt).Milliseconds(), len(response))
 	return response, nil
@@ -601,6 +621,7 @@ func callProvider(ctx context.Context, cfg aiProviderConfig, prompt string, trac
 func callProviderWithFallbacks(ctx context.Context, primary aiProviderConfig, prompt string, trace cronTrace) (string, aiProviderConfig, error) {
 	attempts := providerAttempts(primary)
 	var lastErr error
+	failures := make([]string, 0, len(attempts))
 	for index, cfg := range attempts {
 		attemptTrace := trace
 		attemptTrace.Provider = cfg.Name
@@ -616,6 +637,7 @@ func callProviderWithFallbacks(ctx context.Context, primary aiProviderConfig, pr
 			return response, cfg, nil
 		}
 		lastErr = err
+		failures = append(failures, fmt.Sprintf("%s/%s: %v", cfg.Name, cfg.Model, err))
 		if ctx.Err() != nil {
 			break
 		}
@@ -623,7 +645,13 @@ func callProviderWithFallbacks(ctx context.Context, primary aiProviderConfig, pr
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no configured provider available")
 	}
-	return "", aiProviderConfig{}, lastErr
+	return "", aiProviderConfig{}, fmt.Errorf(
+		"all provider attempts failed primary=%s/%s attempts=[%s]: %w",
+		primary.Name,
+		primary.Model,
+		strings.Join(failures, " | "),
+		lastErr,
+	)
 }
 
 func providerForHour(now time.Time) (aiProviderConfig, bool) {
