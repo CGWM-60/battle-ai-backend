@@ -229,8 +229,16 @@ func (s *WorldService) ListWorlds(ctx context.Context) ([]map[string]interface{}
 				Where("world_id = ? AND continent_id = ?", w.ID, c.ID).
 				Count(&dbPlayersCount).Error
 			worldPlayersCount += dbPlayersCount
-			if pStr == "" {
+			if !isNonNegativeIntString(pStr) {
 				pStr = fmt.Sprintf("%d", dbPlayersCount)
+			}
+			dbFactionsCount := int64(0)
+			_ = s.db.WithContext(ctx).
+				Model(&models.Faction{}).
+				Where("world_id = ? AND continent_id = ?", w.ID, c.ID).
+				Count(&dbFactionsCount).Error
+			if !isNonNegativeIntString(fStr) {
+				fStr = fmt.Sprintf("%d", dbFactionsCount)
 			}
 
 			// Liste des joueurs pour la gestion (from DB ProfileGamer)
@@ -438,9 +446,9 @@ func (s *WorldService) ListWorldPlayers(ctx context.Context, query WorldPlayersQ
 	}
 	switch assignment {
 	case "assigned":
-		base = base.Where("world_id <> 0 AND continent_id <> 0")
+		base = base.Where("world_id IS NOT NULL AND world_id <> 0 AND continent_id IS NOT NULL AND continent_id <> 0")
 	case "unassigned":
-		base = base.Where("world_id = 0 OR continent_id = 0")
+		base = base.Where("world_id IS NULL OR world_id = 0 OR continent_id IS NULL OR continent_id = 0")
 	}
 	if query.Search != "" {
 		like := "%" + query.Search + "%"
@@ -477,8 +485,8 @@ func (s *WorldService) ListWorldPlayers(ctx context.Context, query WorldPlayersQ
 
 	var assignedCount int64
 	var unassignedCount int64
-	_ = s.db.WithContext(ctx).Model(&models.ProfileGamer{}).Where("world_id <> 0 AND continent_id <> 0").Count(&assignedCount).Error
-	_ = s.db.WithContext(ctx).Model(&models.ProfileGamer{}).Where("world_id = 0 OR continent_id = 0").Count(&unassignedCount).Error
+	_ = s.db.WithContext(ctx).Model(&models.ProfileGamer{}).Where("world_id IS NOT NULL AND world_id <> 0 AND continent_id IS NOT NULL AND continent_id <> 0").Count(&assignedCount).Error
+	_ = s.db.WithContext(ctx).Model(&models.ProfileGamer{}).Where("world_id IS NULL OR world_id = 0 OR continent_id IS NULL OR continent_id = 0").Count(&unassignedCount).Error
 
 	return map[string]interface{}{
 		"players": players,
@@ -505,10 +513,13 @@ func (s *WorldService) RepairMissingProfileWorldAssignments(ctx context.Context)
 	if s.db == nil {
 		return 0, errors.New("database unavailable")
 	}
+	if _, err := s.RepairMissingFactionWorldAssignments(ctx); err != nil {
+		return 0, err
+	}
 
 	var profiles []models.ProfileGamer
 	if err := s.db.WithContext(ctx).
-		Where("world_id = 0 OR continent_id = 0").
+		Where("world_id IS NULL OR world_id = 0 OR continent_id IS NULL OR continent_id = 0").
 		Find(&profiles).Error; err != nil {
 		return 0, err
 	}
@@ -563,6 +574,106 @@ func (s *WorldService) RepairMissingProfileWorldAssignments(ctx context.Context)
 	return repaired, nil
 }
 
+func (s *WorldService) RepairMissingFactionWorldAssignments(ctx context.Context) (int, error) {
+	if s.db == nil {
+		return 0, errors.New("database unavailable")
+	}
+
+	var factions []models.Faction
+	if err := s.db.WithContext(ctx).
+		Where("world_id IS NULL OR world_id = 0 OR continent_id IS NULL OR continent_id = 0").
+		Order("id asc").
+		Find(&factions).Error; err != nil {
+		return 0, err
+	}
+	if len(factions) == 0 {
+		return 0, nil
+	}
+
+	continents, err := s.availableContinentsForFactionRepair(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(continents) == 0 {
+		world, err := s.CreateWorld(ctx)
+		if err != nil {
+			return 0, err
+		}
+		continents, err = s.availableContinentsForFactionRepair(ctx)
+		if err != nil {
+			return 0, err
+		}
+		if len(continents) == 0 {
+			return 0, fmt.Errorf("world %d has no continent for faction assignment", world.ID)
+		}
+	}
+
+	factionCounts := make(map[uint]int)
+	for _, continent := range continents {
+		var count int64
+		_ = s.db.WithContext(ctx).
+			Model(&models.Faction{}).
+			Where("world_id = ? AND continent_id = ?", continent.WorldID, continent.ID).
+			Count(&count).Error
+		factionCounts[continent.ID] = int(count)
+	}
+
+	repaired := 0
+	for _, faction := range factions {
+		continentIndex := -1
+		for index, continent := range continents {
+			if factionCounts[continent.ID] < continent.MaxFactions {
+				continentIndex = index
+				break
+			}
+		}
+		if continentIndex < 0 {
+			return repaired, errors.New("no continent capacity available for faction repair")
+		}
+
+		continent := continents[continentIndex]
+		if err := s.db.WithContext(ctx).
+			Model(&models.Faction{}).
+			Where("id = ?", faction.ID).
+			Updates(map[string]interface{}{
+				"world_id":     continent.WorldID,
+				"continent_id": continent.ID,
+			}).Error; err != nil {
+			return repaired, err
+		}
+		factionCounts[continent.ID]++
+		_ = s.redis.SetString(ctx, fmt.Sprintf("nexus:faction:%d:world", faction.ID), fmt.Sprintf("%d", continent.WorldID), 0)
+		_ = s.redis.SetString(ctx, fmt.Sprintf("nexus:faction:%d:continent", faction.ID), fmt.Sprintf("%d", continent.ID), 0)
+		_ = s.redis.SetString(ctx, fmt.Sprintf("nexus:continent:%d:factions", continent.ID), fmt.Sprintf("%d", factionCounts[continent.ID]), 0)
+		repaired++
+	}
+
+	return repaired, nil
+}
+
+func (s *WorldService) availableContinentsForFactionRepair(ctx context.Context) ([]models.Continent, error) {
+	var worlds []models.World
+	if err := s.db.WithContext(ctx).Where("is_active = ?", true).Order("id asc").Find(&worlds).Error; err != nil {
+		return nil, err
+	}
+	if len(worlds) == 0 {
+		return nil, nil
+	}
+	worldIDs := make([]uint, 0, len(worlds))
+	for _, world := range worlds {
+		worldIDs = append(worldIDs, world.ID)
+	}
+
+	var continents []models.Continent
+	if err := s.db.WithContext(ctx).
+		Where("world_id IN ?", worldIDs).
+		Order("world_id asc, id asc").
+		Find(&continents).Error; err != nil {
+		return nil, err
+	}
+	return continents, nil
+}
+
 func profileWorldPlayerPayload(profile models.ProfileGamer, worldName string, continentName string, factionName string) map[string]interface{} {
 	assignmentStatus := "assigned"
 	if profile.WorldID == 0 || profile.ContinentID == 0 {
@@ -588,6 +699,19 @@ func profileWorldPlayerPayload(profile models.ProfileGamer, worldName string, co
 		"profile_updated":   profile.UpdatedAt,
 		"assigned_at":       profile.CreatedAt.Format("2006-01-02 15:04"),
 	}
+}
+
+func isNonNegativeIntString(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *WorldService) factionNamesByID(ctx context.Context, profiles []models.ProfileGamer) (map[uint]string, error) {
