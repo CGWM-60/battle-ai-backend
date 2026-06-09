@@ -6,7 +6,6 @@ import (
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/seeds"
 	"cgwm/battle/internal/nexus_game/services"
-	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -20,39 +19,13 @@ func getEnv(key, def string) string {
 	return def
 }
 
-// RegisterAdminStatic must be called **very early** — before admin.Register (the legacy admin
-// package) and before any router.Group("/api/...").
-//
-// Reason: admin.Register has a side-effect `router.GET("/api/v1/nexus-coin/plans", ...)` plus
-// many /admin specific routes + a final NoRoute. Inserting the /admin/*filepath catch-all
-// (via StaticFS) *after* any /api route exists in the tree triggers the Gin panic you saw:
-//
-//   "catch-all wildcard '*filepath' in new path '/admin/*filepath' conflicts with existing
-//    path segment 'api' in existing prefix '/api'"
-//
-// Call it right after gin creation + first few top-level statics/ping, before admin.Register.
-//
-// We also register the /nexus-assets static here for the same reason (game content images for
-// buildings/units/research uploaded via the admin CRUD).
-//
-// This serves the Next.js built admin (basePath /admin) so that:
-//   - /admin , /admin/nexus/mmo/buildings , /admin/nexus/mmo/units , /admin/nexus/mmo/research
-//     work directly from the Go binary (same origin as the /api/nexus-game handlers).
-//   - Relative fetches in the admin JS ("/api/nexus-game/...") just work.
-//   - Game content assets under /nexus-assets/... continue to work.
-//
-// Use NEXUS_ADMIN_OUT_DIR env var to point to a different location for the built admin/out (useful in Dokploy etc.).
-// If the dir or index.html is missing, we silently skip the admin UI (no panic).
-// The old Gin HTML stubs remain available at /api/nexus-game/admin/content/*/page .
+// RegisterAdminStatic registers Nexus asset files only.
+// Do not mount /admin with StaticFS here: Gin's /admin/*filepath wildcard conflicts with
+// explicit admin routes such as /admin/login. The Next.js admin UI is served by
+// internal/admin via adminNoRoute + serveAdminUI, which avoids wildcard route conflicts.
 func RegisterAdminStatic(router *gin.Engine) {
 	// Game content assets (uploaded via /api/nexus-game/admin/content/upload-asset, served for Flutter + admin previews)
 	router.Static("/nexus-assets", "./content/assets")
-
-	// Next.js MMO admin UI (the real CRUD tables for buildings/units/research with image uploads)
-	adminOutDir := getEnv("NEXUS_ADMIN_OUT_DIR", "./admin/out")
-	if _, err := os.Stat(adminOutDir + "/index.html"); err == nil {
-		router.StaticFS("/admin", http.Dir(adminOutDir))
-	}
 }
 
 func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
