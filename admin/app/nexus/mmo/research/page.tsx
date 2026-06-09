@@ -3,6 +3,10 @@
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../../components/AdminShell";
 
+// Configurable backend base for when admin static is served separately from Go API (e.g. different port or Dokploy static).
+// Set NEXT_PUBLIC_NEXUS_API_BASE=http://localhost:8080 (or prod URL) at build/dev time.
+const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
+
 interface Research {
   contentId: string;
   nameKey?: string;
@@ -29,7 +33,7 @@ export default function ResearchAdminPage() {
   const fetchItems = async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch("/api/nexus-game/admin/content/research", { credentials: "same-origin" });
+      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/research`, { credentials: "same-origin" });
       const data = await res.json();
       setItems(data.research || []);
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
@@ -43,7 +47,7 @@ export default function ResearchAdminPage() {
 
   const submitForm = async () => {
     const isEdit = !!current;
-    const url = isEdit ? `/api/nexus-game/admin/content/research/${current.contentId}` : `/api/nexus-game/admin/content/research`;
+    const url = isEdit ? `${API_BASE}/api/nexus-game/admin/content/research/${current.contentId}` : `${API_BASE}/api/nexus-game/admin/content/research`;
     const method = isEdit ? 'PUT' : 'POST';
     setLoading(true);
     try {
@@ -57,7 +61,7 @@ export default function ResearchAdminPage() {
     if (!current) return;
     setLoading(true);
     try {
-      await fetch(`/api/nexus-game/admin/content/research/${current.contentId}`, { method: 'DELETE', credentials: 'same-origin' });
+      await fetch(`${API_BASE}/api/nexus-game/admin/content/research/${current.contentId}`, { method: 'DELETE', credentials: 'same-origin' });
       closeModal(); await fetchItems();
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
@@ -70,7 +74,7 @@ export default function ResearchAdminPage() {
     if (tier) fd.append("tier", tier);
     setUploading(tier || 'main');
     try {
-      const res = await fetch("/api/nexus-game/admin/content/upload-asset", { method: "POST", body: fd, credentials: "same-origin" });
+      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/upload-asset`, { method: "POST", body: fd, credentials: "same-origin" });
       const data = await res.json();
       const saved = data.savedAs || '';
       const key = tier ? `tier${tier}` : 'main';
@@ -82,7 +86,7 @@ export default function ResearchAdminPage() {
 
   return (
     <AdminShell title="Recherches — Arbre Nexus v2.0" description="11 branches × 7 tiers. CRUD + upload assets + dépendances (prerequisitesJSON).">
-      <button onClick={() => window.location.href = '/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour</button>
+      <button onClick={() => window.location.href = '/admin/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour Nexus MMO</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <h2>Recherches ({items.length})</h2>
         <button onClick={openCreate} style={{ background: '#8b5cf6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>+ Créer Nœud</button>
@@ -130,7 +134,7 @@ export default function ResearchAdminPage() {
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  <input placeholder="contentId (ex: research_economy_tier1)" value={form.contentId || ''} onChange={e=>setForm({...form, contentId:e.target.value})} />
+                  <input placeholder="contentId (ex: research_efficient_storage ou research_solar_stabilization)" value={form.contentId || ''} onChange={e=>setForm({...form, contentId:e.target.value})} />
                   <input placeholder="nameKey" value={form.nameKey || ''} onChange={e=>setForm({...form, nameKey:e.target.value})} />
                   <input placeholder="branch (economy, military...)" value={form.branch || ''} onChange={e=>setForm({...form, branch:e.target.value})} />
                   <input type="number" placeholder="tier (1-7)" value={form.tier || 1} onChange={e=>setForm({...form, tier:parseInt(e.target.value)})} />

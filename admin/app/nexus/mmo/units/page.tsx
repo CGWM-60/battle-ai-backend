@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../../components/AdminShell";
 
+const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
+
 interface Unit {
   contentId: string;
   nameKey?: string;
@@ -26,7 +28,7 @@ export default function UnitsAdminPage() {
   const fetchItems = async () => {
     setLoading(true); setError(null);
     try {
-      const res = await fetch("/api/nexus-game/admin/content/units", { credentials: "same-origin" });
+      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/units`, { credentials: "same-origin" });
       const data = await res.json();
       setItems(data.units || []);
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
@@ -40,7 +42,7 @@ export default function UnitsAdminPage() {
 
   const submitForm = async () => {
     const isEdit = !!current;
-    const url = isEdit ? `/api/nexus-game/admin/content/units/${current.contentId}` : `/api/nexus-game/admin/content/units`;
+    const url = isEdit ? `${API_BASE}/api/nexus-game/admin/content/units/${current.contentId}` : `${API_BASE}/api/nexus-game/admin/content/units`;
     const method = isEdit ? 'PUT' : 'POST';
     setLoading(true);
     try {
@@ -54,7 +56,7 @@ export default function UnitsAdminPage() {
     if (!current) return;
     setLoading(true);
     try {
-      await fetch(`/api/nexus-game/admin/content/units/${current.contentId}`, { method: 'DELETE', credentials: 'same-origin' });
+      await fetch(`${API_BASE}/api/nexus-game/admin/content/units/${current.contentId}`, { method: 'DELETE', credentials: 'same-origin' });
       closeModal(); await fetchItems();
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
@@ -67,7 +69,7 @@ export default function UnitsAdminPage() {
     if (tier) fd.append("tier", tier);
     setUploading(tier || 'main');
     try {
-      const res = await fetch("/api/nexus-game/admin/content/upload-asset", { method: "POST", body: fd, credentials: "same-origin" });
+      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/upload-asset`, { method: "POST", body: fd, credentials: "same-origin" });
       const data = await res.json();
       const saved = data.savedAs || '';
       const key = tier ? `tier${tier}` : 'main';
@@ -79,7 +81,7 @@ export default function UnitsAdminPage() {
 
   return (
     <AdminShell title="Unités — Catalogue Nexus v2.0" description="CRUD des 15 unités (niveaux 1-30). Upload images tierées. Stats de base + assets.">
-      <button onClick={() => window.location.href = '/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour</button>
+      <button onClick={() => window.location.href = '/admin/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour Nexus MMO</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
         <h2>Unités ({items.length})</h2>
         <button onClick={openCreate} style={{ background: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>+ Créer Unité</button>

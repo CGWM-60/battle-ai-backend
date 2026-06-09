@@ -81,7 +81,16 @@ func (s *ContentService) UploadAsset(domain, contentID, tier, originalFilename s
 		ext = ".png"
 	}
 	safeName := fmt.Sprintf("%s_%s%s", contentID, tier, ext)
-	dir := filepath.Join(s.assetsBaseDir, domain+"s") // buildings, units...
+	folder := domain + "s"
+	switch domain {
+	case "research":
+		folder = "research"
+	case "building":
+		folder = "buildings"
+	case "unit":
+		folder = "units"
+	}
+	dir := filepath.Join(s.assetsBaseDir, folder)
 	_ = os.MkdirAll(dir, 0755)
 	fullPath := filepath.Join(dir, safeName)
 

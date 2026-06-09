@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../components/AdminShell";
 
+const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
+
 interface Avatar {
   id: number;
   name: string;
@@ -116,11 +118,11 @@ export default function NexusMmoPage() {
     setError(null);
     try {
       const [avRes, facRes, comRes, worldRes, promptRes] = await Promise.all([
-        fetch("/api/nexus-game/assets/avatars", { credentials: "same-origin" }),
-        fetch("/api/nexus-game/factions", { credentials: "same-origin" }),
-        fetch("/api/nexus-game/ia-companions", { credentials: "same-origin" }),
-        fetch("/api/nexus-game/worlds", { credentials: "same-origin" }),
-        fetch("/api/nexus-game/prompts", { credentials: "same-origin" }),
+        fetch(`${API_BASE}/api/nexus-game/assets/avatars`, { credentials: "same-origin" }),
+        fetch(`${API_BASE}/api/nexus-game/factions`, { credentials: "same-origin" }),
+        fetch(`${API_BASE}/api/nexus-game/ia-companions`, { credentials: "same-origin" }),
+        fetch(`${API_BASE}/api/nexus-game/worlds`, { credentials: "same-origin" }),
+        fetch(`${API_BASE}/api/nexus-game/prompts`, { credentials: "same-origin" }),
       ]);
 
       if (avRes.ok) {
@@ -222,14 +224,14 @@ export default function NexusMmoPage() {
     setSubmitting(true);
     try {
       if (editingPrompt) {
-        await fetch(`/api/nexus-game/prompts/${editingPrompt.id}`, {
+        await fetch(`${API_BASE}/api/nexus-game/prompts/${editingPrompt.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ system_prompt: promptForm.system_prompt }),
           credentials: 'same-origin',
         });
       } else {
-        await fetch('/api/nexus-game/prompts', {
+        await fetch(`${API_BASE}/api/nexus-game/prompts`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(promptForm),
@@ -330,7 +332,7 @@ export default function NexusMmoPage() {
         body.prompt_version = selectedPromptForGen.version || selectedPromptForGen.Version;
       }
 
-      const res = await fetch('/api/nexus-game/ai/generate', {
+      const res = await fetch(`${API_BASE}/api/nexus-game/ai/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -364,7 +366,7 @@ export default function NexusMmoPage() {
 
       // Best effort reload full history so the bottom list + separate page see it immediately
       try {
-        const histRes = await fetch('/api/nexus-game/ai-outputs', { credentials: 'same-origin' });
+        const histRes = await fetch(`${API_BASE}/api/nexus-game/ai-outputs`, { credentials: 'same-origin' });
         if (histRes.ok) {
           const d = await histRes.json();
           setHistoricalIAOutputs(d.outputs || []);
@@ -406,7 +408,7 @@ export default function NexusMmoPage() {
     formData.append("image", formFile);
 
     try {
-      const res = await fetch("/api/nexus-game/assets/avatar", {
+      const res = await fetch(`${API_BASE}/api/nexus-game/assets/avatar`, {
         method: "POST",
         body: formData,
         credentials: "same-origin",
@@ -776,7 +778,7 @@ export default function NexusMmoPage() {
           <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2>Gestion des Mondes ({worldCount}) - 5 Continents, 500 joueurs max, 3 factions max</h2>
-            <button onClick={async () => { await fetch('/api/nexus-game/worlds', { method: 'POST', credentials: 'same-origin' }); await fetchAll(); }} style={{ background: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>
+            <button onClick={async () => { await fetch(`${API_BASE}/api/nexus-game/worlds`, { method: 'POST', credentials: 'same-origin' }); await fetchAll(); }} style={{ background: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none' }}>
               + Créer Nouveau Monde
             </button>
           </div>
@@ -810,13 +812,13 @@ export default function NexusMmoPage() {
                   </div>
                   <div style={{ marginTop: 8, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button onClick={async () => {
-                      const r = await fetch(`/api/nexus-game/worlds/${w.id}/trigger-tick`, { method: 'POST', credentials: 'same-origin' });
+                      const r = await fetch(`${API_BASE}/api/nexus-game/worlds/${w.id}/trigger-tick`, { method: 'POST', credentials: 'same-origin' });
                       const j = await r.json();
                       const text = j.summary || 'Tick exécuté avec résumé IA';
                       setIaOutputs(prev => [...prev, { type: 'tick', text, time: new Date().toLocaleString(), world: w.name || w.id }]);
                     }} style={{ padding: '4px 8px', fontSize: 12 }}>Déclencher Tick Monde + IA Serveur</button>
                     <button onClick={async () => {
-                      const r = await fetch(`/api/nexus-game/worlds/${w.id}/generate-event`, { method: 'POST', credentials: 'same-origin' });
+                      const r = await fetch(`${API_BASE}/api/nexus-game/worlds/${w.id}/generate-event`, { method: 'POST', credentials: 'same-origin' });
                       const j = await r.json();
                       const text = j.proposed_event ? `Événement IA:\nTitre: ${j.proposed_event.title}\nRésumé: ${j.proposed_event.summary}` : JSON.stringify(j, null, 2);
                       setIaOutputs(prev => [...prev, { type: 'event', text, time: new Date().toLocaleString(), world: w.name || w.id }]);

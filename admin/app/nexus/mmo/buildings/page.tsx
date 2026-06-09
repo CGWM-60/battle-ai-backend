@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../../components/AdminShell";
 
+const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
+
 interface Building {
   contentId: string;
   nameKey?: string;
@@ -33,7 +35,7 @@ export default function BuildingsAdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/nexus-game/admin/content/buildings", { credentials: "same-origin" });
+      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/buildings`, { credentials: "same-origin" });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setItems(data.buildings || []);
@@ -73,8 +75,8 @@ export default function BuildingsAdminPage() {
   const submitForm = async () => {
     const isEdit = !!current;
     const url = isEdit 
-      ? `/api/nexus-game/admin/content/buildings/${current.contentId}`
-      : `/api/nexus-game/admin/content/buildings`;
+      ? `${API_BASE}/api/nexus-game/admin/content/buildings/${current.contentId}`
+      : `${API_BASE}/api/nexus-game/admin/content/buildings`;
     const method = isEdit ? 'PUT' : 'POST';
 
     setLoading(true);
@@ -99,7 +101,7 @@ export default function BuildingsAdminPage() {
     if (!current) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/nexus-game/admin/content/buildings/${current.contentId}`, {
+      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/buildings/${current.contentId}`, {
         method: 'DELETE',
         credentials: 'same-origin',
       });
@@ -128,7 +130,7 @@ export default function BuildingsAdminPage() {
 
     setUploading(tier || 'main');
     try {
-      const res = await fetch("/api/nexus-game/admin/content/upload-asset", {
+      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/upload-asset`, {
         method: "POST",
         body: formData,
         credentials: "same-origin",
@@ -157,7 +159,7 @@ export default function BuildingsAdminPage() {
           updated.assetId = saved;
         }
         // persist the asset reference
-        await fetch(`/api/nexus-game/admin/content/buildings/${cid}`, {
+        await fetch(`${API_BASE}/api/nexus-game/admin/content/buildings/${cid}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(updated),
@@ -174,7 +176,7 @@ export default function BuildingsAdminPage() {
 
   return (
     <AdminShell title="Bâtiments — Catalogue Nexus v2.0" description="CRUD complet des 20 bâtiments (niveaux 1-30). Upload images par tier (tier1-4). Données master pour construction / IA / équilibrage.">
-      <button onClick={() => window.location.href = '/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour Nexus MMO</button>
+      <button onClick={() => window.location.href = '/admin/nexus/mmo'} style={{ marginBottom: 16 }}>← Retour Nexus MMO</button>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h2>Bâtiments ({items.length}) — {items.filter(i => i.isPublished).length} publiés</h2>

@@ -102,10 +102,19 @@ func (h *ContentHandler) UploadAsset(c *gin.Context) {
 		return
 	}
 
+	folder := domain + "s"
+	switch domain {
+	case "research":
+		folder = "research"
+	case "building":
+		folder = "buildings"
+	case "unit":
+		folder = "units"
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"ok":        true,
 		"savedAs":   savedName,
-		"urlHint":   "/nexus-assets/content/" + domain + "s/" + savedName, // configure static serving
+		"urlHint":   "/nexus-assets/content/" + folder + "/" + savedName,
 	})
 }
 
