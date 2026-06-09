@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -87,12 +88,20 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 			worldName = w.Name
 		}
 	}
+	factionName := ""
+	if p.FactionID > 0 {
+		var f models.Faction
+		if err := h.db.Select("name").First(&f, p.FactionID).Error; err == nil {
+			factionName = f.Name
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"exists":     true,
-		"profile":    p,
-		"avatar_url": avatarURL,
-		"world_name": worldName,
+		"exists":       true,
+		"profile":      p,
+		"avatar_url":   avatarURL,
+		"world_name":   worldName,
+		"faction_name": factionName,
 	})
 }
 
@@ -169,6 +178,23 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 			}
 			// Do not return 400. Player can enter the game; assignment is enriched when possible.
 		}
+
+		// Additional robust fallback: always ensure the profile gets ContinentID/WorldID from the faction's DB record
+		// if it doesn't have one yet. This guarantees the profile appears in "Liste des Joueurs par Monde"
+		// in the admin (which queries ProfileGamer by continent_id) and shows the assigned world.
+		if p.ContinentID == 0 && req.FactionID > 0 {
+			var f models.Faction
+			if err := h.db.First(&f, req.FactionID).Error; err == nil && f.ContinentID != 0 {
+				p.WorldID = f.WorldID
+				p.ContinentID = f.ContinentID
+				h.db.Save(&p)
+				// Also populate Redis so Assign and counts work next time
+				if h.redis != nil {
+					_ = h.redis.SetString(c.Request.Context(), fmt.Sprintf("nexus:faction:%d:continent", req.FactionID), fmt.Sprintf("%d", f.ContinentID), 0)
+					_ = h.redis.SetString(c.Request.Context(), fmt.Sprintf("nexus:faction:%d:world", req.FactionID), fmt.Sprintf("%d", f.WorldID), 0)
+				}
+			}
+		}
 	} else {
 		// update existing (only the gamer fields; never touch other tables here)
 		p.AvatarID = req.AvatarID
@@ -198,11 +224,19 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 			worldName = w.Name
 		}
 	}
+	factionName := ""
+	if p.FactionID > 0 {
+		var f models.Faction
+		if err := h.db.Select("name").First(&f, p.FactionID).Error; err == nil {
+			factionName = f.Name
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"profile":     p,
-		"exists":      true,
-		"avatar_url":  avatarURL,
-		"world_name":  worldName,
+		"profile":      p,
+		"exists":       true,
+		"avatar_url":   avatarURL,
+		"world_name":   worldName,
+		"faction_name": factionName,
 	})
 }
