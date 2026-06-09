@@ -65,12 +65,35 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 			"exists": false,
 			"profile": models.ProfileGamer{
 				UserID: uint(uid),
+				Level:  1,
+				Power:  0,
 			},
 		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"exists": true, "profile": p})
+	// Enrich for MmoEntryScreen (same as SaveProfile)
+	avatarURL := ""
+	if p.AvatarID > 0 {
+		var av models.Avatar
+		if err := h.db.Select("url").First(&av, p.AvatarID).Error; err == nil {
+			avatarURL = av.URL
+		}
+	}
+	worldName := ""
+	if p.WorldID > 0 {
+		var w models.World
+		if err := h.db.Select("name").First(&w, p.WorldID).Error; err == nil {
+			worldName = w.Name
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"exists":     true,
+		"profile":    p,
+		"avatar_url": avatarURL,
+		"world_name": worldName,
+	})
 }
 
 // SaveProfile creates or updates the ProfileGamer for the user.
@@ -120,6 +143,8 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 			IACompanionID: req.IACompanionID,
 			Pseudo:        req.Pseudo,
 			CityName:      req.CityName,
+			Level:         1,
+			Power:         0,
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		}
@@ -158,5 +183,26 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"profile": p, "exists": true})
+	// Enrich for MmoEntryScreen: avatar URL + world name (so we can show real chosen avatar, pseudo, lvl, power, world name)
+	avatarURL := ""
+	if p.AvatarID > 0 {
+		var av models.Avatar
+		if err := h.db.Select("url").First(&av, p.AvatarID).Error; err == nil {
+			avatarURL = av.URL
+		}
+	}
+	worldName := ""
+	if p.WorldID > 0 {
+		var w models.World
+		if err := h.db.Select("name").First(&w, p.WorldID).Error; err == nil {
+			worldName = w.Name
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"profile":     p,
+		"exists":      true,
+		"avatar_url":  avatarURL,
+		"world_name":  worldName,
+	})
 }

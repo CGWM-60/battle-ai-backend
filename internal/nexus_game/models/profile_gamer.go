@@ -18,6 +18,13 @@ type ProfileGamer struct {
 	// Assigned at profile creation based on chosen Faction's continent.
 	ContinentID uint      `json:"continent_id" gorm:"index"`
 	WorldID     uint      `json:"world_id" gorm:"index"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+
+	// City power and level for the player (Nexus entry HUD).
+	// Power = sum of building powers + research + army units.
+	// Starts at 0 / Level 1 on profile creation.
+	Level int `json:"level" gorm:"default:1"`
+	Power int `json:"power" gorm:"default:0"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
