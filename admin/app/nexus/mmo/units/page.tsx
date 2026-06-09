@@ -29,6 +29,7 @@ export default function UnitsAdminPage() {
     setLoading(true); setError(null);
     try {
       const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/units`, { credentials: "same-origin" });
+      if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setItems(data.units || []);
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
@@ -56,7 +57,8 @@ export default function UnitsAdminPage() {
     if (!current) return;
     setLoading(true);
     try {
-      await fetch(`${API_BASE}/api/nexus-game/admin/content/units/${current.contentId}`, { method: 'DELETE', credentials: 'same-origin' });
+      const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/units/${current.contentId}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!res.ok) throw new Error(await res.text());
       closeModal(); await fetchItems();
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
@@ -70,6 +72,7 @@ export default function UnitsAdminPage() {
     setUploading(tier || 'main');
     try {
       const res = await fetch(`${API_BASE}/api/nexus-game/admin/content/upload-asset`, { method: "POST", body: fd, credentials: "same-origin" });
+      if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       const saved = data.savedAs || '';
       const key = tier ? `tier${tier}` : 'main';
@@ -118,8 +121,8 @@ export default function UnitsAdminPage() {
       </table>
 
       {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="panel" style={{ width: 580, padding: 24, position: 'relative' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, overflowY: 'auto', padding: '24px 12px' }}>
+          <div className="panel" style={{ width: 580, maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto', padding: 24, position: 'relative' }}>
             <button onClick={closeModal} style={{ position: 'absolute', top: 8, right: 12, fontSize: 24, background: 'none', border: 'none' }}>×</button>
             <h3>{modal === 'create' ? 'Créer Unité' : modal === 'edit' ? 'Éditer Unité' : 'Supprimer Unité'}</h3>
 
@@ -127,7 +130,7 @@ export default function UnitsAdminPage() {
               <><p>Supprimer <strong>{current.contentId}</strong> ?</p><button onClick={doDelete} style={{ background: '#ef4444', color: 'white', padding: '8px 16px' }}>Confirmer</button> <button onClick={closeModal}>Annuler</button></>
             ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
                   <input placeholder="contentId" value={form.contentId || ''} onChange={e=>setForm({...form, contentId:e.target.value})} />
                   <input placeholder="nameKey" value={form.nameKey || ''} onChange={e=>setForm({...form, nameKey:e.target.value})} />
                   <select value={form.rarity || 'common'} onChange={e=>setForm({...form, rarity:e.target.value})}>
@@ -144,10 +147,10 @@ export default function UnitsAdminPage() {
                     const key = t ? `tier${t}` : 'main';
                     const cur = (form.assetsByTier && form.assetsByTier[key]) || (t==='' ? form.assetId : '');
                     return (
-                      <div key={key} style={{ display: 'inline-block', marginRight: 8, border: '1px solid #334155', padding: 4, borderRadius: 4 }}>
+                      <div key={key} style={{ display: 'inline-block', marginRight: 8, marginBottom: 8, border: '1px solid #334155', padding: 4, borderRadius: 4, maxWidth: '100%' }}>
                         <div style={{ fontSize: 11 }}>{key}</div>
-                        <input type="file" onChange={e=>{ if (e.target.files?.[0]) uploadAsset(t, e.target.files[0]); }} disabled={uploading===key} />
-                        {cur && <div style={{ fontSize: 10 }}>{cur}</div>}
+                        <input type="file" style={{ maxWidth: '100%' }} onChange={e=>{ if (e.target.files?.[0]) uploadAsset(t, e.target.files[0]); }} disabled={uploading===key} />
+                        {cur && <div style={{ fontSize: 10, wordBreak: 'break-all' }}>{cur}</div>}
                       </div>
                     );
                   })}

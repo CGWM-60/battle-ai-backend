@@ -124,11 +124,18 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	contentH := handlers.NewContentHandler(services.NewContentService(database, "./content/assets"))
 
 	// Admin / catalog
+	// Page routes must be mounted before /:contentId routes so "/page" is not
+	// interpreted as a content id.
+	group.GET("/admin/content/buildings/page", contentH.AdminBuildingsPage)
+	group.GET("/admin/content/units/page", contentH.AdminUnitsPage)
+	group.GET("/admin/content/research/page", contentH.AdminResearchPage)
+
 	group.GET("/admin/content/buildings", contentH.ListBuildings)
 	group.GET("/admin/content/buildings/:contentId", contentH.GetBuilding)
 	group.POST("/admin/content/buildings", contentH.CreateOrUpdateBuilding)
 	group.PUT("/admin/content/buildings/:contentId", contentH.CreateOrUpdateBuilding)
 	group.DELETE("/admin/content/buildings/:contentId", contentH.DeleteBuilding)
+	group.POST("/admin/content/buildings/:contentId/delete", contentH.DeleteBuilding)
 	group.POST("/admin/content/upload-asset", contentH.UploadAsset) // multipart: file + contentId + domain + tier
 
 	// Player constructions (used by Flutter mmo construction flows)
@@ -142,22 +149,19 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// This must happen before any Group("/api/...") to avoid Gin's "*filepath catch-all conflicts with existing 'api'" panic.
 	// The late registration here was removed.
 
-	// Simple admin "pages" (HTML tables + basic CRUD forms) for each major item in backend.
-	// Accessible in browser for dev/admin: /admin/content/buildings/page etc.
-	// Full table + create/edit/delete + asset upload.
-	group.GET("/admin/content/buildings/page", contentH.AdminBuildingsPage)
-	group.GET("/admin/content/units/page", contentH.AdminUnitsPage)
-	group.GET("/admin/content/research/page", contentH.AdminResearchPage)
-
 	// JSON CRUD for units and research (copy of buildings - extend service impl + seed from reference)
 	group.GET("/admin/content/units", contentH.ListUnits)
+	group.GET("/admin/content/units/:contentId", contentH.GetUnit)
 	group.POST("/admin/content/units", contentH.CreateOrUpdateUnit)
 	group.PUT("/admin/content/units/:contentId", contentH.CreateOrUpdateUnit)
-	group.DELETE("/admin/content/units/:contentId", contentH.DeleteUnit) // add DeleteUnit to handler if needed
+	group.DELETE("/admin/content/units/:contentId", contentH.DeleteUnit)
+	group.POST("/admin/content/units/:contentId/delete", contentH.DeleteUnit)
 	group.GET("/admin/content/research", contentH.ListResearch)
+	group.GET("/admin/content/research/:contentId", contentH.GetResearch)
 	group.POST("/admin/content/research", contentH.CreateOrUpdateResearch)
 	group.PUT("/admin/content/research/:contentId", contentH.CreateOrUpdateResearch)
 	group.DELETE("/admin/content/research/:contentId", contentH.DeleteResearch)
+	group.POST("/admin/content/research/:contentId/delete", contentH.DeleteResearch)
 
 	// World management (gestion des worlds) - card entry via admin or API.
 	// GET /worlds -> list worlds with continents and capacities (from Redis)

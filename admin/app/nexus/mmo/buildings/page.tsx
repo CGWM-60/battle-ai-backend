@@ -236,8 +236,8 @@ export default function BuildingsAdminPage() {
       </table>
 
       {modal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="panel" style={{ width: 620, maxWidth: '95%', padding: 24, position: 'relative' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, overflowY: 'auto', padding: '24px 12px' }}>
+          <div className="panel" style={{ width: 620, maxWidth: 'calc(100vw - 24px)', maxHeight: 'calc(100vh - 48px)', overflowY: 'auto', padding: 24, position: 'relative' }}>
             <button onClick={closeModal} style={{ position: 'absolute', top: 8, right: 12, fontSize: 24, background: 'none', border: 'none', cursor: 'pointer' }}>×</button>
 
             <h3>{modal === 'create' ? 'Créer Bâtiment' : modal === 'edit' ? 'Éditer Bâtiment' : 'Supprimer Bâtiment'}</h3>
@@ -252,7 +252,7 @@ export default function BuildingsAdminPage() {
               </>
             ) : (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
                   <input placeholder="contentId (ex: building_modular_habitat)" value={form.contentId || ''} onChange={e => setForm({ ...form, contentId: e.target.value })} />
                   <input placeholder="nameKey" value={form.nameKey || ''} onChange={e => setForm({ ...form, nameKey: e.target.value })} />
                   <input placeholder="descriptionKey" value={form.descriptionKey || ''} onChange={e => setForm({ ...form, descriptionKey: e.target.value })} />
@@ -271,9 +271,9 @@ export default function BuildingsAdminPage() {
                       const key = t ? `tier${t}` : 'main';
                       const currentAsset = (form.assetsByTier && form.assetsByTier[key]) || (t==='' ? form.assetId : '');
                       return (
-                        <div key={key} style={{ border: '1px solid #334155', padding: 6, borderRadius: 4, minWidth: 140 }}>
+                        <div key={key} style={{ border: '1px solid #334155', padding: 6, borderRadius: 4, minWidth: 140, maxWidth: '100%' }}>
                           <div style={{ fontSize: 11 }}>{key}</div>
-                          <input type="file" onChange={e => { if (e.target.files?.[0]) uploadAsset(t, e.target.files[0]); }} disabled={uploading === key} />
+                          <input type="file" style={{ maxWidth: '100%' }} onChange={e => { if (e.target.files?.[0]) uploadAsset(t, e.target.files[0]); }} disabled={uploading === key} />
                           {currentAsset && <div style={{ fontSize: 10, color: '#64748b', marginTop: 2, wordBreak: 'break-all' }}>{currentAsset}</div>}
                           {uploading === key && <div style={{ fontSize: 11 }}>Upload...</div>}
                         </div>

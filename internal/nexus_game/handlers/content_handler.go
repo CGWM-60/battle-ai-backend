@@ -112,9 +112,9 @@ func (h *ContentHandler) UploadAsset(c *gin.Context) {
 		folder = "units"
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"ok":        true,
-		"savedAs":   savedName,
-		"urlHint":   "/nexus-assets/content/" + folder + "/" + savedName,
+		"ok":      true,
+		"savedAs": savedName,
+		"urlHint": "/nexus-assets/content/" + folder + "/" + savedName,
 	})
 }
 
@@ -181,7 +181,7 @@ func (h *ContentHandler) AdminBuildingsPage(c *gin.Context) {
 <p>Upload images via the form or the /admin/content/upload-asset endpoint. Served at /nexus-assets/content/buildings/...</p>
 
 <h2>Create / Update</h2>
-<form method="POST" action="/admin/content/buildings">
+<form method="POST" action="/api/nexus-game/admin/content/buildings">
   contentId: <input name="contentId"><br>
   nameKey: <input name="nameKey"><br>
   rarity: <input name="rarity" value="common"><br>
@@ -189,7 +189,7 @@ func (h *ContentHandler) AdminBuildingsPage(c *gin.Context) {
 </form>
 
 <h2>Asset Upload</h2>
-<form method="POST" action="/admin/content/upload-asset" enctype="multipart/form-data">
+<form method="POST" action="/api/nexus-game/admin/content/upload-asset" enctype="multipart/form-data">
   domain: <input name="domain" value="building"><br>
   contentId: <input name="contentId"><br>
   tier: <input name="tier" value="1"><br>
@@ -201,8 +201,8 @@ func (h *ContentHandler) AdminBuildingsPage(c *gin.Context) {
 <table><tr><th>contentId</th><th>nameKey</th><th>rarity</th><th>maxLevel</th><th>Actions</th></tr>`
 	for _, b := range list {
 		html += `<tr><td>` + b.ContentID + `</td><td>` + b.NameKey + `</td><td>` + b.Rarity + `</td><td>` + strconv.Itoa(b.MaxLevel) + `</td><td>
-		<a href="/admin/content/buildings/` + b.ContentID + `">View</a> | 
-		<form style="display:inline" method="POST" action="/admin/content/buildings/` + b.ContentID + `?_method=DELETE"><button>Delete</button></form>
+		<a href="/api/nexus-game/admin/content/buildings/` + b.ContentID + `">View</a> | 
+		<form style="display:inline" method="POST" action="/api/nexus-game/admin/content/buildings/` + b.ContentID + `/delete"><button>Delete</button></form>
 		</td></tr>`
 	}
 	html += `</table>
@@ -227,7 +227,8 @@ func (h *ContentHandler) AdminUnitsPage(c *gin.Context) {
 <table><tr><th>contentId</th><th>nameKey</th><th>rarity</th><th>Actions</th></tr>`
 	for _, u := range list {
 		html += `<tr><td>` + u.ContentID + `</td><td>` + u.NameKey + `</td><td>` + u.Rarity + `</td><td>
-		<a href="/admin/content/units/` + u.ContentID + `">View</a>
+		<a href="/api/nexus-game/admin/content/units/` + u.ContentID + `">View</a> | 
+		<form style="display:inline" method="POST" action="/api/nexus-game/admin/content/units/` + u.ContentID + `/delete"><button>Delete</button></form>
 		</td></tr>`
 	}
 	html += `</table>
@@ -251,7 +252,8 @@ func (h *ContentHandler) AdminResearchPage(c *gin.Context) {
 <table><tr><th>contentId</th><th>nameKey</th><th>branch</th><th>tier</th><th>Actions</th></tr>`
 	for _, r := range list {
 		html += `<tr><td>` + r.ContentID + `</td><td>` + r.NameKey + `</td><td>` + r.Branch + `</td><td>` + strconv.Itoa(r.Tier) + `</td><td>
-		<a href="/admin/content/research/` + r.ContentID + `">View</a>
+		<a href="/api/nexus-game/admin/content/research/` + r.ContentID + `">View</a> | 
+		<form style="display:inline" method="POST" action="/api/nexus-game/admin/content/research/` + r.ContentID + `/delete"><button>Delete</button></form>
 		</td></tr>`
 	}
 	html += `</table>
@@ -260,13 +262,41 @@ func (h *ContentHandler) AdminResearchPage(c *gin.Context) {
 }
 
 func (h *ContentHandler) ListUnits(c *gin.Context) {
-	list, _ := h.contentSvc.ListUnits(true)
-	c.JSON(http.StatusOK, gin.H{"units": list})
+	list, err := h.contentSvc.ListUnits(true)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"units": list, "count": len(list)})
 }
 
 func (h *ContentHandler) ListResearch(c *gin.Context) {
-	list, _ := h.contentSvc.ListResearch(true)
-	c.JSON(http.StatusOK, gin.H{"research": list})
+	list, err := h.contentSvc.ListResearch(true)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"research": list, "count": len(list)})
+}
+
+func (h *ContentHandler) GetUnit(c *gin.Context) {
+	id := c.Param("contentId")
+	unit, err := h.contentSvc.GetUnit(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "unit not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"unit": unit})
+}
+
+func (h *ContentHandler) GetResearch(c *gin.Context) {
+	id := c.Param("contentId")
+	research, err := h.contentSvc.GetResearch(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "research not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"research": research})
 }
 
 func (h *ContentHandler) CreateOrUpdateUnit(c *gin.Context) {
