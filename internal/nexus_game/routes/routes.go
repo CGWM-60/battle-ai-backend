@@ -6,6 +6,7 @@ import (
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/seeds"
 	"cgwm/battle/internal/nexus_game/services"
+	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -131,6 +132,18 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// Serve uploaded content assets (images for buildings/units/research) from server disk.
 	// After upload via /admin/content/upload-asset, images are at /nexus-assets/content/buildings/xxx_tier1.jpg etc.
 	router.Static("/nexus-assets", "./content/assets")
+
+	// Serve the Next.js admin static export (built with basePath: "/admin", output: "export", trailingSlash).
+	// This makes /admin , /admin/nexus/mmo/buildings , /admin/nexus/mmo/units , /admin/nexus/mmo/research work directly from the Go binary.
+	// All relative fetches ("/api/nexus-game/...") and asset requests resolve on the same origin.
+	// Set NEXUS_ADMIN_OUT_DIR env if the out/ is elsewhere (e.g. mounted volume in Dokploy).
+	// If the dir doesn't exist, we simply skip (no crash). The old Gin HTML stubs remain at /api/nexus-game/admin/content/*/page .
+	adminOutDir := getEnv("NEXUS_ADMIN_OUT_DIR", "./admin/out")
+	if _, err := os.Stat(adminOutDir + "/index.html"); err == nil {
+		router.StaticFS("/admin", http.Dir(adminOutDir))
+		// Note: once mounted, /admin/nexus/mmo/buildings etc. serve the real Next.js CRUD tables.
+		// Relative JS fetches become /api/nexus-game/... on the same Go instance (no more 404 on list/create/delete/upload).
+	}
 
 	// Simple admin "pages" (HTML tables + basic CRUD forms) for each major item in backend.
 	// Accessible in browser for dev/admin: /admin/content/buildings/page etc.
