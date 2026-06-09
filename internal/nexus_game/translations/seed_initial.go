@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"strings"
 
 	"cgwm/battle/internal/models"
 	"gorm.io/gorm"
@@ -33,19 +34,17 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 		locale = "fr"
 	}
 
-	var existingValues int64
-	if err := database.WithContext(ctx).
-		Model(&models.TranslationValue{}).
-		Where("locale = ?", locale).
-		Count(&existingValues).Error; err != nil {
+	rows := initialSeedRows(payload.Rows, locale)
+	rows, err = missingInitialSeedRows(ctx, database, rows)
+	if err != nil {
 		return nil, err
 	}
-	if existingValues >= int64(len(payload.Rows)) {
+	if len(rows) == 0 {
 		return nil, nil
 	}
 
 	service := NewTranslationService(database)
-	preview, err := service.PreviewImport(ctx, payload.Rows)
+	preview, err := service.PreviewImport(ctx, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -56,4 +55,86 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 	}
 
 	return service.CommitImportRows(ctx, preview, payload.FileName)
+}
+
+func initialSeedRows(importRows []models.TranslationImportRow, fallbackLocale string) []models.TranslationImportRow {
+	byKeyLocale := make(map[string]models.TranslationImportRow, len(importRows)+len(DefaultFrenchFallback))
+	for _, row := range importRows {
+		row.Domain = strings.TrimSpace(row.Domain)
+		row.Key = strings.TrimSpace(row.Key)
+		row.Locale = strings.TrimSpace(row.Locale)
+		if row.Locale == "" {
+			row.Locale = fallbackLocale
+		}
+		if row.Domain == "" || row.Key == "" || row.Locale == "" {
+			continue
+		}
+		byKeyLocale[row.Key+"|"+row.Locale] = row
+	}
+	for key, value := range DefaultFrenchFallback {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		mapKey := key + "|fr"
+		if _, exists := byKeyLocale[mapKey]; exists {
+			continue
+		}
+		byKeyLocale[mapKey] = models.TranslationImportRow{
+			Domain: strings.SplitN(key, ".", 2)[0],
+			Key:    key,
+			Locale: "fr",
+			Value:  value,
+		}
+	}
+	rows := make([]models.TranslationImportRow, 0, len(byKeyLocale))
+	for _, row := range byKeyLocale {
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+func missingInitialSeedRows(ctx context.Context, database *gorm.DB, rows []models.TranslationImportRow) ([]models.TranslationImportRow, error) {
+	if len(rows) == 0 {
+		return nil, nil
+	}
+
+	keys := make([]string, 0, len(rows))
+	seenKeys := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		if _, exists := seenKeys[row.Key]; exists {
+			continue
+		}
+		seenKeys[row.Key] = struct{}{}
+		keys = append(keys, row.Key)
+	}
+
+	var existing []struct {
+		Key    string
+		Locale string
+		Value  string
+	}
+	if err := database.WithContext(ctx).
+		Table("nexus_translation_keys as k").
+		Select("k.`key` as `key`, v.locale as locale, v.value as value").
+		Joins("JOIN nexus_translation_values as v ON v.key_id = k.id").
+		Where("k.`key` IN ?", keys).
+		Find(&existing).Error; err != nil {
+		return nil, err
+	}
+
+	existingValues := make(map[string]string, len(existing))
+	for _, value := range existing {
+		existingValues[value.Key+"|"+value.Locale] = strings.TrimSpace(value.Value)
+	}
+
+	missing := make([]models.TranslationImportRow, 0)
+	for _, row := range rows {
+		if existingValues[row.Key+"|"+row.Locale] != "" {
+			continue
+		}
+		missing = append(missing, row)
+	}
+	return missing, nil
 }

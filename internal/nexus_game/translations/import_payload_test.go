@@ -1,6 +1,10 @@
 package translations
 
-import "testing"
+import (
+	"testing"
+
+	"cgwm/battle/internal/models"
+)
 
 func TestParseImportPayloadStructured(t *testing.T) {
 	payload, err := ParseImportPayloadBytes([]byte(`{
@@ -45,5 +49,24 @@ func TestParseImportPayloadUppercaseRows(t *testing.T) {
 	row := payload.Rows[0]
 	if row.Domain != "nexus_game" || row.Key != "nexus_game.ai.ask" || row.Locale != "fr" || row.Value == "" {
 		t.Fatalf("unexpected row: %+v", row)
+	}
+}
+
+func TestInitialSeedRowsIncludesDefaultFrenchFallback(t *testing.T) {
+	rows := initialSeedRows([]models.TranslationImportRow{
+		{Domain: "common", Key: "common.app.title", Locale: "fr", Value: "NEXUS GAMES"},
+	}, "fr")
+
+	var found bool
+	for _, row := range rows {
+		if row.Key == "nexus_game.profile.error.load_choices" && row.Locale == "fr" {
+			found = true
+			if row.Domain != "nexus_game" || row.Value == "" {
+				t.Fatalf("unexpected fallback row: %+v", row)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected fallback key nexus_game.profile.error.load_choices in initial seed rows")
 	}
 }
