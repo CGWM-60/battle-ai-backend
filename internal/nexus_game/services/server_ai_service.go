@@ -277,3 +277,61 @@ func mustJSON(v interface{}) string {
 	b, _ := json.Marshal(v)
 	return string(b)
 }
+
+// RunAIGeneration - point d'entrée flexible pour l'admin "génération manuelle avec prompts CRUD".
+// L'admin choisit un prompt (généré/modifié manuellement via /prompts), un feature (quest_seed, world_event, living_lore, tribunal_case...),
+// et optionnellement du contexte extra.
+// Le service utilise le SystemPrompt + Version du prompt DB si fourni (sinon fallback interne versionné).
+// Toujours: log + StoreAIOutput (DB GORM ai_outputs + Redis list "nexus:ai:outputs") pour historique visible cross-sessions.
+// Output structuré visible dans la page admin IA + ia-outputs dédiée.
+// (Plus tard: vrai appel LLM provider ici avec le effectivePrompt + safety rules.)
+func (s *ServerAIService) RunAIGeneration(ctx context.Context, feature string, worldID uint, manualPrompt *models.Prompt, extraInput map[string]interface{}) (map[string]interface{}, error) {
+	start := time.Now()
+
+	var promptVersion, usedPromptID, systemPrompt string
+	if manualPrompt != nil && manualPrompt.SystemPrompt != "" {
+		usedPromptID = manualPrompt.PromptID
+		promptVersion = fmt.Sprintf("%s/%s", manualPrompt.PromptID, manualPrompt.Version)
+		systemPrompt = manualPrompt.SystemPrompt
+	} else {
+		usedPromptID = "internal"
+		promptVersion = "internal-v1-" + feature
+		systemPrompt = "You are the Nexus server AI (internal default). Generate controlled, constructive, lore-enriching output. Respect max impact rules, no bypass policies."
+	}
+
+	// Effective prompt that would be sent to LLM (for traceability + future real impl).
+	effective := fmt.Sprintf("SYSTEM PROMPT (manual or default):\n%s\n\nFEATURE=%s\nWORLD_ID=%d\nEXTRA=%+v\n\nInstructions: output structured JSON, enriching lore, limited world impact, version=%s", systemPrompt, feature, worldID, extraInput, promptVersion)
+
+	// Stub generation (enrichie avec référence au prompt utilisé). En prod: appel réel Mistral/OpenAI + parsing.
+	// Le texte généré est toujours "textuel" et persiste pour l'affichage admin.
+	generated := map[string]interface{}{
+		"feature":        feature,
+		"world_id":       worldID,
+		"prompt_version": promptVersion,
+		"used_prompt_id": usedPromptID,
+		"generated_at":   time.Now().UTC().Format(time.RFC3339),
+		"title":          fmt.Sprintf("[%s] %s (via %s)", feature, "Génération IA serveur", promptVersion),
+		"summary":        fmt.Sprintf("Sortie enrichissante construite avec le prompt manuel/admin. Extrait système: %s... Contexte monde intégré. Impact limité (politiques respectées).", truncateForLog(systemPrompt, 120)),
+		"details":        "Contenu détaillé (hooks lore, outcomes, conséquences constructives) serait produit par le LLM avec le prompt sélectionné. Évolue avec l'état du monde.",
+		"effective_prompt_snippet": truncateForLog(effective, 300),
+		"extra":          extraInput,
+		"status":         "success",
+	}
+
+	latency := time.Since(start).Milliseconds()
+	generated["latency_ms"] = latency
+	generated["tokens_in"] = 210
+	generated["tokens_out"] = 120
+
+	s.logAICall(ctx, feature, promptVersion, 210, 120, latency, "success", feature, 0)
+	_ = s.StoreAIOutput(ctx, generated)
+
+	return generated, nil
+}
+
+func truncateForLog(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "..."
+}

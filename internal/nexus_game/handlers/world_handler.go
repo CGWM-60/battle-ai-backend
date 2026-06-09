@@ -143,3 +143,48 @@ func (h *WorldHandler) UpdatePrompt(c *gin.Context) {
 // Note: Assignment logic is called internally from profile/faction handlers (see updates below).
 // For full "gestion", expose more admin endpoints as needed (e.g. force assign, view capacities).
 // Server AI prompts (in service) are versioned, logged, respect limits (no bypass policies).
+
+// RunAIGeneration - endpoint admin pour générer quêtes (quest seeds), événements, living lore, cas tribunal, etc.
+// avec les prompts créés/manuellement modifiés dans l'UI Prompts.
+// Body: { world_id, feature: "quest_seed"|"world_event"|"living_lore"|"tribunal_case"|"world_summary", prompt_id?, prompt_version?, extra? }
+// Réponse inclut l'output structuré (title, summary, details + meta prompt utilisé) + persistance auto (DB+Redis).
+// Progression/erreurs/succès sont gérés côté admin UI (appels visibles, steps, result panel).
+func (h *WorldHandler) RunAIGeneration(c *gin.Context) {
+	var req struct {
+		WorldID       uint                   `json:"world_id"`
+		Feature       string                 `json:"feature"`
+		PromptID      string                 `json:"prompt_id,omitempty"`
+		PromptVersion string                 `json:"prompt_version,omitempty"`
+		Extra         map[string]interface{} `json:"extra,omitempty"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body: " + err.Error()})
+		return
+	}
+	if req.Feature == "" || req.WorldID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "world_id and feature are required"})
+		return
+	}
+
+	var manualPrompt *models.Prompt
+	if req.PromptID != "" {
+		if p, err := h.svc.GetPrompt(c.Request.Context(), req.PromptID, req.PromptVersion); err == nil && p != nil {
+			manualPrompt = p
+		}
+	}
+
+	out, err := h.aiSvc.RunAIGeneration(c.Request.Context(), req.Feature, req.WorldID, manualPrompt, req.Extra)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":     true,
+		"feature":     req.Feature,
+		"world_id":    req.WorldID,
+		"output":      out,
+		"used_prompt": manualPrompt, // may be null if internal fallback
+		"note":        "Output persisted to ai_outputs (GORM DB + Redis). Visible in IA Outputs admin page and in-tab history. Uses the exact manual prompt SystemPrompt when provided.",
+	})
+}

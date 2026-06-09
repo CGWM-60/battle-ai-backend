@@ -102,4 +102,9 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 	// AI outputs history (persisted in Redis for cross-sessions)
 	group.GET("/ai-outputs", worldH.ListAIOutputs)
+
+	// Flexible server AI generation for admin (quests, events, lore, tribunal proposals... using manually managed prompts).
+	// POST /ai/generate {world_id, feature, prompt_id?, prompt_version?, extra?}
+	// Powers the rich generation console in admin with visible progress + success/error.
+	group.POST("/ai/generate", worldH.RunAIGeneration)
 }

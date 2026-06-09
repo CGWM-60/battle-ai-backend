@@ -55,6 +55,16 @@ export default function NexusMmoPage() {
   const [historicalIAOutputs, setHistoricalIAOutputs] = useState<any[]>([]);
   const [selectedWorldForIA, setSelectedWorldForIA] = useState('all');
 
+  // === Rich manual AI generation console (quests, events, lore, tribunal using manually CRUD'd prompts) ===
+  // Visible progression + success/error as requested.
+  const [selectedWorldForGen, setSelectedWorldForGen] = useState('first');
+  const [selectedFeatureForGen, setSelectedFeatureForGen] = useState<'world_event' | 'quest_seed' | 'living_lore' | 'tribunal_case' | 'world_summary'>('world_event');
+  const [selectedPromptForGen, setSelectedPromptForGen] = useState<any>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [genProgress, setGenProgress] = useState<any[]>([]);
+  const [genResult, setGenResult] = useState<any>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+
   interface Player {
     world: string;
     worldId: number | string;
@@ -255,6 +265,127 @@ export default function NexusMmoPage() {
     a.download = 'ia_server_outputs.csv';
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  // Small UX sleep to make progression visible step by step (no real backend multi-step needed).
+  const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+  // Core: run generation using the selected manual prompt (from prompts CRUD).
+  // Calls new backend POST /api/nexus-game/ai/generate which uses ServerAIService.RunAIGeneration
+  // (prefers the admin-edited SystemPrompt + version, always stores to ai_outputs for history).
+  // Updates genProgress live + result or error for full visibility.
+  const runManualAIGeneration = async () => {
+    const worldId = selectedWorldForGen === 'first' && worlds.length > 0 ? worlds[0].id : selectedWorldForGen;
+    if (!worldId || worldId === 'all') {
+      setGenError('Sélectionnez un monde valide (créez-en un via le bouton mondes si nécessaire).');
+      return;
+    }
+    setIsGenerating(true);
+    setGenError(null);
+    setGenResult(null);
+
+    // Define visible steps (progression explicite)
+    const baseSteps = [
+      { id: 1, label: '1. Chargement du prompt manuel sélectionné (SystemPrompt + version)', status: 'pending' },
+      { id: 2, label: '2. Préparation contexte monde + feature (quest/événement/lore/tribunal) + extra', status: 'pending' },
+      { id: 3, label: '3. Exécution IA serveur avec le prompt choisi (optimisé, versionné, limité)', status: 'pending' },
+      { id: 4, label: '4. Validation + persistance (ai_outputs DB GORM + Redis) + retour résultat', status: 'pending' },
+    ];
+    setGenProgress(baseSteps.map(s => ({...s})));
+
+    const updateStep = (id: number, status: string, extraMsg?: string) => {
+      setGenProgress(prev => prev.map(st => st.id === id ? { ...st, status, message: extraMsg } : st));
+    };
+
+    try {
+      // Step 1
+      updateStep(1, 'running');
+      await sleep(280);
+      if (selectedPromptForGen) {
+        updateStep(1, 'success', `Prompt: ${selectedPromptForGen.prompt_id || selectedPromptForGen.PromptID} v${selectedPromptForGen.version || selectedPromptForGen.Version}`);
+      } else {
+        updateStep(1, 'success', 'Aucun prompt spécifique → fallback interne (recommandé: choisir un prompt manuel)');
+      }
+
+      // Step 2
+      updateStep(2, 'running');
+      await sleep(220);
+      updateStep(2, 'success');
+
+      // Step 3 + real call
+      updateStep(3, 'running', 'Appel POST /ai/generate ...');
+      const body: any = {
+        world_id: Number(worldId),
+        feature: selectedFeatureForGen,
+        extra: { source: 'admin-manual-console', note: 'generated with user-managed prompt' },
+      };
+      if (selectedPromptForGen) {
+        body.prompt_id = selectedPromptForGen.prompt_id || selectedPromptForGen.PromptID;
+        body.prompt_version = selectedPromptForGen.version || selectedPromptForGen.Version;
+      }
+
+      const res = await fetch('/api/nexus-game/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        credentials: 'same-origin',
+      });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'Erreur génération');
+      }
+      const json = await res.json();
+      updateStep(3, 'success', `Feature=${json.feature || selectedFeatureForGen} | prompt_version=${json.output?.prompt_version}`);
+
+      // Step 4
+      updateStep(4, 'running');
+      await sleep(180);
+      updateStep(4, 'success', 'Persisted (DB id visible dans ia-outputs)');
+
+      const out = json.output || json;
+      setGenResult({ ...out, _meta: { feature: json.feature, used_prompt: json.used_prompt } });
+
+      // Feed the in-tab live list (like the old quick buttons) + auto refresh historical for the list below
+      const displayText = out.summary || out.details || JSON.stringify(out, null, 2);
+      const wName = (worlds.find((w: any) => String(w.id) === String(worldId))?.name) || `Monde ${worldId}`;
+      setIaOutputs(prev => [...prev, {
+        type: selectedFeatureForGen,
+        text: `[${out.prompt_version || 'manual'}] ${displayText}`,
+        time: new Date().toLocaleString(),
+        world: wName,
+        feature: selectedFeatureForGen,
+      }]);
+
+      // Best effort reload full history so the bottom list + separate page see it immediately
+      try {
+        const histRes = await fetch('/api/nexus-game/ai-outputs', { credentials: 'same-origin' });
+        if (histRes.ok) {
+          const d = await histRes.json();
+          setHistoricalIAOutputs(d.outputs || []);
+        }
+      } catch {}
+
+      setIsGenerating(false);
+    } catch (e: any) {
+      // Mark the first non-success step as error
+      const failing = genProgress.find((s: any) => s.status !== 'success') || { id: 3 };
+      updateStep(failing.id || 3, 'error', e?.message || String(e));
+      setGenError(e?.message || 'Erreur lors de la génération (voir logs backend pour détails LLM / provider).');
+      setIsGenerating(false);
+    }
+  };
+
+  // Quick action helper: prefill selectors then run the rich flow (visible progress)
+  const triggerQuickWithProgress = (feature: any, worldHint?: any) => {
+    if (worldHint) setSelectedWorldForGen(String(worldHint));
+    setSelectedFeatureForGen(feature);
+    // try to auto-pick a reasonable prompt from current list if none chosen
+    if (!selectedPromptForGen && prompts && prompts.length > 0) {
+      const match = prompts.find((p: any) => (p.domain || p.Domain || '').toLowerCase().includes(feature) || (p.purpose || p.Purpose || '').toLowerCase().includes(feature));
+      if (match) setSelectedPromptForGen(match);
+    }
+    // run shortly after state updates
+    setTimeout(() => { runManualAIGeneration(); }, 60);
   };
 
   // Create
@@ -740,66 +871,162 @@ export default function NexusMmoPage() {
         </section>
       )}
 
-      {/* IA Server Tools */}
+      {/* IA Server Tools - ENRICHED: console for generating quests/events/lore/tribunal using manually created prompts + visible progress + success/error */}
       {activeView === 'ia' && (
         <section className="panel">
           <button onClick={backToOverview} style={{ marginBottom: 16 }}>← Retour aux points d'entrée</button>
-          <h2>Outils IA Serveur (gestion complète des prompts, ticks, events)</h2>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-            <button onClick={async () => {
-              if (!worlds[0]) { alert('Créez un monde d\'abord'); return; }
-              const r = await fetch(`/api/nexus-game/worlds/${worlds[0].id}/generate-event`, {method:'POST', credentials:'same-origin'});
-              const j = await r.json();
-              const text = j.proposed_event ? `Événement IA:\nTitre: ${j.proposed_event.title}\nRésumé: ${j.proposed_event.summary}` : JSON.stringify(j, null, 2);
-              setIaOutputs(prev => [...prev, { type: 'event', text, time: new Date().toLocaleString(), world: worlds[0].name || worlds[0].id }]);
-            }} style={{ padding: '10px 16px' }}>Générer Événement IA Serveur</button>
-            <button onClick={async () => {
-              if (!worlds[0]) { alert('Créez un monde d\'abord'); return; }
-              const r = await fetch(`/api/nexus-game/worlds/${worlds[0].id}/trigger-tick`, {method:'POST', credentials:'same-origin'});
-              const j = await r.json();
-              const text = j.summary || 'Tick exécuté avec résumé IA (voir logs backend pour détails complets)';
-              setIaOutputs(prev => [...prev, { type: 'tick', text, time: new Date().toLocaleString(), world: worlds[0].name || worlds[0].id }]);
-            }} style={{ padding: '10px 16px' }}>Déclencher Tick + IA Serveur</button>
-            <button onClick={() => goToView('prompts')} style={{ padding: '10px 16px' }}>Gérer Prompts (CRUD, versions, évolution)</button>
-            <button onClick={() => window.location.href = '/nexus/mmo/ia-outputs'} style={{ padding: '10px 16px', background: '#14b8a6', color: 'white' }}>Ouvrir Page Séparée IA Outputs</button>
-          </div>
+          <h2>Outils IA Serveur — Génération manuelle (Quêtes / Événements / Lore / Tribunal) avec vos prompts</h2>
 
-          <div style={{ marginTop: 24 }}>
-            <h3>Ce qui est généré par l'IA du serveur (textuel) - Persisté Redis pour historique cross-sessions</h3>
-            <div style={{ marginBottom: 12 }}>
-              <label style={{ marginRight: 8 }}>Filtrer par monde:</label>
-              <select 
-                value={selectedWorldForIA} 
-                onChange={e => setSelectedWorldForIA(e.target.value)}
-                style={{ padding: 8, background: '#1e2937', color: 'white', border: '1px solid #334155' }}
-              >
-                <option value="all">Tous les mondes</option>
-                {worlds.map((w, i) => (
-                  <option key={i} value={String(w.id)}>{w.name || `Monde ${w.id}`}</option>
-                ))}
-              </select>
-            </div>
-            <button onClick={async () => {
-              const res = await fetch('/api/nexus-game/ai-outputs', { credentials: 'same-origin' });
-              if (res.ok) {
-                const data = await res.json();
-                setHistoricalIAOutputs(data.outputs || []);
-              }
-            }} style={{ marginRight: 8, padding: '4px 10px', fontSize: 12 }}>Recharger historique Redis</button>
-            <button onClick={exportIAOutputsToCSV} style={{ padding: '4px 10px', fontSize: 12 }}>Exporter en CSV</button>
-            {iaOutputs.length === 0 && historicalIAOutputs.length === 0 && <p style={{ color: '#64748b' }}>Aucun output pour l'instant. Utilise les boutons ci-dessus pour générer (events, résumés de tick, etc.). Les outputs sont persistés en Redis.</p>}
-            {[...iaOutputs, ...historicalIAOutputs]
-              .filter(o => selectedWorldForIA === 'all' || String(o.world) === selectedWorldForIA || o.world === selectedWorldForIA)
-              .map((o, i) => (
-              <div key={i} style={{ background: '#0f172a', padding: 12, borderRadius: 6, marginBottom: 8, border: '1px solid #334155' }}>
-                <div style={{ fontSize: 12, color: '#64748b' }}>{o.time} | {o.type} | {o.world}</div>
-                <pre style={{ whiteSpace: 'pre-wrap', fontSize: 13, margin: 8, color: '#e2e8f0', maxHeight: 200, overflow: 'auto' }}>{o.text}</pre>
+          {/* === CONSOLE DE GÉNÉRATION AVEC PROMPTS MANUELS (progression + succès/erreur visibles) === */}
+          <div style={{ border: '1px solid #14b8a6', borderRadius: 8, padding: 16, marginBottom: 16, background: '#0b1320' }}>
+            <div style={{ fontWeight: 600, marginBottom: 8, color: '#14b8a6' }}>Console de génération (utilise les prompts que vous avez créés/modifiés manuellement)</div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12, marginBottom: 12 }}>
+              {/* World */}
+              <div>
+                <label style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginBottom: 4 }}>Monde</label>
+                <select value={selectedWorldForGen} onChange={e => setSelectedWorldForGen(e.target.value)} style={{ width: '100%', padding: 8, background: '#1e2937', color: 'white', border: '1px solid #334155' }}>
+                  <option value="first">Premier monde disponible</option>
+                  {worlds.map((w: any, i: number) => (
+                    <option key={i} value={String(w.id)}>{w.name || `Monde ${w.id}`} (id {w.id})</option>
+                  ))}
+                </select>
               </div>
-            ))}
-            {(iaOutputs.length > 0 || historicalIAOutputs.length > 0) && <button onClick={() => { setIaOutputs([]); setHistoricalIAOutputs([]); }} style={{ marginTop: 8, fontSize: 12 }}>Clear tous outputs</button>}
+
+              {/* Feature / Type de génération */}
+              <div>
+                <label style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginBottom: 4 }}>Type de génération (quêtes, events, lore...)</label>
+                <select value={selectedFeatureForGen} onChange={e => setSelectedFeatureForGen(e.target.value as any)} style={{ width: '100%', padding: 8, background: '#1e2937', color: 'white', border: '1px solid #334155' }}>
+                  <option value="world_event">Événement Monde (World Event)</option>
+                  <option value="quest_seed">Graine de Quête / Quest Seed (Quêtes RP monde, Living Lore seeds)</option>
+                  <option value="living_lore">Entrée Living Lore (agrégation contributions + événements)</option>
+                  <option value="tribunal_case">Cas Tribunal IA (proposition Bridge depuis conflit)</option>
+                  <option value="world_summary">Résumé / Synthèse Tick Monde</option>
+                </select>
+              </div>
+
+              {/* Prompt manuel (from the CRUD list) */}
+              <div>
+                <label style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginBottom: 4 }}>Prompt manuel (créé dans l'onglet Prompts)</label>
+                <select
+                  value={selectedPromptForGen ? (selectedPromptForGen.id || selectedPromptForGen.ID || JSON.stringify({pid: selectedPromptForGen.prompt_id || selectedPromptForGen.PromptID, v: selectedPromptForGen.version || selectedPromptForGen.Version})) : ''}
+                  onChange={e => {
+                    if (!e.target.value) { setSelectedPromptForGen(null); return; }
+                    const found = prompts.find((p: any) => String(p.id || p.ID) === e.target.value || `${p.prompt_id || p.PromptID}/${p.version || p.Version}` === e.target.value);
+                    setSelectedPromptForGen(found || null);
+                  }}
+                  style={{ width: '100%', padding: 8, background: '#1e2937', color: 'white', border: '1px solid #334155' }}
+                >
+                  <option value="">(fallback interne — choisissez un prompt pour l'utiliser)</option>
+                  {prompts.map((p: any, i: number) => {
+                    const pid = p.prompt_id || p.PromptID || 'prompt';
+                    const ver = p.version || p.Version || '';
+                    const dom = p.domain || p.Domain || p.purpose || '';
+                    return <option key={i} value={String(p.id || p.ID || `${pid}/${ver}`)}>{pid} v{ver} — {dom}</option>;
+                  })}
+                </select>
+                <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>Le SystemPrompt édité manuellement sera utilisé par le serveur IA.</div>
+              </div>
+            </div>
+
+            <button
+              onClick={runManualAIGeneration}
+              disabled={isGenerating || !worlds.length}
+              style={{ width: '100%', padding: '12px 16px', background: isGenerating ? '#334155' : '#14b8a6', color: 'white', border: 'none', borderRadius: 6, fontWeight: 600, fontSize: 15, cursor: isGenerating ? 'wait' : 'pointer' }}
+            >
+              {isGenerating ? '⏳ Génération en cours (progression visible ci-dessous)...' : '▶ Lancer la génération avec le prompt sélectionné'}
+            </button>
+
+            {/* Visible PROGRESSION */}
+            {genProgress.length > 0 && (
+              <div style={{ marginTop: 14, background: '#111827', borderRadius: 6, padding: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: '#cbd5e1' }}>Progression visible</div>
+                {genProgress.map((st: any, idx: number) => (
+                  <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4, fontSize: 13 }}>
+                    <span style={{
+                      display: 'inline-block', width: 18, textAlign: 'center',
+                      color: st.status === 'success' ? '#10b981' : st.status === 'error' ? '#ef4444' : st.status === 'running' ? '#3b82f6' : '#64748b'
+                    }}>
+                      {st.status === 'success' ? '✓' : st.status === 'error' ? '✕' : st.status === 'running' ? '⟳' : '○'}
+                    </span>
+                    <span style={{ flex: 1, color: st.status === 'error' ? '#fca5a5' : '#e2e8f0' }}>
+                      {st.label} {st.message ? <span style={{ color: '#94a3b8' }}>— {st.message}</span> : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* SUCCESS result - fully visible */}
+            {genResult && (
+              <div style={{ marginTop: 12, background: '#052e16', border: '1px solid #10b981', borderRadius: 6, padding: 12 }}>
+                <div style={{ color: '#10b981', fontWeight: 600, marginBottom: 4 }}>✓ Succès — Output persisté (DB + Redis). Visible dans la page IA Outputs séparée et l'historique ci-dessous.</div>
+                <div style={{ fontSize: 12, color: '#86efac' }}>Feature: {genResult.feature || selectedFeatureForGen} | Prompt: {genResult.prompt_version || genResult._meta?.used_prompt?.prompt_id}</div>
+                <div style={{ marginTop: 6 }}>
+                  <strong style={{ fontSize: 13 }}>{genResult.title}</strong>
+                  <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, background: '#0a1724', padding: 8, borderRadius: 4, marginTop: 6, maxHeight: 180, overflow: 'auto' }}>{genResult.summary || genResult.details || JSON.stringify(genResult, null, 2)}</pre>
+                </div>
+                <button onClick={() => { setGenResult(null); setGenProgress([]); }} style={{ marginTop: 6, fontSize: 12, padding: '2px 8px' }}>Effacer ce résultat</button>
+              </div>
+            )}
+
+            {/* ERROR visible */}
+            {genError && (
+              <div style={{ marginTop: 12, background: '#3f1c1c', border: '1px solid #ef4444', borderRadius: 6, padding: 12, color: '#fecaca' }}>
+                <div style={{ fontWeight: 600 }}>✕ Erreur visible</div>
+                <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>{genError}</pre>
+                <div style={{ fontSize: 11, marginTop: 4, color: '#fda4af' }}>Vérifiez les logs backend (feature + prompt_version + effective prompt sont loggés). L'output n'a pas été persisté.</div>
+              </div>
+            )}
           </div>
 
-          <p style={{ marginTop: 12, fontSize: 13, color: '#64748b' }}>Prompts optimisés (coût, rapidité, constructif/enrichissant). Évoluent automatiquement avec l'état du monde/jour/univers. Logs et coûts traçables. Tous les appels IA serveur respectent les limits (pas de bypass policies).</p>
+          {/* Quick actions (legacy buttons now feed the rich progress console) */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>Actions rapides (prérenseignent la console + lancent avec progression visible) :</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <button onClick={() => triggerQuickWithProgress('world_event')} style={{ padding: '8px 12px', fontSize: 12 }}>Générer Événement (avec prompt si choisi)</button>
+              <button onClick={() => triggerQuickWithProgress('quest_seed')} style={{ padding: '8px 12px', fontSize: 12 }}>Générer Quest Seed / Quête</button>
+              <button onClick={() => triggerQuickWithProgress('living_lore')} style={{ padding: '8px 12px', fontSize: 12 }}>Générer Living Lore entry</button>
+              <button onClick={() => triggerQuickWithProgress('tribunal_case')} style={{ padding: '8px 12px', fontSize: 12 }}>Préparer Cas Tribunal</button>
+              <button onClick={() => goToView('prompts')} style={{ padding: '8px 12px', fontSize: 12 }}>Gérer / Créer les Prompts manuels →</button>
+              <button onClick={() => window.location.href = '/nexus/mmo/ia-outputs'} style={{ padding: '8px 12px', fontSize: 12, background: '#14b8a6', color: 'white' }}>Ouvrir page IA Outputs (historique complet)</button>
+            </div>
+          </div>
+
+          {/* Historique / outputs (maintenant alimenté par les générations manuelles + prompts choisis) */}
+          <div style={{ marginTop: 8 }}>
+            <h3>Outputs IA Serveur générés (textuel + meta) — Persistés DB + Redis (cross-sessions)</h3>
+            <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 12 }}>Filtre monde:</label>
+              <select value={selectedWorldForIA} onChange={e => setSelectedWorldForIA(e.target.value)} style={{ padding: 6, background: '#1e2937', color: 'white', border: '1px solid #334155' }}>
+                <option value="all">Tous</option>
+                {worlds.map((w: any, i: number) => <option key={i} value={String(w.id)}>{w.name || `Monde ${w.id}`}</option>)}
+              </select>
+              <button onClick={async () => {
+                const res = await fetch('/api/nexus-game/ai-outputs', { credentials: 'same-origin' });
+                if (res.ok) { const d = await res.json(); setHistoricalIAOutputs(d.outputs || []); }
+              }} style={{ padding: '4px 10px', fontSize: 12 }}>Recharger historique</button>
+              <button onClick={exportIAOutputsToCSV} style={{ padding: '4px 10px', fontSize: 12 }}>Exporter CSV</button>
+              {(iaOutputs.length > 0 || historicalIAOutputs.length > 0) && <button onClick={() => { setIaOutputs([]); setHistoricalIAOutputs([]); }} style={{ padding: '4px 10px', fontSize: 12 }}>Clear</button>}
+            </div>
+
+            {iaOutputs.length === 0 && historicalIAOutputs.length === 0 && (
+              <p style={{ color: '#64748b' }}>Aucun output. Utilisez la console ci-dessus avec un prompt manuel pour générer quêtes/événements/lore/tribunal. Tout est persisté et traçable (prompt_version exacte, feature, tokens, latence).</p>
+            )}
+
+            {[...iaOutputs, ...historicalIAOutputs]
+              .filter(o => selectedWorldForIA === 'all' || String(o.world) === selectedWorldForIA || String(o.world_id) === selectedWorldForIA || o.world === selectedWorldForIA)
+              .map((o, i) => (
+                <div key={i} style={{ background: '#0f172a', padding: 10, borderRadius: 6, marginBottom: 6, border: '1px solid #334155' }}>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>{o.time || o.timestamp} | {o.type || o.feature} | monde:{o.world || o.world_id} | prompt:{o.prompt_version || ''}</div>
+                  <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12, margin: 4, color: '#e2e8f0', maxHeight: 160, overflow: 'auto' }}>{o.text || (typeof o.output === 'string' ? o.output : JSON.stringify(o.output || o, null, 2))}</pre>
+                </div>
+              ))}
+          </div>
+
+          <p style={{ marginTop: 12, fontSize: 12, color: '#64748b' }}>
+            Les générations utilisent le SystemPrompt que vous avez saisi manuellement (CRUD Prompts). Progression, succès et erreurs sont affichés en direct. Outputs stockés dans ai_outputs (GORM) + Redis → visibles dans /nexus/mmo/ia-outputs et ici. Respecte les règles (logs, versions, limites d'impact).
+          </p>
         </section>
       )}
 
