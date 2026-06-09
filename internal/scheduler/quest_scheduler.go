@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -111,6 +112,45 @@ func (e providerCallError) Error() string {
 
 func (e providerCallError) Unwrap() error {
 	return e.Err
+}
+
+func (e providerCallError) TimedOut() bool {
+	return errors.Is(e.Err, context.DeadlineExceeded) || strings.Contains(strings.ToLower(e.Err.Error()), "context deadline exceeded")
+}
+
+type providerAttemptFailure struct {
+	Provider string
+	Model    string
+	URL      string
+	Message  string
+	TimedOut bool
+}
+
+type providerAttemptsError struct {
+	Primary  aiProviderConfig
+	Failures []providerAttemptFailure
+	LastErr  error
+}
+
+func (e providerAttemptsError) Error() string {
+	parts := make([]string, 0, len(e.Failures))
+	for _, failure := range e.Failures {
+		timeout := ""
+		if failure.TimedOut {
+			timeout = " timeout=true"
+		}
+		parts = append(parts, fmt.Sprintf("%s/%s url=%s%s err=%s", failure.Provider, failure.Model, failure.URL, timeout, failure.Message))
+	}
+	return fmt.Sprintf(
+		"all provider attempts failed primary=%s/%s attempts=[%s]",
+		e.Primary.Name,
+		e.Primary.Model,
+		strings.Join(parts, " | "),
+	)
+}
+
+func (e providerAttemptsError) Unwrap() error {
+	return e.LastErr
 }
 
 type generatedBattleQuest struct {
@@ -619,9 +659,13 @@ func callProvider(ctx context.Context, cfg aiProviderConfig, prompt string, trac
 }
 
 func callProviderWithFallbacks(ctx context.Context, primary aiProviderConfig, prompt string, trace cronTrace) (string, aiProviderConfig, error) {
-	attempts := providerAttempts(primary)
+	return callProviderWithFallbacksExcluding(ctx, primary, prompt, trace, nil)
+}
+
+func callProviderWithFallbacksExcluding(ctx context.Context, primary aiProviderConfig, prompt string, trace cronTrace, excludedProviders map[string]bool) (string, aiProviderConfig, error) {
+	attempts := providerAttemptsWithExclusions(primary, excludedProviders)
 	var lastErr error
-	failures := make([]string, 0, len(attempts))
+	failures := make([]providerAttemptFailure, 0, len(attempts))
 	for index, cfg := range attempts {
 		attemptTrace := trace
 		attemptTrace.Provider = cfg.Name
@@ -637,7 +681,17 @@ func callProviderWithFallbacks(ctx context.Context, primary aiProviderConfig, pr
 			return response, cfg, nil
 		}
 		lastErr = err
-		failures = append(failures, fmt.Sprintf("%s/%s: %v", cfg.Name, cfg.Model, err))
+		failure := providerAttemptFailure{
+			Provider: cfg.Name,
+			Model:    cfg.Model,
+			Message:  err.Error(),
+		}
+		var callErr providerCallError
+		if errors.As(err, &callErr) {
+			failure.URL = callErr.URL
+			failure.TimedOut = callErr.TimedOut()
+		}
+		failures = append(failures, failure)
 		if ctx.Err() != nil {
 			break
 		}
@@ -645,13 +699,7 @@ func callProviderWithFallbacks(ctx context.Context, primary aiProviderConfig, pr
 	if lastErr == nil {
 		lastErr = fmt.Errorf("no configured provider available")
 	}
-	return "", aiProviderConfig{}, fmt.Errorf(
-		"all provider attempts failed primary=%s/%s attempts=[%s]: %w",
-		primary.Name,
-		primary.Model,
-		strings.Join(failures, " | "),
-		lastErr,
-	)
+	return "", aiProviderConfig{}, providerAttemptsError{Primary: primary, Failures: failures, LastErr: lastErr}
 }
 
 func providerForHour(now time.Time) (aiProviderConfig, bool) {
@@ -745,11 +793,20 @@ func providerConfigForName(name string) (aiProviderConfig, bool) {
 }
 
 func providerAttempts(primary aiProviderConfig) []aiProviderConfig {
+	return providerAttemptsWithExclusions(primary, nil)
+}
+
+func providerAttemptsWithExclusions(primary aiProviderConfig, excludedProviders map[string]bool) []aiProviderConfig {
 	attempts := []aiProviderConfig{primary}
-	seen := map[string]bool{strings.ToLower(strings.TrimSpace(primary.Name)): true}
+	primaryName := strings.ToLower(strings.TrimSpace(primary.Name))
+	attempts = nil
+	seen := map[string]bool{primaryName: true}
+	if primary.Name != "" && !excludedProviders[primaryName] {
+		attempts = append(attempts, primary)
+	}
 	for _, name := range cronProviderRotation() {
 		name = strings.ToLower(strings.TrimSpace(name))
-		if name == "" || seen[name] {
+		if name == "" || seen[name] || excludedProviders[name] {
 			continue
 		}
 		seen[name] = true
@@ -1382,6 +1439,7 @@ func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cron
 	// Generate 1 by 1 (user requirement) — much more reliable than one huge prompt for 10 complex narrative cases.
 	out := make([]generatedTribunalCase, 0, tribunalCasesPerCron)
 	seen := map[int]bool{}
+	disabledProviders := map[string]bool{}
 
 	for lvl := 1; lvl <= tribunalCasesPerCron; lvl++ {
 		if seen[lvl] {
@@ -1393,9 +1451,11 @@ func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cron
 
 		// callProvider puts the prompt as system message
 		fullPrompt := sys + "\n\n" + user
-		response, usedProvider, err := callProviderWithFallbacks(ctx, cfg, fullPrompt, trace)
+		trace.log("single_case_request", "started", "request_index=%d total=%d level=%d disabled_providers=%s", lvl, tribunalCasesPerCron, lvl, strings.Join(disabledProviderNames(disabledProviders), ","))
+		response, usedProvider, err := callProviderWithFallbacksExcluding(ctx, cfg, fullPrompt, trace, disabledProviders)
 		if err != nil {
 			trace.log("single_case", "failed", "level=%d err=%v", lvl, err)
+			disableTimedOutProviders(err, disabledProviders, trace)
 			continue // don't fail the whole batch
 		}
 		if usedProvider.Name != cfg.Name || usedProvider.Model != cfg.Model {
@@ -1423,6 +1483,7 @@ func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cron
 			single.EstimatedDurationMinutes = 5 + lv*5
 		}
 		out = append(out, single)
+		trace.log("single_case_request", "completed", "request_index=%d total=%d level=%d provider=%s model=%s", lvl, tribunalCasesPerCron, lv, usedProvider.Name, usedProvider.Model)
 		trace.log("single_case", "success", "level=%d title=%s", lv, single.Title)
 	}
 
@@ -1430,6 +1491,34 @@ func generateTribunalCases(ctx context.Context, cfg aiProviderConfig, trace cron
 		return nil, fmt.Errorf("provider returned 0 cases (1-by-1 mode)")
 	}
 	return out, nil
+}
+
+func disableTimedOutProviders(err error, disabledProviders map[string]bool, trace cronTrace) {
+	var attemptsErr providerAttemptsError
+	if !errors.As(err, &attemptsErr) {
+		return
+	}
+	for _, failure := range attemptsErr.Failures {
+		if !failure.TimedOut || failure.Provider == "" {
+			continue
+		}
+		providerName := strings.ToLower(strings.TrimSpace(failure.Provider))
+		if providerName == "" || disabledProviders[providerName] {
+			continue
+		}
+		disabledProviders[providerName] = true
+		trace.log("provider_batch_disable", "timeout", "provider=%s model=%s reason=timeout_for_remaining_single_case_requests", failure.Provider, failure.Model)
+	}
+}
+
+func disabledProviderNames(disabledProviders map[string]bool) []string {
+	names := make([]string, 0, len(disabledProviders))
+	for name, disabled := range disabledProviders {
+		if disabled {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func promptsForTribunalCases() (string, string) {
