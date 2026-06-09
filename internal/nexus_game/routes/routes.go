@@ -20,6 +20,36 @@ func getEnv(key, def string) string {
 	return def
 }
 
+// RegisterAdminStatic must be called **early** (right after creating the gin.Engine, before any
+// router.Group("/api/...") or other routes that create children under "/api").
+//
+// Gin has a strict radix tree and panics with "catch-all wildcard '*filepath' ... conflicts with
+// existing path segment 'api' in existing prefix '/api'" if you register a StaticFS (which uses
+// a *filepath catch-all) after concrete segments under a sibling prefix like /api have been added.
+//
+// We also register the /nexus-assets static here for the same reason (game content images for
+// buildings/units/research uploaded via the admin CRUD).
+//
+// This serves the Next.js built admin (basePath /admin) so that:
+//   - /admin , /admin/nexus/mmo/buildings , /admin/nexus/mmo/units , /admin/nexus/mmo/research
+//     work directly from the Go binary (same origin as the /api/nexus-game handlers).
+//   - Relative fetches in the admin JS ("/api/nexus-game/...") just work.
+//   - Game content assets under /nexus-assets/... continue to work.
+//
+// Use NEXUS_ADMIN_OUT_DIR env var to point to a different location for the built admin/out (useful in Dokploy etc.).
+// If the dir or index.html is missing, we silently skip the admin UI (no panic).
+// The old Gin HTML stubs remain available at /api/nexus-game/admin/content/*/page .
+func RegisterAdminStatic(router *gin.Engine) {
+	// Game content assets (uploaded via /api/nexus-game/admin/content/upload-asset, served for Flutter + admin previews)
+	router.Static("/nexus-assets", "./content/assets")
+
+	// Next.js MMO admin UI (the real CRUD tables for buildings/units/research with image uploads)
+	adminOutDir := getEnv("NEXUS_ADMIN_OUT_DIR", "./admin/out")
+	if _, err := os.Stat(adminOutDir + "/index.html"); err == nil {
+		router.StaticFS("/admin", http.Dir(adminOutDir))
+	}
+}
+
 func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	redis := cache.NewRedisServiceFromEnv()
 	health := handlers.NewHealthHandler(database, redis)
@@ -129,21 +159,10 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/profile/:id/construction/start", contentH.StartConstruction)
 	group.POST("/profile/:id/construction/complete-ready", contentH.CompleteReadyConstructions)
 
-	// Serve uploaded content assets (images for buildings/units/research) from server disk.
-	// After upload via /admin/content/upload-asset, images are at /nexus-assets/content/buildings/xxx_tier1.jpg etc.
-	router.Static("/nexus-assets", "./content/assets")
-
-	// Serve the Next.js admin static export (built with basePath: "/admin", output: "export", trailingSlash).
-	// This makes /admin , /admin/nexus/mmo/buildings , /admin/nexus/mmo/units , /admin/nexus/mmo/research work directly from the Go binary.
-	// All relative fetches ("/api/nexus-game/...") and asset requests resolve on the same origin.
-	// Set NEXUS_ADMIN_OUT_DIR env if the out/ is elsewhere (e.g. mounted volume in Dokploy).
-	// If the dir doesn't exist, we simply skip (no crash). The old Gin HTML stubs remain at /api/nexus-game/admin/content/*/page .
-	adminOutDir := getEnv("NEXUS_ADMIN_OUT_DIR", "./admin/out")
-	if _, err := os.Stat(adminOutDir + "/index.html"); err == nil {
-		router.StaticFS("/admin", http.Dir(adminOutDir))
-		// Note: once mounted, /admin/nexus/mmo/buildings etc. serve the real Next.js CRUD tables.
-		// Relative JS fetches become /api/nexus-game/... on the same Go instance (no more 404 on list/create/delete/upload).
-	}
+	// NOTE: Both /nexus-assets (game content images) and /admin (Next.js MMO admin UI) are now registered
+	// EARLY by the central router (see RegisterAdminStatic + the call in internal/router/router.go).
+	// This must happen before any Group("/api/...") to avoid Gin's "*filepath catch-all conflicts with existing 'api'" panic.
+	// The late registration here was removed.
 
 	// Simple admin "pages" (HTML tables + basic CRUD forms) for each major item in backend.
 	// Accessible in browser for dev/admin: /admin/content/buildings/page etc.
