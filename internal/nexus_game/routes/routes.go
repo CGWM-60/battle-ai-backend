@@ -122,9 +122,10 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/admin/content/upload-asset", contentH.UploadAsset) // multipart: file + contentId + domain + tier
 
 	// Player constructions (used by Flutter mmo construction flows)
-	group.GET("/profile/:profileId/buildings", contentH.ListPlayerBuildings)
-	group.POST("/profile/:profileId/construction/start", contentH.StartConstruction)
-	group.POST("/profile/:profileId/construction/complete-ready", contentH.CompleteReadyConstructions)
+	// Use :id to match existing /profile/:id/* routes and avoid Gin wildcard conflict
+	group.GET("/profile/:id/buildings", contentH.ListPlayerBuildings)
+	group.POST("/profile/:id/construction/start", contentH.StartConstruction)
+	group.POST("/profile/:id/construction/complete-ready", contentH.CompleteReadyConstructions)
 
 	// Serve uploaded content assets (images for buildings/units/research) from server disk.
 	// After upload via /admin/content/upload-asset, images are at /nexus-assets/content/buildings/xxx_tier1.jpg etc.

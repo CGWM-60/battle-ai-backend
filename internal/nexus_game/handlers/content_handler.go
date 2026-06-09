@@ -112,7 +112,7 @@ func (h *ContentHandler) UploadAsset(c *gin.Context) {
 // === Player constructions (depends on buildings) ===
 
 func (h *ContentHandler) ListPlayerBuildings(c *gin.Context) {
-	pidStr := c.Param("profileId")
+	pidStr := c.Param("id")
 	pid, _ := strconv.ParseUint(pidStr, 10, 64)
 	list, err := h.contentSvc.ListPlayerBuildings(uint(pid))
 	if err != nil {
@@ -143,7 +143,7 @@ func (h *ContentHandler) StartConstruction(c *gin.Context) {
 
 // Poll or call on load to complete ready constructions (server truth).
 func (h *ContentHandler) CompleteReadyConstructions(c *gin.Context) {
-	pidStr := c.Param("profileId")
+	pidStr := c.Param("id")
 	pid, _ := strconv.ParseUint(pidStr, 10, 64)
 
 	list, _ := h.contentSvc.ListPlayerBuildings(uint(pid))
