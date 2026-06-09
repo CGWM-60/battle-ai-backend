@@ -52,6 +52,15 @@ func (h *ContentHandler) CreateOrUpdateBuilding(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
 		return
 	}
+	if pathID := c.Param("contentId"); pathID != "" {
+		if def.ContentID == "" {
+			def.ContentID = pathID
+		}
+		if def.ContentID != pathID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "contentId path/body mismatch"})
+			return
+		}
+	}
 	if def.ContentID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "contentId required"})
 		return
@@ -305,6 +314,15 @@ func (h *ContentHandler) CreateOrUpdateUnit(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
 		return
 	}
+	if pathID := c.Param("contentId"); pathID != "" {
+		if def.ContentID == "" {
+			def.ContentID = pathID
+		}
+		if def.ContentID != pathID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "contentId path/body mismatch"})
+			return
+		}
+	}
 	if def.ContentID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "contentId required"})
 		return
@@ -321,6 +339,15 @@ func (h *ContentHandler) CreateOrUpdateResearch(c *gin.Context) {
 	if err := c.ShouldBindJSON(&def); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
 		return
+	}
+	if pathID := c.Param("contentId"); pathID != "" {
+		if def.ContentID == "" {
+			def.ContentID = pathID
+		}
+		if def.ContentID != pathID {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "contentId path/body mismatch"})
+			return
+		}
 	}
 	if def.ContentID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "contentId required"})

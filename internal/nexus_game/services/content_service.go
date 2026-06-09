@@ -18,7 +18,7 @@ import (
 // Assets uploaded here are served statically by the main server (configure /nexus-assets/ to point to content/assets).
 
 type ContentService struct {
-	db           *gorm.DB
+	db            *gorm.DB
 	assetsBaseDir string // e.g. "./content/assets" or absolute
 }
 
@@ -56,10 +56,18 @@ func (s *ContentService) CreateOrUpdateBuilding(def *models.BuildingDefinition) 
 	if def.EffectsJSON == "" {
 		def.EffectsJSON = "[]"
 	}
-	def.UpdatedAt = time.Now()
-	if def.CreatedAt.IsZero() {
-		def.CreatedAt = time.Now()
+	now := time.Now()
+	var existing models.BuildingDefinition
+	err := s.db.Where("content_id = ?", def.ContentID).First(&existing).Error
+	if err == nil {
+		def.ID = existing.ID
+		def.CreatedAt = existing.CreatedAt
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	} else if def.CreatedAt.IsZero() {
+		def.CreatedAt = now
 	}
+	def.UpdatedAt = now
 	return s.db.Save(def).Error
 }
 
@@ -262,10 +270,18 @@ func (s *ContentService) CreateOrUpdateUnit(def *models.UnitDefinition) error {
 	if def.EffectsJSON == "" {
 		def.EffectsJSON = "[]"
 	}
-	def.UpdatedAt = time.Now()
-	if def.CreatedAt.IsZero() {
-		def.CreatedAt = time.Now()
+	now := time.Now()
+	var existing models.UnitDefinition
+	err := s.db.Where("content_id = ?", def.ContentID).First(&existing).Error
+	if err == nil {
+		def.ID = existing.ID
+		def.CreatedAt = existing.CreatedAt
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	} else if def.CreatedAt.IsZero() {
+		def.CreatedAt = now
 	}
+	def.UpdatedAt = now
 	return s.db.Save(def).Error
 }
 
@@ -298,10 +314,18 @@ func (s *ContentService) CreateOrUpdateResearch(def *models.ResearchDefinition) 
 	if def.EffectsJSON == "" {
 		def.EffectsJSON = "[]"
 	}
-	def.UpdatedAt = time.Now()
-	if def.CreatedAt.IsZero() {
-		def.CreatedAt = time.Now()
+	now := time.Now()
+	var existing models.ResearchDefinition
+	err := s.db.Where("content_id = ?", def.ContentID).First(&existing).Error
+	if err == nil {
+		def.ID = existing.ID
+		def.CreatedAt = existing.CreatedAt
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	} else if def.CreatedAt.IsZero() {
+		def.CreatedAt = now
 	}
+	def.UpdatedAt = now
 	return s.db.Save(def).Error
 }
 
