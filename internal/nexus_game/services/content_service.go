@@ -284,7 +284,7 @@ func assetFilenameFromReference(ref string) string {
 
 func (s *ContentService) ListBuildings(publishedOnly bool) ([]models.BuildingDefinition, error) {
 	var list []models.BuildingDefinition
-	q := s.db.Model(&models.BuildingDefinition{})
+	q := s.db.Model(&models.BuildingDefinition{}).Where("content_id <> ''")
 	if publishedOnly {
 		q = q.Where("is_published = ?", true)
 	}
@@ -524,7 +524,7 @@ func (s *ContentService) ListPlayerBuildings(profileID uint) ([]models.PlayerBui
 // === Units (full CRUD + catalog from reference §5) ===
 func (s *ContentService) ListUnits(publishedOnly bool) ([]models.UnitDefinition, error) {
 	var list []models.UnitDefinition
-	q := s.db.Model(&models.UnitDefinition{})
+	q := s.db.Model(&models.UnitDefinition{}).Where("content_id <> ''")
 	if publishedOnly {
 		q = q.Where("is_published = ?", true)
 	}
@@ -572,7 +572,7 @@ func (s *ContentService) DeleteUnitByID(id uint) error {
 // === Research (full CRUD + 11 branches x 7 tiers per §6) ===
 func (s *ContentService) ListResearch(publishedOnly bool) ([]models.ResearchDefinition, error) {
 	var list []models.ResearchDefinition
-	q := s.db.Model(&models.ResearchDefinition{})
+	q := s.db.Model(&models.ResearchDefinition{}).Where("content_id <> ''")
 	if publishedOnly {
 		q = q.Where("is_published = ?", true)
 	}
