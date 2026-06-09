@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../../components/AdminShell";
-import { CostSummary, EffectsPreview, LevelDescriptionsPreview, TranslationCell, TranslationMap, fetchCatalogTranslations } from "../contentDisplay";
+import { AssetPreview, CatalogIdentity, CatalogTable, CostSummary, DescriptionSummary, EffectsPreview, LevelDescriptionsPreview, TranslationMap, fetchCatalogTranslations } from "../contentDisplay";
 
 const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "");
 
@@ -265,56 +265,36 @@ export default function BuildingsAdminPage() {
       {loading && <p>Chargement...</p>}
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
-      <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <CatalogTable>
         <thead>
           <tr>
-            <th>Preview</th>
-            <th>Content ID</th>
-            <th>Nom</th>
-            <th>Description globale</th>
-            <th>Rareté</th>
-            <th>Coûts</th>
-            <th>Descriptions par lvl</th>
-            <th>Apports / effets</th>
-            <th>Assets</th>
-            <th>Agents IA</th>
-            <th>Actions</th>
+            <th style={{ width: 260 }}>Fiche</th>
+            <th style={{ width: 310 }}>Description</th>
+            <th style={{ width: 190 }}>Coûts</th>
+            <th style={{ width: 280 }}>Apports</th>
+            <th style={{ width: 280 }}>Niveaux</th>
+            <th style={{ width: 220 }}>Médias</th>
+            <th style={{ width: 130 }}>Actions</th>
           </tr>
         </thead>
         <tbody>
           {items.map((b) => {
             const assets = collectAssets(b);
-            const previewAssets = assets.slice(0, 4);
             return (
-              <tr key={b.contentId || `building-${b.id}`} style={{ borderTop: '1px solid #334155' }}>
-                <td style={{ padding: 4 }}>
-                  {previewAssets.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 48px)', gap: 4 }}>
-                      {previewAssets.map((asset) => (
-                        <div key={asset.key} style={{ position: 'relative' }}>
-                          <img src={asset.url!} alt={`${b.contentId || `building-${b.id}`}-${asset.key}`} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155', background: '#0f172a' }} onError={(e) => (e.currentTarget.style.opacity = '0.18')} />
-                          <span style={{ position: 'absolute', left: 2, bottom: 2, fontSize: 9, padding: '1px 3px', borderRadius: 3, background: 'rgba(15,23,42,0.82)', color: '#cbd5e1' }}>{asset.key}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ width: 48, height: 48, background: '#1e2937', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>no img</div>
-                  )}
+              <tr key={b.contentId || `building-${b.id}`} style={{ borderTop: '1px solid #334155', verticalAlign: 'top' }}>
+                <td>
+                  <CatalogIdentity
+                    translations={translations}
+                    titleKey={b.nameKey}
+                    contentId={b.contentId}
+                    badges={[b.rarity || '-', `lvl ${b.maxLevel || '-'}`, `${b.aiAgentSlots ?? 0} agent(s)`]}
+                  />
                 </td>
-                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{b.contentId || <span style={{ color: '#fca5a5' }}>#{b.id} — contentId manquant</span>}</td>
-                <td><TranslationCell translations={translations} labelKey={b.nameKey} /></td>
-                <td><TranslationCell translations={translations} labelKey={b.descriptionKey} /></td>
-                <td>{b.rarity || '—'}</td>
+                <td><DescriptionSummary translations={translations} descriptionKey={b.descriptionKey} flavorTextKey={b.flavorTextKey} /></td>
                 <td><CostSummary item={b as any} kind="building" /></td>
-                <td><LevelDescriptionsPreview keys={b.levelDescriptionKeys} translations={translations} /></td>
                 <td><EffectsPreview effects={b.effects || b.effectsJSON} /></td>
-                <td style={{ fontSize: 11 }}>
-                  {b.assetId && <div>main: {b.assetId}</div>}
-                  {b.assetsByTier && Object.keys(b.assetsByTier).map(t => (
-                    <div key={t}>{t}: {b.assetsByTier![t]}</div>
-                  ))}
-                </td>
-                <td>{b.aiAgentSlots ?? 0}</td>
+                <td><LevelDescriptionsPreview keys={b.levelDescriptionKeys} translations={translations} /></td>
+                <td><AssetPreview assets={assets} fallbackLabel={b.contentId || `building-${b.id}`} /></td>
                 <td>
                   <button onClick={() => openEdit(b)} style={{ marginRight: 6, fontSize: 12 }}>Éditer</button>
                   <button onClick={() => openDelete(b)} style={{ color: '#f87171', fontSize: 12 }}>Suppr</button>
@@ -323,7 +303,7 @@ export default function BuildingsAdminPage() {
             );
           })}
         </tbody>
-      </table>
+      </CatalogTable>
 
       {modal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, overflowY: 'auto', padding: '24px 12px' }}>

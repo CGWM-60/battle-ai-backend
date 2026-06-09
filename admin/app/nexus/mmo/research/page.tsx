@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AdminShell } from "../../../components/AdminShell";
-import { CostSummary, EffectsPreview, LevelDescriptionsPreview, TranslationCell, TranslationMap, fetchCatalogTranslations } from "../contentDisplay";
+import { AssetPreview, CatalogIdentity, CatalogTable, CostSummary, DescriptionSummary, EffectsPreview, LevelDescriptionsPreview, TranslationMap, fetchCatalogTranslations } from "../contentDisplay";
 
 // Configurable backend base for when admin static is served separately from Go API (e.g. different port or Dokploy static).
 // Set NEXT_PUBLIC_NEXUS_API_BASE=http://localhost:8080 (or prod URL) at build/dev time.
@@ -160,43 +160,32 @@ export default function ResearchAdminPage() {
       {loading && <p>Chargement...</p>}
       {error && <p style={{color:'red'}}>{error}</p>}
 
-      <table className="data-table" style={{ width: '100%' }}>
-        <thead><tr><th>Preview</th><th>contentId</th><th>Nom</th><th>Description globale</th><th>Branche</th><th>Tier</th><th>Coûts</th><th>Descriptions par lvl</th><th>Apports / effet</th><th>Assets</th><th>Actions</th></tr></thead>
+      <CatalogTable>
+        <thead><tr><th style={{ width: 280 }}>Fiche</th><th style={{ width: 320 }}>Description</th><th style={{ width: 190 }}>Coûts</th><th style={{ width: 300 }}>Effet principal</th><th style={{ width: 280 }}>Niveaux</th><th style={{ width: 210 }}>Médias</th><th style={{ width: 130 }}>Actions</th></tr></thead>
         <tbody>
           {items.map(r => {
             const assets = collectAssets(r);
-            const previewAssets = assets.slice(0, 4);
             return (
-              <tr key={r.contentId || `research-${r.id}`} style={{ borderTop: '1px solid #334155' }}>
-                <td style={{ padding: 4 }}>
-                  {previewAssets.length > 0 ? (
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 48px)', gap: 4 }}>
-                      {previewAssets.map((asset) => (
-                        <div key={asset.key} style={{ position: 'relative' }}>
-                          <img src={asset.url!} alt={`${r.contentId || `research-${r.id}`}-${asset.key}`} style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #334155', background: '#0f172a' }} onError={(e) => (e.currentTarget.style.opacity = '0.18')} />
-                          <span style={{ position: 'absolute', left: 2, bottom: 2, fontSize: 9, padding: '1px 3px', borderRadius: 3, background: 'rgba(15,23,42,0.82)', color: '#cbd5e1' }}>{asset.key}</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div style={{ width: 48, height: 48, background: '#1e2937', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#64748b' }}>no img</div>
-                  )}
+              <tr key={r.contentId || `research-${r.id}`} style={{ borderTop: '1px solid #334155', verticalAlign: 'top' }}>
+                <td>
+                  <CatalogIdentity
+                    translations={translations}
+                    titleKey={r.nameKey}
+                    contentId={r.contentId}
+                    badges={[r.branch || '-', `tier ${r.tier || '-'}`, r.rarity || '-']}
+                  />
                 </td>
-                <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{r.contentId || <span style={{ color: '#fca5a5' }}>#{r.id} — contentId manquant</span>}</td>
-                <td><TranslationCell translations={translations} labelKey={r.nameKey} /></td>
-                <td><TranslationCell translations={translations} labelKey={r.descriptionKey} /></td>
-                <td>{r.branch || '—'}</td>
-                <td>{r.tier || '—'}</td>
+                <td><DescriptionSummary translations={translations} descriptionKey={r.descriptionKey} flavorTextKey={r.flavorTextKey} /></td>
                 <td><CostSummary item={r as any} kind="research" /></td>
-                <td><LevelDescriptionsPreview keys={r.levelDescriptionKeys} translations={translations} /></td>
                 <td><EffectsPreview effects={r.effects || r.effectsJSON} /></td>
-                <td style={{ fontSize: 11 }}>{r.assetId || (r.assetsByTier && Object.keys(r.assetsByTier).join(', '))}</td>
+                <td><LevelDescriptionsPreview keys={r.levelDescriptionKeys} translations={translations} /></td>
+                <td><AssetPreview assets={assets} fallbackLabel={r.contentId || `research-${r.id}`} /></td>
                 <td><button onClick={() => openEdit(r)} style={{ fontSize: 12, marginRight: 6 }}>Éditer</button><button onClick={() => openDelete(r)} style={{ fontSize: 12, color: '#f87171' }}>Suppr</button></td>
               </tr>
             );
           })}
         </tbody>
-      </table>
+      </CatalogTable>
 
       {modal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 100, overflowY: 'auto', padding: '24px 12px' }}>

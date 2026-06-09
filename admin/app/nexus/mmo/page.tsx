@@ -19,6 +19,7 @@ export default function NexusMmoPage() {
   const [companions, setCompanions] = useState<any[]>([]);
   const [worlds, setWorlds] = useState<any[]>([]);
   const [prompts, setPrompts] = useState<any[]>([]);
+  const [catalogCounts, setCatalogCounts] = useState({ buildings: 0, units: 0, research: 0, total: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -117,12 +118,13 @@ export default function NexusMmoPage() {
     setLoading(true);
     setError(null);
     try {
-      const [avRes, facRes, comRes, worldRes, promptRes] = await Promise.all([
+      const [avRes, facRes, comRes, worldRes, promptRes, catalogRes] = await Promise.all([
         fetch(`${API_BASE}/api/nexus-game/assets/avatars`, { credentials: "same-origin" }),
         fetch(`${API_BASE}/api/nexus-game/factions`, { credentials: "same-origin" }),
         fetch(`${API_BASE}/api/nexus-game/ia-companions`, { credentials: "same-origin" }),
         fetch(`${API_BASE}/api/nexus-game/worlds`, { credentials: "same-origin" }),
         fetch(`${API_BASE}/api/nexus-game/prompts`, { credentials: "same-origin" }),
+        fetch(`${API_BASE}/api/nexus-game/admin/content/catalog`, { credentials: "same-origin" }),
       ]);
 
       if (avRes.ok) {
@@ -144,6 +146,15 @@ export default function NexusMmoPage() {
       if (promptRes.ok) {
         const pData = await promptRes.json();
         setPrompts(pData.prompts || []);
+      }
+      if (catalogRes.ok) {
+        const catalogData = await catalogRes.json();
+        setCatalogCounts({
+          buildings: catalogData.counts?.buildings || catalogData.buildings?.length || 0,
+          units: catalogData.counts?.units || catalogData.units?.length || 0,
+          research: catalogData.counts?.research || catalogData.research?.length || 0,
+          total: catalogData.counts?.total || 0,
+        });
       }
     } catch (e: any) {
       setError(e.message || "Erreur de chargement");
@@ -603,7 +614,7 @@ export default function NexusMmoPage() {
                 onClick={() => window.location.href = '/admin/nexus/mmo/buildings'}
               >
                 <h3>Bâtiments (Catalogue 1-30)</h3>
-                <div style={{ fontSize: 32, fontWeight: 700, color: '#f59e0b' }}>🏗️</div>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#f59e0b' }}>{catalogCounts.buildings}</div>
                 <p style={{ fontSize: 13, color: '#64748b' }}>CRUD complet + upload images tier 1-4 (Habitat, Solaire, Ferme, Mine, Centre IA...)</p>
                 <button style={{ marginTop: 8, width: '100%' }}>Gérer les Bâtiments →</button>
               </div>
@@ -614,7 +625,7 @@ export default function NexusMmoPage() {
                 onClick={() => window.location.href = '/admin/nexus/mmo/units'}
               >
                 <h3>Unités (Catalogue 1-30)</h3>
-                <div style={{ fontSize: 32, fontWeight: 700, color: '#3b82f6' }}>⚔️</div>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#3b82f6' }}>{catalogCounts.units}</div>
                 <p style={{ fontSize: 13, color: '#64748b' }}>CRUD + assets + stats (Milicien, Drones, Éclaireurs, Titan...)</p>
                 <button style={{ marginTop: 8, width: '100%' }}>Gérer les Unités →</button>
               </div>
@@ -625,7 +636,7 @@ export default function NexusMmoPage() {
                 onClick={() => window.location.href = '/admin/nexus/mmo/research'}
               >
                 <h3>Arbre de Recherches</h3>
-                <div style={{ fontSize: 32, fontWeight: 700, color: '#8b5cf6' }}>🔬</div>
+                <div style={{ fontSize: 32, fontWeight: 700, color: '#8b5cf6' }}>{catalogCounts.research}</div>
                 <p style={{ fontSize: 13, color: '#64748b' }}>11 branches × 7 tiers, dépendances, effets, upload assets</p>
                 <button style={{ marginTop: 8, width: '100%' }}>Gérer les Recherches →</button>
               </div>

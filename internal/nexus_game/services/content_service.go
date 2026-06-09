@@ -43,6 +43,13 @@ type ContentAssetStatusRow struct {
 	Exists      bool   `json:"exists"`
 }
 
+type ContentCatalog struct {
+	Buildings []models.BuildingDefinition `json:"buildings"`
+	Units     []models.UnitDefinition     `json:"units"`
+	Research  []models.ResearchDefinition `json:"research"`
+	Counts    map[string]int              `json:"counts"`
+}
+
 func NewContentService(db *gorm.DB, assetsBaseDir string) *ContentService {
 	if assetsBaseDir == "" {
 		assetsBaseDir = filepath.Join(os.Getenv("NEXUS_ASSETS_BASE_DIR"), "content")
@@ -52,6 +59,32 @@ func NewContentService(db *gorm.DB, assetsBaseDir string) *ContentService {
 	}
 	_ = os.MkdirAll(assetsBaseDir, 0755)
 	return &ContentService{db: db, assetsBaseDir: assetsBaseDir}
+}
+
+func (s *ContentService) Catalog(publishedOnly bool) (*ContentCatalog, error) {
+	buildings, err := s.ListBuildings(publishedOnly)
+	if err != nil {
+		return nil, err
+	}
+	units, err := s.ListUnits(publishedOnly)
+	if err != nil {
+		return nil, err
+	}
+	research, err := s.ListResearch(publishedOnly)
+	if err != nil {
+		return nil, err
+	}
+	return &ContentCatalog{
+		Buildings: buildings,
+		Units:     units,
+		Research:  research,
+		Counts: map[string]int{
+			"buildings": len(buildings),
+			"units":     len(units),
+			"research":  len(research),
+			"total":     len(buildings) + len(units) + len(research),
+		},
+	}, nil
 }
 
 func (s *ContentService) TranslationStatus(locales []string) ([]ContentTranslationStatusRow, error) {

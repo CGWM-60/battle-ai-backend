@@ -39,6 +39,16 @@ func (h *ContentHandler) ListBuildings(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"buildings": list, "count": len(list)})
 }
 
+func (h *ContentHandler) Catalog(c *gin.Context) {
+	published := c.Query("published") == "true"
+	catalog, err := h.contentSvc.Catalog(published)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, catalog)
+}
+
 func (h *ContentHandler) GetBuilding(c *gin.Context) {
 	id := c.Param("contentId")
 	b, err := h.contentSvc.GetBuilding(id)
