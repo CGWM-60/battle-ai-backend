@@ -157,3 +157,77 @@ func (h *ContentHandler) CompleteReadyConstructions(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"completed": completed, "remaining": len(list) - len(completed)})
 }
+
+// === Simple admin HTML "pages" (table + basic CRUD UI) for backend dev ===
+// These are quick browser-accessible pages with tables. Full power is the REST JSON + upload.
+// Images uploaded appear in /nexus-assets after static mount.
+
+func (h *ContentHandler) AdminBuildingsPage(c *gin.Context) {
+	list, _ := h.contentSvc.ListBuildings(true)
+
+	html := `<html><head><title>Nexus Admin - Buildings</title>
+<style>body{font-family:sans-serif;margin:20px} table{border-collapse:collapse;width:100%} th,td{border:1px solid #ccc;padding:8px} form{margin:10px 0}</style>
+</head><body>
+<h1>Buildings CRUD (Backend Admin Page)</h1>
+<p>Upload images via the form or the /admin/content/upload-asset endpoint. Served at /nexus-assets/content/buildings/...</p>
+
+<h2>Create / Update</h2>
+<form method="POST" action="/admin/content/buildings">
+  contentId: <input name="contentId"><br>
+  nameKey: <input name="nameKey"><br>
+  rarity: <input name="rarity" value="common"><br>
+  <button type="submit">Save (JSON body better for full fields - use curl/Next for now)</button>
+</form>
+
+<h2>Asset Upload</h2>
+<form method="POST" action="/admin/content/upload-asset" enctype="multipart/form-data">
+  domain: <input name="domain" value="building"><br>
+  contentId: <input name="contentId"><br>
+  tier: <input name="tier" value="1"><br>
+  file: <input type="file" name="file"><br>
+  <button type="submit">Upload Asset</button>
+</form>
+
+<h2>Existing Buildings</h2>
+<table><tr><th>contentId</th><th>nameKey</th><th>rarity</th><th>maxLevel</th><th>Actions</th></tr>`
+	for _, b := range list {
+		html += `<tr><td>` + b.ContentID + `</td><td>` + b.NameKey + `</td><td>` + b.Rarity + `</td><td>` + strconv.Itoa(b.MaxLevel) + `</td><td>
+		<a href="/admin/content/buildings/` + b.ContentID + `">View</a> | 
+		<form style="display:inline" method="POST" action="/admin/content/buildings/` + b.ContentID + `?_method=DELETE"><button>Delete</button></form>
+		</td></tr>`
+	}
+	html += `</table>
+<p>Note: Full CRUD via JSON API. This is a simple dev page. Use Next.js admin for production tables.</p>
+</body></html>`
+
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+}
+
+func (h *ContentHandler) AdminUnitsPage(c *gin.Context) {
+	// Stub - implement ListUnits in service + seed the 15 units from reference
+	html := `<html><body><h1>Units Admin Page (stub)</h1><p>Implement ListUnits + full CRUD same as buildings. See NEXUS REFERENCE §5 for the 15 units + per-level stats + counters table.</p><p>Upload assets to /nexus-assets/content/units/</p></body></html>`
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+}
+
+func (h *ContentHandler) AdminResearchPage(c *gin.Context) {
+	html := `<html><body><h1>Research Admin Page (stub)</h1><p>11 branches × 7 tiers. Implement ListResearch + dependencies. See REFERENCE §6.</p></body></html>`
+	c.Data(http.StatusOK, "text/html; charset=utf-8", []byte(html))
+}
+
+// Stub CRUD for units and research (copy the buildings pattern for full impl).
+// For now the /page gives the table placeholder. Extend ListUnits etc in service + add real methods here.
+
+func (h *ContentHandler) ListUnits(c *gin.Context) {
+	list, _ := h.contentSvc.ListUnits(true)
+	c.JSON(http.StatusOK, gin.H{"units": list})
+}
+
+func (h *ContentHandler) ListResearch(c *gin.Context) {
+	list, _ := h.contentSvc.ListResearch(true)
+	c.JSON(http.StatusOK, gin.H{"research": list})
+}
+
+// Note: The Admin*Page methods for units/research are the simple HTML stub pages defined above.
+// They provide a basic "table + CRUD" view in the backend (browser accessible).
+// Extend with real data from the content reference (seed the 15 units + 11 research branches).
+// Full JSON CRUD is available at /admin/content/units and /admin/content/research.

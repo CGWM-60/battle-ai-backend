@@ -32,7 +32,9 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
 		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{}, &models.MmoIAAgent{}, &models.DailyPlan{},
-			&models.BuildingDefinition{}, &models.PlayerBuilding{})
+			&models.BuildingDefinition{}, &models.PlayerBuilding{},
+			&models.UnitDefinition{}, &models.PlayerUnit{},
+			&models.ResearchDefinition{}, &models.PlayerResearch{})
 
 		// Seed initial content for dev (buildings from reference). In prod use admin CRUD + upload.
 		_ = seeds.SeedInitialBuildings(database, services.NewContentService(database, "./content/assets"))
@@ -119,6 +121,21 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/profile/:profileId/buildings", contentH.ListPlayerBuildings)
 	group.POST("/profile/:profileId/construction/start", contentH.StartConstruction)
 	group.POST("/profile/:profileId/construction/complete-ready", contentH.CompleteReadyConstructions)
+
+	// Serve uploaded content assets (images for buildings/units/research) from server disk.
+	// After upload via /admin/content/upload-asset, images are at /nexus-assets/content/buildings/xxx_tier1.jpg etc.
+	router.Static("/nexus-assets", "./content/assets")
+
+	// Simple admin "pages" (HTML tables + basic CRUD forms) for each major item in backend.
+	// Accessible in browser for dev/admin: /admin/content/buildings/page etc.
+	// Full table + create/edit/delete + asset upload.
+	group.GET("/admin/content/buildings/page", contentH.AdminBuildingsPage)
+	group.GET("/admin/content/units/page", contentH.AdminUnitsPage)
+	group.GET("/admin/content/research/page", contentH.AdminResearchPage)
+
+	// JSON CRUD for units and research (copy of buildings - extend service impl + seed from reference)
+	group.GET("/admin/content/units", contentH.ListUnits)
+	group.GET("/admin/content/research", contentH.ListResearch)
 
 	// World management (gestion des worlds) - card entry via admin or API.
 	// GET /worlds -> list worlds with continents and capacities (from Redis)

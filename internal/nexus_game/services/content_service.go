@@ -179,3 +179,22 @@ func (s *ContentService) ListPlayerBuildings(profileID uint) ([]models.PlayerBui
 	err := s.db.Where("profile_gamer_id = ?", profileID).Find(&list).Error
 	return list, err
 }
+
+// === Units (stub for now - full catalog from reference §5 to be seeded/CRUD'ed) ===
+func (s *ContentService) ListUnits(publishedOnly bool) ([]models.UnitDefinition, error) {
+	// TODO: full impl + seed the 15 units with stats per level 1-30, counters etc.
+	return []models.UnitDefinition{}, nil
+}
+
+func (s *ContentService) GetUnit(contentID string) (*models.UnitDefinition, error) {
+	return nil, errors.New("not implemented - use CRUD pattern from buildings")
+}
+
+// === Research (stub - 11 branches, 7 tiers per §6) ===
+func (s *ContentService) ListResearch(publishedOnly bool) ([]models.ResearchDefinition, error) {
+	return []models.ResearchDefinition{}, nil
+}
+
+func (s *ContentService) GetResearch(contentID string) (*models.ResearchDefinition, error) {
+	return nil, errors.New("not implemented")
+}
