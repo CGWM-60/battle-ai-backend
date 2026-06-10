@@ -605,9 +605,9 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/models/resource.go": {
-    "mtime": 1781068440.7634447,
-    "ast_hash": "612ee136520c7e828ada1cc70a8a1615",
-    "semantic_hash": "612ee136520c7e828ada1cc70a8a1615"
+    "mtime": 1781109241.2383459,
+    "ast_hash": "a164c1055844793bb95c8ce27425e2dc",
+    "semantic_hash": ""
   },
   "internal/nexus_game/models/unit_definition.go": {
     "mtime": 1781100437.0278928,
@@ -665,13 +665,13 @@
     "semantic_hash": "0246e51277b97a950787b7659496c219"
   },
   "internal/nexus_game/services/content_service.go": {
-    "mtime": 1781100437.0312984,
-    "ast_hash": "d00b949ceff1504a3bd423c4cb1d1fb0",
+    "mtime": 1781109241.2263162,
+    "ast_hash": "0f857b864a65f55ecac89a51b6dc57fe",
     "semantic_hash": ""
   },
   "internal/nexus_game/services/resource_service.go": {
-    "mtime": 1781108660.0023336,
-    "ast_hash": "36b9feb3caad4ee4c1cb3e54175814fe",
+    "mtime": 1781109241.2360268,
+    "ast_hash": "d65f531e5d2aab8cd7e00233f14dce47",
     "semantic_hash": ""
   },
   "internal/nexus_game/services/resource_service_test.go": {
@@ -1160,13 +1160,18 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/ENDPOINTS.md": {
-    "mtime": 1781108685.478457,
-    "ast_hash": "63543c567aea38194a6674e146fa0677",
+    "mtime": 1781109241.1895807,
+    "ast_hash": "007f922c852ac8b39c2ae278be085ad6",
     "semantic_hash": ""
   },
   "output/playwright/nexus-world-admin.png": {
     "mtime": 1781099573.888396,
     "ast_hash": "d3838d1131a473c5ba69ea1f3f7babd6",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/FLUTTER_REALTIME_SYNC.md": {
+    "mtime": 1781109281.7933528,
+    "ast_hash": "3fefbd0424219849b012326140f933a2",
     "semantic_hash": ""
   }
 }

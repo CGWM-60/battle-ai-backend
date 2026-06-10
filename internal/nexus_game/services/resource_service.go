@@ -100,6 +100,11 @@ type productionAccumulator struct {
 	EnergyConsumption   int
 }
 
+type researchModifiers struct {
+	BuildingBonuses           map[string][]buildingEffect
+	StorageCapacityMultiplier float64
+}
+
 func NewResourceService(db *gorm.DB) *ResourceService {
 	return &ResourceService{db: db}
 }
@@ -167,6 +172,17 @@ func resolveEffectValue(effect buildingEffect, level int) float64 {
 	return effect.ValueBase + float64(level-1)*effect.ValuePerLevel
 }
 
+func percentToFraction(value float64) float64 {
+	if value > 1 || value < -1 {
+		return value / 100.0
+	}
+	return value
+}
+
+func applyPercentBonus(base float64, percent float64) float64 {
+	return base + (base * percentToFraction(percent))
+}
+
 func applyScaledDelta(base float64, delta float64, isPercentage bool) float64 {
 	if !isPercentage {
 		return base + delta
@@ -174,7 +190,7 @@ func applyScaledDelta(base float64, delta float64, isPercentage bool) float64 {
 	if base <= 0 {
 		return base
 	}
-	return base + (base * delta / 100.0)
+	return applyPercentBonus(base, delta)
 }
 
 func applyStarterFallbackProduction(acc *productionAccumulator, building models.PlayerBuilding) {
@@ -192,6 +208,111 @@ func applyStarterFallbackProduction(acc *productionAccumulator, building models.
 		acc.ResourceProduction["food"] += 70 * levelFactor
 	case "building_nexus_market":
 		acc.ResourceProduction["credits"] += 25 * levelFactor
+	}
+}
+
+func mergeProductionAccumulator(dst *productionAccumulator, src productionAccumulator) {
+	for code, value := range src.ResourceProduction {
+		dst.ResourceProduction[code] += value
+	}
+	for code, value := range src.ResourceConsumption {
+		dst.ResourceConsumption[code] += value
+	}
+	dst.PopulationCapacity += src.PopulationCapacity
+	dst.EnergyProduction += src.EnergyProduction
+	dst.EnergyConsumption += src.EnergyConsumption
+}
+
+func loadResearchModifiers(ctx context.Context, tx *gorm.DB, profileID uint) (researchModifiers, error) {
+	mods := researchModifiers{
+		BuildingBonuses:           map[string][]buildingEffect{},
+		StorageCapacityMultiplier: 1.0,
+	}
+
+	var playerResearch []models.PlayerResearch
+	if err := tx.WithContext(ctx).Where("profile_gamer_id = ?", profileID).Find(&playerResearch).Error; err != nil {
+		return mods, err
+	}
+	if len(playerResearch) == 0 {
+		return mods, nil
+	}
+
+	contentIDs := make([]string, 0, len(playerResearch))
+	for _, pr := range playerResearch {
+		if pr.ContentID != "" {
+			contentIDs = append(contentIDs, pr.ContentID)
+		}
+	}
+	if len(contentIDs) == 0 {
+		return mods, nil
+	}
+
+	var defs []models.ResearchDefinition
+	if err := tx.WithContext(ctx).Where("content_id IN ?", contentIDs).Find(&defs).Error; err != nil {
+		return mods, err
+	}
+
+	for _, def := range defs {
+		var effects []buildingEffect
+		if err := json.Unmarshal([]byte(def.EffectsJSON), &effects); err != nil {
+			continue
+		}
+		for _, effect := range effects {
+			effectType := strings.ToLower(strings.TrimSpace(effect.EffectType))
+			stat := strings.ToLower(strings.TrimSpace(effect.Stat))
+			target := strings.ToLower(strings.TrimSpace(effect.Target))
+			value := resolveEffectValue(effect, 1)
+			switch effectType {
+			case "buildingbonus":
+				mods.BuildingBonuses[target] = append(mods.BuildingBonuses[target], effect)
+			case "resourcebonus":
+				if stat == "storagecapacity" {
+					mods.StorageCapacityMultiplier = applyPercentBonus(mods.StorageCapacityMultiplier, value)
+				}
+			case "statbonus":
+				if stat == "storagecapacity" {
+					mods.StorageCapacityMultiplier = applyPercentBonus(mods.StorageCapacityMultiplier, value)
+				}
+			}
+		}
+	}
+
+	return mods, nil
+}
+
+func applyResearchBuildingBonuses(acc *productionAccumulator, bonuses []buildingEffect, level int) {
+	for _, effect := range bonuses {
+		value := resolveEffectValue(effect, level)
+		if value == 0 {
+			continue
+		}
+		effectType := strings.ToLower(strings.TrimSpace(effect.EffectType))
+		if effectType != "buildingbonus" && effectType != "statbonus" {
+			continue
+		}
+		stat := strings.ToLower(strings.TrimSpace(effect.Stat))
+		if stat == "" {
+			stat = strings.ToLower(strings.TrimSpace(effect.Target))
+		}
+		switch stat {
+		case "populationcapacity":
+			acc.PopulationCapacity = int(math.Round(applyPercentBonus(float64(acc.PopulationCapacity), value)))
+		case "energyproduction":
+			acc.EnergyProduction = int(math.Round(applyPercentBonus(float64(acc.EnergyProduction), value)))
+			acc.ResourceProduction["energy"] = float64(acc.EnergyProduction)
+		case "dataproduction":
+			acc.ResourceProduction["data"] = applyPercentBonus(acc.ResourceProduction["data"], value)
+		case "tradebonus", "credits":
+			acc.ResourceProduction["credits"] = applyPercentBonus(acc.ResourceProduction["credits"], value)
+		case "globalresourceproduction":
+			for resourceCode, current := range acc.ResourceProduction {
+				acc.ResourceProduction[resourceCode] = applyPercentBonus(current, value)
+			}
+		default:
+			if code := normalizeResourceCode(stat); code != "" {
+				acc.ResourceProduction[code] = applyPercentBonus(acc.ResourceProduction[code], value)
+			}
+		}
 	}
 }
 
@@ -249,6 +370,10 @@ func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, 
 
 func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.DB, profile models.ProfileGamer) (productionAccumulator, error) {
 	acc := newProductionAccumulator()
+	mods, err := loadResearchModifiers(ctx, tx, profile.ID)
+	if err != nil {
+		return acc, err
+	}
 
 	var buildings []models.PlayerBuilding
 	if err := tx.WithContext(ctx).
@@ -279,16 +404,27 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 	}
 
 	for _, building := range buildings {
-		applyStarterFallbackProduction(&acc, building)
+		local := newProductionAccumulator()
 		def, ok := definitionsByContentID[building.ContentID]
 		if !ok || strings.TrimSpace(def.EffectsJSON) == "" {
+			applyStarterFallbackProduction(&local, building)
+			mergeProductionAccumulator(&acc, local)
 			continue
 		}
 		var effects []buildingEffect
 		if err := json.Unmarshal([]byte(def.EffectsJSON), &effects); err != nil {
+			applyStarterFallbackProduction(&local, building)
+			mergeProductionAccumulator(&acc, local)
 			continue
 		}
-		applyBuildingEffects(&acc, effects, building.Level)
+		applyBuildingEffects(&local, effects, building.Level)
+		if bonusEffects := mods.BuildingBonuses[strings.ToLower(building.ContentID)]; len(bonusEffects) > 0 {
+			applyResearchBuildingBonuses(&local, bonusEffects, building.Level)
+		}
+		if bonusEffects := mods.BuildingBonuses["all"]; len(bonusEffects) > 0 {
+			applyResearchBuildingBonuses(&local, bonusEffects, building.Level)
+		}
+		mergeProductionAccumulator(&acc, local)
 	}
 
 	if acc.EnergyProduction <= 0 {
@@ -334,6 +470,11 @@ func (s *ResourceService) SyncBuildingProduction(ctx context.Context, profileID 
 			return err
 		}
 
+		mods, err := loadResearchModifiers(ctx, tx, profileID)
+		if err != nil {
+			return err
+		}
+
 		acc, err := s.computeProductionState(ctx, tx, profile)
 		if err != nil {
 			return err
@@ -360,15 +501,6 @@ func (s *ResourceService) SyncBuildingProduction(ctx context.Context, profileID 
 			return err
 		}
 
-		capacityByCode := map[string]int64{}
-		for _, def := range officialResourceDefinitions {
-			capacity := int64(0)
-			if def.IsStorageLimited {
-				capacity = DefaultStorageCapacity
-			}
-			capacityByCode[def.Code] = capacity
-		}
-
 		for _, resource := range resources {
 			prod := acc.ResourceProduction[resource.ResourceCode]
 			cons := acc.ResourceConsumption[resource.ResourceCode]
@@ -393,9 +525,13 @@ func (s *ResourceService) SyncBuildingProduction(ctx context.Context, profileID 
 			}
 
 			if resource.Capacity == 0 {
-				if capValue, ok := capacityByCode[resource.ResourceCode]; ok {
-					resource.Capacity = capValue
+				if def, ok := resourceDefinitionByCode(resource.ResourceCode); ok {
+					if def.IsStorageLimited {
+						resource.Capacity = int64(math.Round(float64(DefaultStorageCapacity) * mods.StorageCapacityMultiplier))
+					}
 				}
+			} else if def, ok := resourceDefinitionByCode(resource.ResourceCode); ok && def.IsStorageLimited {
+				resource.Capacity = int64(math.Round(float64(DefaultStorageCapacity) * mods.StorageCapacityMultiplier))
 			}
 
 			if err := resourceRepo.Save(ctx, &resource); err != nil {
