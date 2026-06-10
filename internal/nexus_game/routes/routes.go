@@ -237,11 +237,16 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// === /api/v1/buildings and construction endpoints for Flutter (public client) ===
 	// Matches the requested contract. Implemented on top of existing service.
 	v1 := router.Group("/api/v1")
+	v1.GET("/prerequisites/validate", contentH.ValidatePrerequisitesV1)
 	// Catalog
 	v1.GET("/buildings/catalog", contentH.ListBuildingsV1)
 	v1.GET("/buildings/catalog/version", contentH.CatalogVersionV1)
 	v1.GET("/buildings/:key", contentH.GetBuildingV1)
 	v1.GET("/buildings/:key/research-tree", contentH.GetBuildingResearchTreeV1)
+	v1.GET("/units/catalog", contentH.ListUnitsV1)
+	v1.GET("/units/:key", contentH.GetUnitV1)
+	v1.GET("/research/catalog", contentH.ListResearchV1)
+	v1.GET("/research/:key", contentH.GetResearchV1)
 	// Assets
 	v1.GET("/assets/buildings/manifest", contentH.BuildingsAssetsManifestV1)
 	v1.GET("/assets/buildings/updates", contentH.BuildingsAssetsUpdatesV1)

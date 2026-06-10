@@ -455,6 +455,7 @@ func SeedInitialBuildings(db *gorm.DB, svc *services.ContentService) error {
 		},
 	}
 
+	applyDefaultBuildingRequirements(buildings)
 	for i := range buildings {
 		b := buildings[i]
 		var existing models.BuildingDefinition
@@ -462,6 +463,8 @@ func SeedInitialBuildings(db *gorm.DB, svc *services.ContentService) error {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				_ = db.Create(&b).Error
 			}
+		} else {
+			fillEmptyBuildingRequirements(db, &existing, b)
 		}
 	}
 	return nil
@@ -771,6 +774,7 @@ func SeedInitialUnits(db *gorm.DB, svc *services.ContentService) error {
 		},
 	}
 
+	applyDefaultUnitRequirements(units)
 	for i := range units {
 		u := units[i]
 		var existing models.UnitDefinition
@@ -778,6 +782,8 @@ func SeedInitialUnits(db *gorm.DB, svc *services.ContentService) error {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				_ = db.Create(&u).Error
 			}
+		} else {
+			fillEmptyUnitRequirements(db, &existing, u)
 		}
 	}
 	return nil
@@ -900,6 +906,7 @@ func SeedInitialResearch(db *gorm.DB, svc *services.ContentService) error {
 		_ = db.Where("content_id = ?", lid).Delete(&models.ResearchDefinition{}).Error
 	}
 
+	applyDefaultResearchRequirements(research)
 	for i := range research {
 		r := research[i]
 		var existing models.ResearchDefinition
@@ -907,7 +914,232 @@ func SeedInitialResearch(db *gorm.DB, svc *services.ContentService) error {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				_ = db.Create(&r).Error
 			}
+		} else {
+			fillEmptyResearchRequirements(db, &existing, r)
 		}
 	}
 	return nil
+}
+
+func applyDefaultBuildingRequirements(buildings []models.BuildingDefinition) {
+	for i := range buildings {
+		switch buildings[i].ContentID {
+		case "building_ai_center":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_research_lab", 2)
+		case "building_quantum_refinery":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_composite_mine", 5)
+			buildings[i].RequiredResearchJSON = researchReq("research_quantum_reactor_safety")
+		case "building_drone_factory":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_barracks", 2)
+			buildings[i].RequiredResearchJSON = researchReq("research_drone_assembly")
+		case "building_holo_wall":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_barracks", 1)
+		case "building_diplomatic_center":
+			buildings[i].RequiredResearchJSON = researchReq("research_emissary_protocol")
+		case "building_nexus_market":
+			buildings[i].RequiredResearchJSON = researchReq("research_efficient_storage")
+		case "building_logistic_station":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_nexus_market", 2)
+			buildings[i].RequiredResearchJSON = researchReq("research_resource_routing")
+		case "building_living_lore_archives":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_research_lab", 3)
+			buildings[i].RequiredResearchJSON = researchReq("research_archive_indexing")
+		case "building_tribunal_nexus":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_diplomatic_center", 3)
+			buildings[i].RequiredResearchJSON = researchReq("research_evidence_handling")
+		case "building_guild_hq":
+			buildings[i].RequiredResearchJSON = researchReq("research_guild_charter")
+		case "building_surveillance_tower":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_holo_wall", 2)
+			buildings[i].RequiredResearchJSON = researchReq("research_regional_scanning")
+		case "building_world_relay":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_surveillance_tower", 3)
+			buildings[i].RequiredResearchJSON = researchReq("research_event_forecasting")
+		case "building_data_bank":
+			buildings[i].RequiredBuildingsJSON = buildingReq("building_research_lab", 4)
+			buildings[i].RequiredResearchJSON = researchReq("research_ai_summary_engine")
+		case "building_nexus_core":
+			buildings[i].RequiredBuildingsJSON = multiBuildingReq(map[string]int{
+				"building_ai_center":      5,
+				"building_world_relay":    5,
+				"building_data_bank":      5,
+				"building_tribunal_nexus": 3,
+			})
+			buildings[i].RequiredResearchJSON = researchReq("research_nexus_world_awareness")
+		}
+	}
+}
+
+func applyDefaultUnitRequirements(units []models.UnitDefinition) {
+	for i := range units {
+		units[i].RequiredBuildingsJSON = buildingReq("building_barracks", 1)
+		switch units[i].ContentID {
+		case "unit_milicien_nexus":
+			units[i].NexusLevelRequired = maxInt(units[i].NexusLevelRequired, 1)
+		case "unit_drone_sentinelle":
+			units[i].RequiredBuildingsJSON = buildingReq("building_drone_factory", 1)
+			units[i].RequiredResearchJSON = researchReq("research_drone_assembly")
+		case "unit_eclaireur_cybernetique":
+			units[i].RequiredResearchJSON = researchReq("research_basic_tactics")
+		case "unit_fantassin_augmente":
+			units[i].RequiredBuildingsJSON = buildingReq("building_barracks", 2)
+			units[i].RequiredResearchJSON = researchReq("research_augmented_infantry")
+		case "unit_drone_assaut":
+			units[i].RequiredBuildingsJSON = buildingReq("building_drone_factory", 2)
+			units[i].RequiredResearchJSON = researchReq("research_swarm_control")
+		case "unit_drone_bouclier":
+			units[i].RequiredBuildingsJSON = buildingReq("building_drone_factory", 3)
+			units[i].RequiredResearchJSON = researchReq("research_shield_drone_matrix")
+		case "unit_hacker_de_combat":
+			units[i].RequiredBuildingsJSON = buildingReq("building_ai_center", 2)
+			units[i].RequiredResearchJSON = researchReq("research_multi_agent_routing")
+		case "unit_medic_synthetique":
+			units[i].RequiredBuildingsJSON = buildingReq("building_research_lab", 2)
+			units[i].RequiredResearchJSON = researchReq("research_population_welfare")
+		case "unit_artillerie_railgun":
+			units[i].RequiredBuildingsJSON = buildingReq("building_barracks", 4)
+			units[i].RequiredResearchJSON = researchReq("research_railgun_engineering")
+		case "unit_mecha_leger":
+			units[i].RequiredBuildingsJSON = multiBuildingReq(map[string]int{"building_barracks": 5, "building_drone_factory": 3})
+			units[i].RequiredResearchJSON = researchReq("research_battlefield_logistics")
+		case "unit_agent_infiltre":
+			units[i].RequiredBuildingsJSON = buildingReq("building_surveillance_tower", 2)
+			units[i].RequiredResearchJSON = researchReq("research_reputation_mapping")
+		case "unit_envoye_de_faction":
+			units[i].RequiredBuildingsJSON = buildingReq("building_diplomatic_center", 2)
+			units[i].RequiredResearchJSON = researchReq("research_faction_language_models")
+		case "unit_gardien_holographique":
+			units[i].RequiredBuildingsJSON = buildingReq("building_holo_wall", 4)
+			units[i].RequiredResearchJSON = researchReq("research_weather_adaptation")
+		case "unit_titan_nexus":
+			units[i].RequiredBuildingsJSON = multiBuildingReq(map[string]int{"building_nexus_core": 1, "building_barracks": 8})
+			units[i].RequiredResearchJSON = researchReq("research_nexus_warfare")
+		case "unit_archiviste_mobile":
+			units[i].RequiredBuildingsJSON = buildingReq("building_living_lore_archives", 2)
+			units[i].RequiredResearchJSON = researchReq("research_archive_indexing")
+		}
+	}
+}
+
+func applyDefaultResearchRequirements(research []models.ResearchDefinition) {
+	for i := range research {
+		research[i].RequiredBuildingsJSON = buildingReq("building_research_lab", 1)
+		switch research[i].Branch {
+		case "economy":
+			research[i].RequiredBuildingsJSON = buildingReq("building_nexus_market", 1)
+		case "energy":
+			research[i].RequiredBuildingsJSON = buildingReq("building_solar_plant", 1)
+		case "ville":
+			research[i].RequiredBuildingsJSON = buildingReq("building_modular_habitat", 1)
+		case "militaire":
+			research[i].RequiredBuildingsJSON = buildingReq("building_barracks", 1)
+		case "drones":
+			research[i].RequiredBuildingsJSON = buildingReq("building_research_lab", 2)
+		case "ia":
+			research[i].RequiredBuildingsJSON = buildingReq("building_ai_center", 1)
+		case "diplomatie":
+			research[i].RequiredBuildingsJSON = buildingReq("building_diplomatic_center", 1)
+		case "monde":
+			research[i].RequiredBuildingsJSON = buildingReq("building_surveillance_tower", 1)
+		case "guilde":
+			research[i].RequiredBuildingsJSON = buildingReq("building_guild_hq", 1)
+		case "lore":
+			research[i].RequiredBuildingsJSON = buildingReq("building_living_lore_archives", 1)
+		case "tribunal":
+			research[i].RequiredBuildingsJSON = buildingReq("building_tribunal_nexus", 1)
+		}
+	}
+}
+
+func fillEmptyBuildingRequirements(db *gorm.DB, existing *models.BuildingDefinition, seeded models.BuildingDefinition) {
+	changed := false
+	if existing.NexusLevelRequired <= 0 && seeded.NexusLevelRequired > 0 {
+		existing.NexusLevelRequired = seeded.NexusLevelRequired
+		changed = true
+	}
+	if existing.RequiredBuildingsJSON == "" && seeded.RequiredBuildingsJSON != "" {
+		existing.RequiredBuildingsJSON = seeded.RequiredBuildingsJSON
+		changed = true
+	}
+	if existing.RequiredResearchJSON == "" && seeded.RequiredResearchJSON != "" {
+		existing.RequiredResearchJSON = seeded.RequiredResearchJSON
+		changed = true
+	}
+	if changed {
+		_ = db.Save(existing).Error
+	}
+}
+
+func fillEmptyUnitRequirements(db *gorm.DB, existing *models.UnitDefinition, seeded models.UnitDefinition) {
+	changed := false
+	if existing.NexusLevelRequired <= 0 && seeded.NexusLevelRequired > 0 {
+		existing.NexusLevelRequired = seeded.NexusLevelRequired
+		changed = true
+	}
+	if existing.RequiredBuildingsJSON == "" && seeded.RequiredBuildingsJSON != "" {
+		existing.RequiredBuildingsJSON = seeded.RequiredBuildingsJSON
+		changed = true
+	}
+	if existing.RequiredResearchJSON == "" && seeded.RequiredResearchJSON != "" {
+		existing.RequiredResearchJSON = seeded.RequiredResearchJSON
+		changed = true
+	}
+	if changed {
+		_ = db.Save(existing).Error
+	}
+}
+
+func fillEmptyResearchRequirements(db *gorm.DB, existing *models.ResearchDefinition, seeded models.ResearchDefinition) {
+	changed := false
+	if existing.NexusLevelRequired <= 0 && seeded.NexusLevelRequired > 0 {
+		existing.NexusLevelRequired = seeded.NexusLevelRequired
+		changed = true
+	}
+	if existing.RequiredBuildingsJSON == "" && seeded.RequiredBuildingsJSON != "" {
+		existing.RequiredBuildingsJSON = seeded.RequiredBuildingsJSON
+		changed = true
+	}
+	if changed {
+		_ = db.Save(existing).Error
+	}
+}
+
+func buildingReq(contentID string, level int) string {
+	return multiBuildingReq(map[string]int{contentID: level})
+}
+
+func multiBuildingReq(items map[string]int) string {
+	out := "["
+	first := true
+	for contentID, level := range items {
+		if !first {
+			out += ","
+		}
+		first = false
+		out += `{"contentId":"` + contentID + `","level":` + stringInt(level) + `}`
+	}
+	return out + "]"
+}
+
+func researchReq(contentID string) string {
+	return `["` + contentID + `"]`
+}
+
+func stringInt(value int) string {
+	if value <= 0 {
+		return "0"
+	}
+	digits := []byte{}
+	for value > 0 {
+		digits = append([]byte{byte('0' + value%10)}, digits...)
+		value /= 10
+	}
+	return string(digits)
+}
+
+func maxInt(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

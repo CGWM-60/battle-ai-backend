@@ -75,6 +75,21 @@ func TestRegisterRoutesMountsContentCRUDRoutes(t *testing.T) {
 		"PUT /api/nexus-game/admin/content/research/:contentId",
 		"DELETE /api/nexus-game/admin/content/research/:contentId",
 		"POST /api/nexus-game/admin/content/research/:contentId/delete",
+		"GET /api/v1/prerequisites/validate",
+		"GET /api/v1/buildings/catalog",
+		"GET /api/v1/buildings/catalog/version",
+		"GET /api/v1/buildings/:key",
+		"GET /api/v1/buildings/:key/research-tree",
+		"GET /api/v1/units/catalog",
+		"GET /api/v1/units/:key",
+		"GET /api/v1/research/catalog",
+		"GET /api/v1/research/:key",
+		"GET /api/v1/construction/queue",
+		"POST /api/v1/construction/start",
+		"POST /api/v1/construction/:id/upgrade",
+		"POST /api/v1/construction/:id/speedup",
+		"POST /api/v1/construction/:id/cancel",
+		"POST /api/v1/construction/:id/complete",
 	}
 
 	for _, route := range expected {

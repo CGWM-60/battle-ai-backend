@@ -28,7 +28,9 @@ type ResearchDefinition struct {
 	EffectsJSON string `gorm:"type:text" json:"effects"` // unlocks, bonuses
 
 	// Dependencies as JSON for simplicity (list of contentIds)
-	PrerequisitesJSON string `gorm:"type:text" json:"prerequisites"`
+	NexusLevelRequired    int    `json:"nexusLevelRequired"`
+	RequiredBuildingsJSON string `gorm:"type:text" json:"requiredBuildings"` // [{"contentId":"building_research_lab","level":2}]
+	PrerequisitesJSON     string `gorm:"type:text" json:"prerequisites"`     // research contentIds
 
 	BalanceVersion string    `json:"balanceVersion"`
 	IsPublished    bool      `json:"isPublished"`

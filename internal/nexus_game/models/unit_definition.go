@@ -21,6 +21,11 @@ type UnitDefinition struct {
 	MaxLevel int    `json:"maxLevel"`
 	Rarity   string `json:"rarity"`
 
+	// Unlock requirements enforced by the server before training/use.
+	NexusLevelRequired    int    `json:"nexusLevelRequired"`
+	RequiredBuildingsJSON string `gorm:"type:text" json:"requiredBuildings"` // [{"contentId":"building_barracks","level":2}]
+	RequiredResearchJSON  string `gorm:"type:text" json:"requiredResearch"`  // ["research_basic_tactics"] or [{"contentId":"..."}]
+
 	// Base for formulas
 	HealthBase              int `json:"healthBase"`
 	AttackBase              int `json:"attackBase"`

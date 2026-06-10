@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -48,6 +49,40 @@ type ContentCatalog struct {
 	Units     []models.UnitDefinition     `json:"units"`
 	Research  []models.ResearchDefinition `json:"research"`
 	Counts    map[string]int              `json:"counts"`
+}
+
+type RequirementStatus struct {
+	Type          string `json:"type"`
+	ContentID     string `json:"contentId,omitempty"`
+	RequiredLevel int    `json:"requiredLevel,omitempty"`
+	CurrentLevel  int    `json:"currentLevel,omitempty"`
+	Required      bool   `json:"required"`
+	Satisfied     bool   `json:"satisfied"`
+	Message       string `json:"message,omitempty"`
+}
+
+type PrerequisiteValidation struct {
+	ProfileGamerID uint                `json:"profileGamerId"`
+	Domain         string              `json:"domain"`
+	ContentID      string              `json:"contentId"`
+	Allowed        bool                `json:"allowed"`
+	Requirements   []RequirementStatus `json:"requirements"`
+	Missing        []RequirementStatus `json:"missing"`
+}
+
+type PrerequisiteError struct {
+	Validation PrerequisiteValidation
+}
+
+func (e *PrerequisiteError) Error() string {
+	if len(e.Validation.Missing) == 0 {
+		return "requirements not satisfied"
+	}
+	first := e.Validation.Missing[0]
+	if first.Message != "" {
+		return first.Message
+	}
+	return "requirements not satisfied"
 }
 
 func NewContentService(db *gorm.DB, assetsBaseDir string) *ContentService {
@@ -460,19 +495,52 @@ func (s *ContentService) StartConstruction(profileID uint, contentID string, tar
 	if err != nil {
 		return nil, err
 	}
+	if targetLevel <= 0 {
+		targetLevel = 1
+	}
 	if targetLevel > def.MaxLevel {
 		return nil, errors.New("max level exceeded")
 	}
 
-	// TODO: check resources, prerequisites, workers using city service / profile
+	if _, err := s.ValidatePrerequisites(profileID, "building", contentID); err != nil {
+		return nil, err
+	}
+
+	var existing models.PlayerBuilding
+	err = s.db.Where("profile_gamer_id = ? AND content_id = ?", profileID, contentID).First(&existing).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
+	}
+	currentLevel := 0
+	hasExisting := err == nil
+	if hasExisting {
+		if existing.IsConstructing {
+			return nil, errors.New("BUILDING_ALREADY_CONSTRUCTING: Une construction est deja en cours pour ce batiment.")
+		}
+		currentLevel = existing.Level
+	}
+	if targetLevel != currentLevel+1 {
+		return nil, fmt.Errorf("BUILDING_LEVEL_SEQUENCE_REQUIRED: Le prochain niveau attendu est %d.", currentLevel+1)
+	}
 
 	now := time.Now()
 	ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, "common")) * time.Second)
 
+	if hasExisting {
+		existing.Level = targetLevel - 1
+		existing.IsConstructing = true
+		existing.ConstructionStartedAt = &now
+		existing.ConstructionEndsAt = &ends
+		if err := s.db.Save(&existing).Error; err != nil {
+			return nil, err
+		}
+		return &existing, nil
+	}
+
 	pb := &models.PlayerBuilding{
 		ProfileGamerID:        profileID,
 		ContentID:             contentID,
-		Level:                 targetLevel - 1, // current before finish
+		Level:                 0,
 		IsConstructing:        true,
 		ConstructionStartedAt: &now,
 		ConstructionEndsAt:    &ends,
@@ -575,6 +643,282 @@ func (s *ContentService) BuildingsAssetsUpdates(sinceVersion string) (map[string
 	}, nil
 }
 
+func (s *ContentService) ValidatePrerequisites(profileID uint, domain string, contentID string) (PrerequisiteValidation, error) {
+	domain = normalizeDomain(domain)
+	contentID = strings.TrimSpace(contentID)
+	validation := PrerequisiteValidation{
+		ProfileGamerID: profileID,
+		Domain:         domain,
+		ContentID:      contentID,
+		Allowed:        true,
+		Requirements:   []RequirementStatus{},
+		Missing:        []RequirementStatus{},
+	}
+	if profileID == 0 {
+		validation.Allowed = false
+		missing := RequirementStatus{Type: "profile", Required: true, Satisfied: false, Message: "PROFILE_REQUIRED: profileGamerId is required"}
+		validation.Requirements = append(validation.Requirements, missing)
+		validation.Missing = append(validation.Missing, missing)
+		return validation, &PrerequisiteError{Validation: validation}
+	}
+
+	switch domain {
+	case "building":
+		def, err := s.GetBuilding(contentID)
+		if err != nil {
+			return validation, err
+		}
+		validation.Requirements = append(validation.Requirements, nexusLevelRequirement(def.NexusLevelRequired))
+		validation.Requirements = append(validation.Requirements, parseBuildingRequirements(def.RequiredBuildingsJSON)...)
+		validation.Requirements = append(validation.Requirements, parseResearchRequirements(def.RequiredResearchJSON)...)
+	case "unit":
+		def, err := s.GetUnit(contentID)
+		if err != nil {
+			return validation, err
+		}
+		validation.Requirements = append(validation.Requirements, nexusLevelRequirement(def.NexusLevelRequired))
+		validation.Requirements = append(validation.Requirements, parseBuildingRequirements(def.RequiredBuildingsJSON)...)
+		validation.Requirements = append(validation.Requirements, parseResearchRequirements(def.RequiredResearchJSON)...)
+	case "research":
+		def, err := s.GetResearch(contentID)
+		if err != nil {
+			return validation, err
+		}
+		validation.Requirements = append(validation.Requirements, nexusLevelRequirement(def.NexusLevelRequired))
+		validation.Requirements = append(validation.Requirements, parseBuildingRequirements(def.RequiredBuildingsJSON)...)
+		validation.Requirements = append(validation.Requirements, parseResearchRequirements(def.PrerequisitesJSON)...)
+	default:
+		return validation, fmt.Errorf("unsupported requirement domain %q", domain)
+	}
+
+	profileLevel, buildingLevels, completedResearch, err := s.playerRequirementState(profileID)
+	if err != nil {
+		return validation, err
+	}
+	for i := range validation.Requirements {
+		req := &validation.Requirements[i]
+		if !req.Required {
+			req.Satisfied = true
+			continue
+		}
+		switch req.Type {
+		case "nexus_level":
+			req.CurrentLevel = profileLevel
+			req.Satisfied = req.RequiredLevel <= 0 || profileLevel >= req.RequiredLevel
+			if !req.Satisfied {
+				req.Message = fmt.Sprintf("NEXUS_LEVEL_REQUIRED: Niveau Nexus %d requis.", req.RequiredLevel)
+			}
+		case "building":
+			req.CurrentLevel = buildingLevels[req.ContentID]
+			req.Satisfied = req.RequiredLevel <= 0 || req.CurrentLevel >= req.RequiredLevel
+			if !req.Satisfied {
+				req.Message = fmt.Sprintf("BUILDING_REQUIRED: %s niveau %d requis.", req.ContentID, req.RequiredLevel)
+			}
+		case "research":
+			req.CurrentLevel = 0
+			if completedResearch[req.ContentID] {
+				req.CurrentLevel = 1
+			}
+			req.Satisfied = completedResearch[req.ContentID]
+			if !req.Satisfied {
+				req.Message = fmt.Sprintf("RESEARCH_REQUIRED: %s requis.", req.ContentID)
+			}
+		}
+		if !req.Satisfied {
+			validation.Missing = append(validation.Missing, *req)
+		}
+	}
+	validation.Allowed = len(validation.Missing) == 0
+	if !validation.Allowed {
+		return validation, &PrerequisiteError{Validation: validation}
+	}
+	return validation, nil
+}
+
+func (s *ContentService) playerRequirementState(profileID uint) (int, map[string]int, map[string]bool, error) {
+	var profile models.ProfileGamer
+	if err := s.db.First(&profile, profileID).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, nil, nil, err
+		}
+	}
+	profileLevel := profile.Level
+	if profileLevel <= 0 {
+		profileLevel = 1
+	}
+
+	var buildings []models.PlayerBuilding
+	if err := s.db.Where("profile_gamer_id = ? AND is_constructing = ?", profileID, false).Find(&buildings).Error; err != nil {
+		return 0, nil, nil, err
+	}
+	buildingLevels := map[string]int{}
+	for _, building := range buildings {
+		if building.Level > buildingLevels[building.ContentID] {
+			buildingLevels[building.ContentID] = building.Level
+		}
+	}
+
+	var research []models.PlayerResearch
+	if err := s.db.Where("profile_gamer_id = ?", profileID).Find(&research).Error; err != nil {
+		return 0, nil, nil, err
+	}
+	completedResearch := map[string]bool{}
+	for _, item := range research {
+		completedResearch[item.ContentID] = true
+	}
+
+	return profileLevel, buildingLevels, completedResearch, nil
+}
+
+func normalizeDomain(domain string) string {
+	domain = strings.ToLower(strings.TrimSpace(domain))
+	domain = strings.TrimSuffix(domain, "s")
+	switch domain {
+	case "build", "construction":
+		return "building"
+	case "research_node", "tech":
+		return "research"
+	default:
+		return domain
+	}
+}
+
+func nexusLevelRequirement(level int) RequirementStatus {
+	if level <= 0 {
+		return RequirementStatus{Type: "nexus_level", RequiredLevel: 0, Required: false, Satisfied: true}
+	}
+	return RequirementStatus{Type: "nexus_level", RequiredLevel: level, Required: true}
+}
+
+func parseBuildingRequirements(raw string) []RequirementStatus {
+	items := parseRequirementItems(raw)
+	requirements := make([]RequirementStatus, 0, len(items))
+	for _, item := range items {
+		contentID := stringFromAny(firstPresent(item, "contentId", "buildingContentId", "buildingKey", "key"))
+		if contentID == "" {
+			continue
+		}
+		level := intFromAny(firstPresent(item, "level", "requiredLevel", "minLevel"), 1)
+		requirements = append(requirements, RequirementStatus{Type: "building", ContentID: contentID, RequiredLevel: level, Required: true})
+	}
+	return requirements
+}
+
+func parseResearchRequirements(raw string) []RequirementStatus {
+	items := parseRequirementItems(raw)
+	requirements := make([]RequirementStatus, 0, len(items))
+	for _, item := range items {
+		contentID := stringFromAny(firstPresent(item, "contentId", "researchContentId", "researchKey", "key"))
+		if contentID == "" {
+			continue
+		}
+		requirements = append(requirements, RequirementStatus{Type: "research", ContentID: contentID, RequiredLevel: 1, Required: true})
+	}
+	return requirements
+}
+
+func parseRequirementItems(raw string) []map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "[]" || raw == "{}" || raw == "null" {
+		return nil
+	}
+	if !strings.HasPrefix(raw, "[") && !strings.HasPrefix(raw, "{") {
+		return []map[string]any{{"contentId": raw}}
+	}
+	var asObjects []map[string]any
+	if err := json.Unmarshal([]byte(raw), &asObjects); err == nil {
+		return asObjects
+	}
+	var asStrings []string
+	if err := json.Unmarshal([]byte(raw), &asStrings); err == nil {
+		items := make([]map[string]any, 0, len(asStrings))
+		for _, item := range asStrings {
+			if strings.TrimSpace(item) != "" {
+				items = append(items, map[string]any{"contentId": strings.TrimSpace(item)})
+			}
+		}
+		return items
+	}
+	var asObject map[string]any
+	if err := json.Unmarshal([]byte(raw), &asObject); err != nil {
+		return nil
+	}
+	if nested, ok := asObject["buildings"]; ok {
+		return mapsFromAny(nested)
+	}
+	if nested, ok := asObject["research"]; ok {
+		return mapsFromAny(nested)
+	}
+	return []map[string]any{asObject}
+}
+
+func mapsFromAny(value any) []map[string]any {
+	switch typed := value.(type) {
+	case []any:
+		items := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			switch v := item.(type) {
+			case map[string]any:
+				items = append(items, v)
+			case string:
+				items = append(items, map[string]any{"contentId": v})
+			}
+		}
+		return items
+	case []map[string]any:
+		return typed
+	case string:
+		return []map[string]any{{"contentId": typed}}
+	case map[string]any:
+		return []map[string]any{typed}
+	default:
+		return nil
+	}
+}
+
+func firstPresent(item map[string]any, keys ...string) any {
+	for _, key := range keys {
+		if value, ok := item[key]; ok {
+			return value
+		}
+	}
+	return nil
+}
+
+func stringFromAny(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	case nil:
+		return ""
+	default:
+		return strings.TrimSpace(fmt.Sprint(typed))
+	}
+}
+
+func intFromAny(value any, fallback int) int {
+	switch typed := value.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case json.Number:
+		if i, err := typed.Int64(); err == nil {
+			return int(i)
+		}
+	case string:
+		var parsed int
+		if _, err := fmt.Sscanf(strings.TrimSpace(typed), "%d", &parsed); err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
 func (s *ContentService) ConstructionQueue(profileID uint) ([]map[string]interface{}, error) {
 	pbs, err := s.ListPlayerBuildings(profileID)
 	if err != nil {
@@ -590,12 +934,12 @@ func (s *ContentService) ConstructionQueue(profileID uint) ([]map[string]interfa
 			remaining = 0
 		}
 		queue = append(queue, map[string]interface{}{
-			"id":            pb.ID,
-			"contentId":     pb.ContentID,
-			"level":         pb.Level,
-			"startedAt":     pb.ConstructionStartedAt,
-			"endsAt":        pb.ConstructionEndsAt,
-			"remainingSec":  remaining,
+			"id":              pb.ID,
+			"contentId":       pb.ContentID,
+			"level":           pb.Level,
+			"startedAt":       pb.ConstructionStartedAt,
+			"endsAt":          pb.ConstructionEndsAt,
+			"remainingSec":    remaining,
 			"assignedWorkers": pb.AssignedWorkers,
 		})
 	}
@@ -617,8 +961,23 @@ func (s *ContentService) StartUpgrade(profileID uint, playerBuildingID uint, tar
 	if pb.ProfileGamerID != profileID {
 		return nil, errors.New("not owner")
 	}
+	if pb.IsConstructing {
+		return nil, errors.New("BUILDING_ALREADY_CONSTRUCTING: Une construction est deja en cours pour ce batiment.")
+	}
 	def, err := s.GetBuilding(pb.ContentID)
 	if err != nil {
+		return nil, err
+	}
+	if targetLevel <= 0 {
+		targetLevel = pb.Level + 1
+	}
+	if def.MaxLevel > 0 && targetLevel > def.MaxLevel {
+		return nil, errors.New("max level exceeded")
+	}
+	if targetLevel != pb.Level+1 {
+		return nil, fmt.Errorf("BUILDING_LEVEL_SEQUENCE_REQUIRED: Le prochain niveau attendu est %d.", pb.Level+1)
+	}
+	if _, err := s.ValidatePrerequisites(profileID, "building", pb.ContentID); err != nil {
 		return nil, err
 	}
 	now := time.Now()

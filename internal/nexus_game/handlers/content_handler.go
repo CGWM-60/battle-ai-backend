@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,6 +38,48 @@ func (h *ContentHandler) ListBuildings(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"buildings": list, "count": len(list)})
+}
+
+func (h *ContentHandler) requirementStatusMap(c *gin.Context, domain string, ids []string) map[string]services.PrerequisiteValidation {
+	profileID := profileIDFromQuery(c)
+	if profileID == 0 {
+		return nil
+	}
+	statuses := map[string]services.PrerequisiteValidation{}
+	for _, id := range ids {
+		validation, err := h.contentSvc.ValidatePrerequisites(profileID, domain, id)
+		if err == nil {
+			statuses[id] = validation
+			continue
+		}
+		var prereqErr *services.PrerequisiteError
+		if errors.As(err, &prereqErr) {
+			statuses[id] = prereqErr.Validation
+		}
+	}
+	return statuses
+}
+
+func profileIDFromQuery(c *gin.Context) uint {
+	value := c.Query("profileGamerId")
+	if value == "" {
+		value = c.Query("profileId")
+	}
+	id, _ := strconv.ParseUint(value, 10, 64)
+	return uint(id)
+}
+
+func writeContentActionError(c *gin.Context, err error) {
+	var prereqErr *services.PrerequisiteError
+	if errors.As(err, &prereqErr) {
+		c.JSON(http.StatusConflict, gin.H{
+			"error":              err.Error(),
+			"code":               "REQUIREMENTS_NOT_MET",
+			"requirementsStatus": prereqErr.Validation,
+		})
+		return
+	}
+	c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 }
 
 func (h *ContentHandler) Catalog(c *gin.Context) {
@@ -253,7 +296,7 @@ func (h *ContentHandler) StartConstruction(c *gin.Context) {
 	}
 	pb, err := h.contentSvc.StartConstruction(body.ProfileID, body.ContentID, body.TargetLevel)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeContentActionError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"playerBuilding": pb, "note": "Construction started. Complete on tick or poll /complete."})
@@ -510,8 +553,20 @@ func (h *ContentHandler) DeleteResearch(c *gin.Context) {
 // === V1 public endpoints for Flutter (buildings + construction) ===
 
 func (h *ContentHandler) ListBuildingsV1(c *gin.Context) {
-	// public catalog
-	h.ListBuildings(c)
+	list, err := h.contentSvc.ListBuildings(true)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ids := make([]string, 0, len(list))
+	for _, item := range list {
+		ids = append(ids, item.ContentID)
+	}
+	payload := gin.H{"buildings": list, "count": len(list)}
+	if statuses := h.requirementStatusMap(c, "building", ids); statuses != nil {
+		payload["requirementsStatus"] = statuses
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 func (h *ContentHandler) CatalogVersionV1(c *gin.Context) {
@@ -526,7 +581,90 @@ func (h *ContentHandler) GetBuildingV1(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"building": b})
+	payload := gin.H{"building": b}
+	if statuses := h.requirementStatusMap(c, "building", []string{b.ContentID}); statuses != nil {
+		payload["requirementsStatus"] = statuses[b.ContentID]
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func (h *ContentHandler) ListUnitsV1(c *gin.Context) {
+	list, err := h.contentSvc.ListUnits(true)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ids := make([]string, 0, len(list))
+	for _, item := range list {
+		ids = append(ids, item.ContentID)
+	}
+	payload := gin.H{"units": list, "count": len(list)}
+	if statuses := h.requirementStatusMap(c, "unit", ids); statuses != nil {
+		payload["requirementsStatus"] = statuses
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func (h *ContentHandler) GetUnitV1(c *gin.Context) {
+	key := c.Param("key")
+	unit, err := h.contentSvc.GetUnit(key)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	payload := gin.H{"unit": unit}
+	if statuses := h.requirementStatusMap(c, "unit", []string{unit.ContentID}); statuses != nil {
+		payload["requirementsStatus"] = statuses[unit.ContentID]
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func (h *ContentHandler) ListResearchV1(c *gin.Context) {
+	list, err := h.contentSvc.ListResearch(true)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	ids := make([]string, 0, len(list))
+	for _, item := range list {
+		ids = append(ids, item.ContentID)
+	}
+	payload := gin.H{"research": list, "count": len(list)}
+	if statuses := h.requirementStatusMap(c, "research", ids); statuses != nil {
+		payload["requirementsStatus"] = statuses
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func (h *ContentHandler) GetResearchV1(c *gin.Context) {
+	key := c.Param("key")
+	research, err := h.contentSvc.GetResearch(key)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	payload := gin.H{"research": research}
+	if statuses := h.requirementStatusMap(c, "research", []string{research.ContentID}); statuses != nil {
+		payload["requirementsStatus"] = statuses[research.ContentID]
+	}
+	c.JSON(http.StatusOK, payload)
+}
+
+func (h *ContentHandler) ValidatePrerequisitesV1(c *gin.Context) {
+	profileID := profileIDFromQuery(c)
+	domain := c.Query("domain")
+	contentID := c.Query("contentId")
+	validation, err := h.contentSvc.ValidatePrerequisites(profileID, domain, contentID)
+	if err != nil {
+		var prereqErr *services.PrerequisiteError
+		if errors.As(err, &prereqErr) {
+			c.JSON(http.StatusOK, prereqErr.Validation)
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, validation)
 }
 
 func (h *ContentHandler) GetBuildingResearchTreeV1(c *gin.Context) {
@@ -617,7 +755,7 @@ func (h *ContentHandler) StartConstructionV1(c *gin.Context) {
 	}
 	pb, err := h.contentSvc.StartConstructionV1(body.ProfileGamerId, body.ContentID, body.TargetLevel)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeContentActionError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"playerBuilding": pb})
@@ -633,7 +771,7 @@ func (h *ContentHandler) StartUpgradeV1(c *gin.Context) {
 	_ = c.ShouldBindJSON(&body)
 	pb, err := h.contentSvc.StartUpgrade(body.ProfileGamerId, uint(id), body.TargetLevel)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		writeContentActionError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"playerBuilding": pb})
