@@ -1,0 +1,345 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - generic [ref=e4]:
+        - img [ref=e5]
+        - generic [ref=e7]:
+          - strong [ref=e8]: go-battle-ia
+          - generic [ref=e9]: admin
+      - navigation "Navigation admin" [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e12]: Commandement
+          - link "Vue generale" [ref=e13] [cursor=pointer]:
+            - /url: /admin/
+            - img [ref=e14]
+            - generic [ref=e17]: Vue generale
+          - link "Comptes" [ref=e18] [cursor=pointer]:
+            - /url: /admin/accounts/
+            - img [ref=e19]
+            - generic [ref=e24]: Comptes
+          - link "Systeme" [ref=e25] [cursor=pointer]:
+            - /url: /admin/system/
+            - img [ref=e26]
+            - generic [ref=e28]: Systeme
+          - link "IA & couts" [ref=e29] [cursor=pointer]:
+            - /url: /admin/usage/
+            - img [ref=e30]
+            - generic [ref=e42]: IA & couts
+        - generic [ref=e43]:
+          - generic [ref=e44]: Nexus World
+          - link "Tour de controle" [ref=e45] [cursor=pointer]:
+            - /url: /admin/nexus/world/
+            - img [ref=e46]
+            - generic [ref=e53]: Tour de controle
+          - link "Console MMO" [ref=e54] [cursor=pointer]:
+            - /url: /admin/nexus/mmo/
+            - img [ref=e55]
+            - generic [ref=e60]: Console MMO
+          - link "Batiments" [ref=e61] [cursor=pointer]:
+            - /url: /admin/nexus/mmo/buildings/
+            - img [ref=e62]
+            - generic [ref=e66]: Batiments
+          - link "Unites" [ref=e67] [cursor=pointer]:
+            - /url: /admin/nexus/mmo/units/
+            - img [ref=e68]
+            - generic [ref=e70]: Unites
+          - link "Recherches" [ref=e71] [cursor=pointer]:
+            - /url: /admin/nexus/mmo/research/
+            - img [ref=e72]
+            - generic [ref=e74]: Recherches
+          - link "Evenements" [ref=e75] [cursor=pointer]:
+            - /url: /admin/nexus/seasonal-events/
+            - img [ref=e76]
+            - generic [ref=e78]: Evenements
+          - link "Nexus Coin" [ref=e79] [cursor=pointer]:
+            - /url: /admin/nexus-coin/
+            - img [ref=e80]
+            - generic [ref=e85]: Nexus Coin
+        - generic [ref=e86]:
+          - generic [ref=e87]: Flux vivants
+          - link "Live" [ref=e88] [cursor=pointer]:
+            - /url: /admin/live/
+            - img [ref=e89]
+            - generic [ref=e95]: Live
+          - link "Quetes" [ref=e96] [cursor=pointer]:
+            - /url: /admin/quests/
+            - img [ref=e97]
+            - generic [ref=e100]: Quetes
+          - link "Quetes RP" [ref=e101] [cursor=pointer]:
+            - /url: /admin/roleplay-quests/
+            - img [ref=e102]
+            - generic [ref=e105]: Quetes RP
+          - link "Tribunal IA" [ref=e106] [cursor=pointer]:
+            - /url: /admin/tribunal-ai/
+            - img [ref=e107]
+            - generic [ref=e109]: Tribunal IA
+        - generic [ref=e110]:
+          - generic [ref=e111]: Noyau IA
+          - link "IA serveur" [ref=e112] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/
+            - img [ref=e113]
+            - generic [ref=e120]: IA serveur
+          - link "Villes IA" [ref=e121] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/cities/
+            - img [ref=e122]
+            - generic [ref=e126]: Villes IA
+          - link "Attaques" [ref=e127] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/attacks/
+            - img [ref=e128]
+            - generic [ref=e130]: Attaques
+          - link "Broadcasts" [ref=e131] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/broadcasts/
+            - img [ref=e132]
+            - generic [ref=e138]: Broadcasts
+          - link "Memoire" [ref=e139] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/memory/
+            - img [ref=e140]
+            - generic [ref=e152]: Memoire
+          - link "Prompts IA" [ref=e153] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/prompts/
+            - img [ref=e154]
+            - generic [ref=e166]: Prompts IA
+          - link "Logs & couts" [ref=e167] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/logs/
+            - img [ref=e168]
+            - generic [ref=e170]: Logs & couts
+          - link "Traductions" [ref=e171] [cursor=pointer]:
+            - /url: /admin/nexus/translations/
+            - img [ref=e172]
+            - generic [ref=e175]: Traductions
+      - button "Deconnexion" [ref=e177] [cursor=pointer]:
+        - img [ref=e178]
+        - generic [ref=e181]: Deconnexion
+    - main [ref=e182]:
+      - generic [ref=e184]:
+        - paragraph [ref=e185]: Pilotage backend
+        - heading "Tour de controle Nexus World" [level=1] [ref=e186]
+        - paragraph [ref=e187]: "Vue temps reel du monde Nexus: connexions, recherches, constructions, unites, IA serveur, evenements, quetes et flux admin."
+      - generic [ref=e188]: 13 flux indisponible(s). Le cockpit affiche les donnees disponibles.
+      - generic [ref=e189]:
+        - generic [ref=e190]:
+          - paragraph [ref=e191]: Nexus World / Command center
+          - heading "Etat operationnel global" [level=2] [ref=e192]
+          - paragraph [ref=e193]: "Rafraichissement automatique toutes les 12s. Dernier signal: 10/06/2026 15:51."
+        - generic [ref=e194]:
+          - generic [ref=e195]: 13 flux a verifier
+          - button "Rafraichir" [ref=e196] [cursor=pointer]
+      - generic [ref=e197]:
+        - generic [ref=e198]:
+          - generic [ref=e199]: Mondes actifs
+          - strong [ref=e200]: "0"
+        - generic [ref=e201]:
+          - generic [ref=e202]: Continents
+          - strong [ref=e203]: "0"
+        - generic [ref=e204]:
+          - generic [ref=e205]: Joueurs affectes
+          - strong [ref=e206]: "0"
+        - generic [ref=e207]:
+          - generic [ref=e208]: Live streaming
+          - strong [ref=e209]: "0"
+        - generic [ref=e210]:
+          - generic [ref=e211]: Batiments
+          - strong [ref=e212]: "0"
+        - generic [ref=e213]:
+          - generic [ref=e214]: Unites
+          - strong [ref=e215]: "0"
+        - generic [ref=e216]:
+          - generic [ref=e217]: Recherches
+          - strong [ref=e218]: "0"
+        - generic [ref=e219]:
+          - generic [ref=e220]: Appels IA 24h
+          - strong [ref=e221]: "0"
+      - generic [ref=e222]:
+        - generic [ref=e223]:
+          - heading "Connexions et occupation" [level=2] [ref=e224]
+          - table [ref=e226]:
+            - rowgroup [ref=e227]:
+              - row "Monde Continent Joueurs Capacite Statut" [ref=e228]:
+                - columnheader "Monde" [ref=e229]
+                - columnheader "Continent" [ref=e230]
+                - columnheader "Joueurs" [ref=e231]
+                - columnheader "Capacite" [ref=e232]
+                - columnheader "Statut" [ref=e233]
+            - rowgroup [ref=e234]:
+              - row "Aucun continent recu." [ref=e235]:
+                - cell "Aucun continent recu." [ref=e236]
+        - generic [ref=e237]:
+          - heading "Noyau IA et evenements" [level=2] [ref=e238]
+          - generic [ref=e239]:
+            - generic [ref=e240]:
+              - generic [ref=e241]: Bastions IA
+              - strong [ref=e242]: "-"
+            - generic [ref=e243]:
+              - generic [ref=e244]: Attaques
+              - strong [ref=e245]: "0"
+            - generic [ref=e246]:
+              - generic [ref=e247]: Events a revoir
+              - strong [ref=e248]: "0"
+            - generic [ref=e249]:
+              - generic [ref=e250]: Broadcasts
+              - strong [ref=e251]: "0"
+            - generic [ref=e252]:
+              - generic [ref=e253]: Prompts serveur
+              - strong [ref=e254]: "0"
+            - generic [ref=e255]:
+              - generic [ref=e256]: Prompts publics
+              - strong [ref=e257]: "0"
+      - generic [ref=e258]:
+        - generic [ref=e259]:
+          - heading "Quetes generees" [level=2] [ref=e260]
+          - paragraph [ref=e262]: Aucune quete bataille recente.
+        - generic [ref=e263]:
+          - heading "Quetes RP recues" [level=2] [ref=e264]
+          - paragraph [ref=e266]: Aucune quete RP recente.
+        - generic [ref=e267]:
+          - heading "Flux live" [level=2] [ref=e268]
+          - paragraph [ref=e270]: Aucune session live recente.
+      - generic [ref=e271]:
+        - generic [ref=e272]:
+          - heading "Evenements et broadcasts" [level=2] [ref=e273]
+          - table [ref=e275]:
+            - rowgroup [ref=e276]:
+              - row "Type Titre Statut Date" [ref=e277]:
+                - columnheader "Type" [ref=e278]
+                - columnheader "Titre" [ref=e279]
+                - columnheader "Statut" [ref=e280]
+                - columnheader "Date" [ref=e281]
+            - rowgroup [ref=e282]:
+              - row "Aucun event ou broadcast recu." [ref=e283]:
+                - cell "Aucun event ou broadcast recu." [ref=e284]
+        - generic [ref=e285]:
+          - heading "Sante des flux" [level=2] [ref=e286]
+          - generic [ref=e287]:
+            - generic [ref=e288]:
+              - generic [ref=e289]: Erreur
+              - generic [ref=e290]:
+                - strong [ref=e291]: Admin dashboard
+                - generic [ref=e292]: /admin/api/dashboard - HTTP 404
+            - generic [ref=e293]:
+              - generic [ref=e294]: Erreur
+              - generic [ref=e295]:
+                - strong [ref=e296]: Mondes
+                - generic [ref=e297]: /api/nexus-game/worlds - 404 Not Found
+            - generic [ref=e298]:
+              - generic [ref=e299]: Erreur
+              - generic [ref=e300]:
+                - strong [ref=e301]: Factions
+                - generic [ref=e302]: /api/nexus-game/factions - 404 Not Found
+            - generic [ref=e303]:
+              - generic [ref=e304]: Erreur
+              - generic [ref=e305]:
+                - strong [ref=e306]: Compagnons IA
+                - generic [ref=e307]: /api/nexus-game/ia-companions - 404 Not Found
+            - generic [ref=e308]:
+              - generic [ref=e309]: Erreur
+              - generic [ref=e310]:
+                - strong [ref=e311]: Prompts publics
+                - generic [ref=e312]: /api/nexus-game/prompts - 404 Not Found
+            - generic [ref=e313]:
+              - generic [ref=e314]: Erreur
+              - generic [ref=e315]:
+                - strong [ref=e316]: Catalogue construction
+                - generic [ref=e317]: /api/nexus-game/admin/content/catalog - 404 Not Found
+            - generic [ref=e318]:
+              - generic [ref=e319]: Erreur
+              - generic [ref=e320]:
+                - strong [ref=e321]: Dashboard IA serveur
+                - generic [ref=e322]: /api/nexus-game/admin/ai-server/dashboard - 404 Not Found
+            - generic [ref=e323]:
+              - generic [ref=e324]: Erreur
+              - generic [ref=e325]:
+                - strong [ref=e326]: Prompts IA serveur
+                - generic [ref=e327]: /api/nexus-game/admin/ai-server/prompts - 404 Not Found
+            - generic [ref=e328]:
+              - generic [ref=e329]: Erreur
+              - generic [ref=e330]:
+                - strong [ref=e331]: Logs IA
+                - generic [ref=e332]: /api/nexus-game/admin/ai-server/call-logs - 404 Not Found
+            - generic [ref=e333]:
+              - generic [ref=e334]: Erreur
+              - generic [ref=e335]:
+                - strong [ref=e336]: Couts IA
+                - generic [ref=e337]: /api/nexus-game/admin/ai-server/costs - 404 Not Found
+            - generic [ref=e338]:
+              - generic [ref=e339]: Erreur
+              - generic [ref=e340]:
+                - strong [ref=e341]: Evenements saisonniers
+                - generic [ref=e342]: /api/nexus-game/admin/seasonal-events - 404 Not Found
+            - generic [ref=e343]:
+              - generic [ref=e344]: Erreur
+              - generic [ref=e345]:
+                - strong [ref=e346]: Broadcasts
+                - generic [ref=e347]: /api/nexus-game/admin/ai-server/broadcasts - 404 Not Found
+            - generic [ref=e348]:
+              - generic [ref=e349]: Erreur
+              - generic [ref=e350]:
+                - strong [ref=e351]: Attaques IA
+                - generic [ref=e352]: /api/nexus-game/admin/ai-server/attacks - 404 Not Found
+      - generic [ref=e353]:
+        - heading "Postes de controle Nexus World" [level=2] [ref=e354]
+        - generic [ref=e355]:
+          - link "Console MMO Avatars, factions, compagnons, mondes et generation manuelle." [ref=e356] [cursor=pointer]:
+            - /url: /admin/nexus/mmo/
+            - strong [ref=e357]: Console MMO
+            - generic [ref=e358]: Avatars, factions, compagnons, mondes et generation manuelle.
+          - link "Batiments Contraintes, couts, durees, effets et images de construction." [ref=e359] [cursor=pointer]:
+            - /url: /admin/nexus/mmo/buildings/
+            - strong [ref=e360]: Batiments
+            - generic [ref=e361]: Contraintes, couts, durees, effets et images de construction.
+          - link "Unites Stats, prerequisites, recrutement, assets et traductions." [ref=e362] [cursor=pointer]:
+            - /url: /admin/nexus/mmo/units/
+            - strong [ref=e363]: Unites
+            - generic [ref=e364]: Stats, prerequisites, recrutement, assets et traductions.
+          - link "Recherches Arbre techno, durees, dependances, unlocks et descriptions." [ref=e365] [cursor=pointer]:
+            - /url: /admin/nexus/mmo/research/
+            - strong [ref=e366]: Recherches
+            - generic [ref=e367]: Arbre techno, durees, dependances, unlocks et descriptions.
+          - link "IA serveur Pression, bastions, generation et compteurs du noyau IA." [ref=e368] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/
+            - strong [ref=e369]: IA serveur
+            - generic [ref=e370]: Pression, bastions, generation et compteurs du noyau IA.
+          - link "Prompts IA Prompts, tests, seed et versions de generation." [ref=e371] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/prompts/
+            - strong [ref=e372]: Prompts IA
+            - generic [ref=e373]: Prompts, tests, seed et versions de generation.
+          - link "Logs & couts Tokens, latence, erreurs et cout estime par appel." [ref=e374] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/logs/
+            - strong [ref=e375]: Logs & couts
+            - generic [ref=e376]: Tokens, latence, erreurs et cout estime par appel.
+          - link "Attaques Planification, annulation et resolution d'attaques IA." [ref=e377] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/attacks/
+            - strong [ref=e378]: Attaques
+            - generic [ref=e379]: Planification, annulation et resolution d'attaques IA.
+          - link "Broadcasts Messages serveur generes, publies ou en attente." [ref=e380] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/broadcasts/
+            - strong [ref=e381]: Broadcasts
+            - generic [ref=e382]: Messages serveur generes, publies ou en attente.
+          - link "Memoire IA Memoire globale et memoire joueur nettoyable." [ref=e383] [cursor=pointer]:
+            - /url: /admin/nexus/ai-server/memory/
+            - strong [ref=e384]: Memoire IA
+            - generic [ref=e385]: Memoire globale et memoire joueur nettoyable.
+          - link "Evenements Propositions, validation, scheduling et lancement." [ref=e386] [cursor=pointer]:
+            - /url: /admin/nexus/seasonal-events/
+            - strong [ref=e387]: Evenements
+            - generic [ref=e388]: Propositions, validation, scheduling et lancement.
+          - link "Traductions Domaines, statuts, imports, manquants et logs." [ref=e389] [cursor=pointer]:
+            - /url: /admin/nexus/translations/
+            - strong [ref=e390]: Traductions
+            - generic [ref=e391]: Domaines, statuts, imports, manquants et logs.
+          - link "Quetes Quetes bataille generees, statut et recompenses." [ref=e392] [cursor=pointer]:
+            - /url: /admin/quests/
+            - strong [ref=e393]: Quetes
+            - generic [ref=e394]: Quetes bataille generees, statut et recompenses.
+          - link "Quetes RP Quetes roleplay, arcs narratifs et generation recue." [ref=e395] [cursor=pointer]:
+            - /url: /admin/roleplay-quests/
+            - strong [ref=e396]: Quetes RP
+            - generic [ref=e397]: Quetes roleplay, arcs narratifs et generation recue.
+          - link "Live Sessions, streaming, replay et audience." [ref=e398] [cursor=pointer]:
+            - /url: /admin/live/
+            - strong [ref=e399]: Live
+            - generic [ref=e400]: Sessions, streaming, replay et audience.
+          - link "Tribunal IA Dossiers, decisions et controle de moderation." [ref=e401] [cursor=pointer]:
+            - /url: /admin/tribunal-ai/
+            - strong [ref=e402]: Tribunal IA
+            - generic [ref=e403]: Dossiers, decisions et controle de moderation.
+  - alert [ref=e404]
