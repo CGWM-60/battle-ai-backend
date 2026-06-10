@@ -6,6 +6,7 @@ import (
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/seeds"
 	"cgwm/battle/internal/nexus_game/services"
+	"context"
 	"io"
 	"os"
 	"path/filepath"
@@ -94,13 +95,17 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	companionH := handlers.NewIACompanionHandler(database)
 	profileH := handlers.NewProfileHandler(database, redis)
 	worldH := handlers.NewWorldHandler(database, redis)
+	resourceH := handlers.NewResourceHandler(database)
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
 		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{}, &models.MmoIAAgent{}, &models.DailyPlan{},
 			&models.BuildingDefinition{}, &models.PlayerBuilding{},
 			&models.UnitDefinition{}, &models.PlayerUnit{},
-			&models.ResearchDefinition{}, &models.PlayerResearch{})
+			&models.ResearchDefinition{}, &models.PlayerResearch{},
+			&models.ResourceCatalog{}, &models.PlayerResource{}, &models.PlayerCityStats{},
+			&models.ResourceTransaction{}, &models.DailyGrantClaim{}, &models.DailyGrantConfig{},
+			&models.InitialAllocationLog{})
 
 		// Seed initial content for dev (full reference v2.0: buildings, units, research).
 		// In prod: use admin CRUD + asset upload for the complete catalogs.
@@ -108,6 +113,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 		_ = seeds.SeedInitialBuildings(database, contentSvc)
 		_ = seeds.SeedInitialUnits(database, contentSvc)
 		_ = seeds.SeedInitialResearch(database, contentSvc)
+		_ = services.NewResourceService(database).SeedDefaults(context.Background())
 		// Full catalogue from reference v2.0 seeded for buildings (20), units (15), research (11 branches x7). Use admin to add/update images and data.
 	}
 
@@ -180,6 +186,15 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/profile/:id/daily-plan/recommendations", profileH.SaveDailyPlanRecommendations)
 	group.POST("/profile/:id/daily-plan/apply", profileH.ApplyDailyPlan)
 
+	// Resources and daily grants. profile_gamer_id query param identifies the player profile.
+	group.GET("/resources", resourceH.Resources)
+	group.GET("/resources/catalog", resourceH.Catalog)
+	group.GET("/resources/transactions", resourceH.Transactions)
+	group.GET("/city/stats", resourceH.CityStats)
+	group.GET("/daily-grant/status", resourceH.DailyGrantStatus)
+	group.POST("/daily-grant/claim", resourceH.DailyGrantClaim)
+	group.GET("/daily-grant/history", resourceH.DailyGrantHistory)
+
 	// Content system (Buildings first, extensible to Units/Research per NEXUS GAME CONTENT REFERENCE v2.0).
 	// Admin CRUD + asset upload (images served by this server after upload).
 	// Player construction endpoints (queues, completion).
@@ -195,6 +210,10 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/admin/content/catalog", contentH.Catalog)
 	group.GET("/admin/content/assets/status", contentH.AssetStatus)
 	group.GET("/admin/content/translations/status", contentH.TranslationStatus)
+	group.GET("/admin/resources/catalog", resourceH.AdminCatalog)
+	group.POST("/admin/resources/seed/preview", resourceH.AdminSeedPreview)
+	group.POST("/admin/resources/seed/commit", resourceH.AdminSeedCommit)
+	group.GET("/admin/resources/seed/status", resourceH.AdminSeedStatus)
 
 	group.GET("/admin/content/buildings", contentH.ListBuildings)
 	group.DELETE("/admin/content/buildings/by-id/:id", contentH.DeleteBuildingByID)

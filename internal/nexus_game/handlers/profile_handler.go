@@ -94,6 +94,9 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		})
 		return
 	}
+	if err := services.NewResourceService(h.db).EnsureInitialAllocation(c.Request.Context(), p.ID); err == nil {
+		_ = h.db.First(&p, p.ID).Error
+	}
 
 	// Enrich for MmoEntryScreen (same as SaveProfile)
 	avatarURL := ""
@@ -180,13 +183,13 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 			Power:         0,
 			// Initial evolutionary city stats (Population, Morale, Energy, Security).
 			// These will evolve via ticks, actions, events per the detailed rules.
-			Population:         5,
-			PopulationCapacity: 10,
-			Morale:             55,
-			EnergyProduction:   20,
-			EnergyConsumption:  10,
-			EnergyBalance:      10,
-			EnergyStored:       50,
+			Population:         0,
+			PopulationCapacity: 0,
+			Morale:             50,
+			EnergyProduction:   0,
+			EnergyConsumption:  0,
+			EnergyBalance:      0,
+			EnergyStored:       0,
 			Security:           50,
 			CreatedAt:          now,
 			UpdatedAt:          now,
@@ -228,6 +231,9 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 					_ = h.redis.SetString(c.Request.Context(), fmt.Sprintf("nexus:faction:%d:world", req.FactionID), fmt.Sprintf("%d", f.WorldID), 0)
 				}
 			}
+		}
+		if err := services.NewResourceService(h.db).EnsureInitialAllocation(c.Request.Context(), p.ID); err == nil {
+			_ = h.db.First(&p, p.ID).Error
 		}
 	} else {
 		// update existing (only the gamer fields; never touch other tables here)
@@ -464,10 +470,10 @@ func (h *ProfileHandler) GetDailyPlan(c *gin.Context) {
 			ctx := h.buildDailyPlanContextForID(uint(profileID))
 			ctxBytes, _ := json.Marshal(ctx)
 			plan = models.DailyPlan{
-				ProfileGamerID: uint(profileID),
-				Context:        string(ctxBytes),
+				ProfileGamerID:  uint(profileID),
+				Context:         string(ctxBytes),
 				Recommendations: "[]",
-				GeneratedAt:    time.Now().UTC(),
+				GeneratedAt:     time.Now().UTC(),
 			}
 			_ = h.db.Create(&plan).Error
 		} else {
@@ -667,4 +673,3 @@ func (h *ProfileHandler) buildDailyPlanContextForID(profileID uint) map[string]i
 	h.db.First(&p, profileID)
 	return buildDailyPlanContext(p)
 }
-
