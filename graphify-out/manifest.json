@@ -670,8 +670,8 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/services/resource_service.go": {
-    "mtime": 1781110950.7779338,
-    "ast_hash": "267f078281ea2da4f8ef9ff4f3bb9250",
+    "mtime": 1781115461.472087,
+    "ast_hash": "30815e18e567518ef1cf1cda80223593",
     "semantic_hash": ""
   },
   "internal/nexus_game/services/resource_service_test.go": {
@@ -695,8 +695,8 @@
     "semantic_hash": "a37ba26b96d306dee937f5e0a8734c36"
   },
   "internal/nexus_game/services/world_tick_service.go": {
-    "mtime": 1781110220.3065643,
-    "ast_hash": "b9b01e9f2dc629bef6d85ec3123afb2a",
+    "mtime": 1781115470.7050025,
+    "ast_hash": "a7816beac3c844cc6fa5032068ebdfcf",
     "semantic_hash": ""
   },
   "internal/nexus_game/translations/import_payload.go": {
@@ -1172,6 +1172,11 @@
   "internal/nexus_game/FLUTTER_REALTIME_SYNC.md": {
     "mtime": 1781109281.7933528,
     "ast_hash": "3fefbd0424219849b012326140f933a2",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/RULES_DU_JEU.md": {
+    "mtime": 1781115238.7311826,
+    "ast_hash": "e8e3616cde08b248cbbd87f3619ea0f6",
     "semantic_hash": ""
   }
 }

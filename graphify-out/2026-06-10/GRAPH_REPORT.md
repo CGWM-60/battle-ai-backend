@@ -1,16 +1,16 @@
 # Graph Report - go-battle-ia  (2026-06-10)
 
 ## Corpus Check
-- 227 files · ~418,552 words
+- 227 files · ~420,301 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 5313 nodes · 11798 edges · 284 communities (239 shown, 45 thin omitted)
-- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 560 edges (avg confidence: 0.8)
+- 5330 nodes · 11869 edges · 274 communities (230 shown, 44 thin omitted)
+- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 567 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `edba7fac`
+- Built from commit: `dbc9ed18`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -107,7 +107,6 @@
 - [[_COMMUNITY_Internal Repository Quest Repository|Internal Repository Quest Repository]]
 - [[_COMMUNITY_Nexus Game Repositories Resource Repository|Nexus Game Repositories Resource Repository]]
 - [[_COMMUNITY_Nexus Game Handlers World Handler|Nexus Game Handlers World Handler]]
-- [[_COMMUNITY_Nexus Game Services Server AI|Nexus Game Services Server AI]]
 - [[_COMMUNITY_Internal Generated Battle Arena Members|Internal Generated Battle Arena Members]]
 - [[_COMMUNITY_Internal Generated Coop Party Members|Internal Generated Coop Party Members]]
 - [[_COMMUNITY_Internal Models Nexus Translation Models|Internal Models Nexus Translation Models]]
@@ -134,7 +133,6 @@
 - [[_COMMUNITY_Internal Scenarios Dev E2e Test|Internal Scenarios Dev E2e Test]]
 - [[_COMMUNITY_Internal Admin Admin|Internal Admin Admin]]
 - [[_COMMUNITY_Internal Generated Gen|Internal Generated Gen]]
-- [[_COMMUNITY_Nexus Game Services World Tick|Nexus Game Services World Tick]]
 - [[_COMMUNITY_Nexus Tribunal Adapters AI Provider|Nexus Tribunal Adapters AI Provider]]
 - [[_COMMUNITY_Internal Market Engine|Internal Market Engine]]
 - [[_COMMUNITY_Server AI Models Models|Server AI Models Models]]
@@ -208,7 +206,6 @@
 - [[_COMMUNITY_Internal Models World Army Models|Internal Models World Army Models]]
 - [[_COMMUNITY_Nexus Tribunal Models Generated Case|Nexus Tribunal Models Generated Case]]
 - [[_COMMUNITY_Completed Admin CRUD|Completed Admin CRUD]]
-- [[_COMMUNITY_Internal Admin Admin Test|Internal Admin Admin Test]]
 - [[_COMMUNITY_Internal Admin Admin|Internal Admin Admin]]
 - [[_COMMUNITY_Internal Generated Battle Arena Members|Internal Generated Battle Arena Members]]
 - [[_COMMUNITY_Internal Generated Coop Party Members|Internal Generated Coop Party Members]]
@@ -259,8 +256,6 @@
 - [[_COMMUNITY_Community 250|Community 250]]
 - [[_COMMUNITY_Community 251|Community 251]]
 - [[_COMMUNITY_Community 252|Community 252]]
-- [[_COMMUNITY_Community 253|Community 253]]
-- [[_COMMUNITY_Community 254|Community 254]]
 - [[_COMMUNITY_Community 255|Community 255]]
 - [[_COMMUNITY_Community 256|Community 256]]
 - [[_COMMUNITY_Community 257|Community 257]]
@@ -269,7 +264,6 @@
 - [[_COMMUNITY_Community 260|Community 260]]
 - [[_COMMUNITY_Community 261|Community 261]]
 - [[_COMMUNITY_Community 262|Community 262]]
-- [[_COMMUNITY_Community 263|Community 263]]
 - [[_COMMUNITY_Community 264|Community 264]]
 - [[_COMMUNITY_Community 265|Community 265]]
 - [[_COMMUNITY_Community 266|Community 266]]
@@ -285,11 +279,7 @@
 - [[_COMMUNITY_Community 276|Community 276]]
 - [[_COMMUNITY_Community 277|Community 277]]
 - [[_COMMUNITY_Community 278|Community 278]]
-- [[_COMMUNITY_Community 279|Community 279]]
 - [[_COMMUNITY_Community 280|Community 280]]
-- [[_COMMUNITY_Community 281|Community 281]]
-- [[_COMMUNITY_Community 282|Community 282]]
-- [[_COMMUNITY_Community 283|Community 283]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `WorldGameService` - 99 edges
@@ -323,11 +313,11 @@
 - **Battle Persistence Flow** — api_endpoints_battles, api_endpoints_battlesave, api_endpoints_battlesaveturn, battle_ia_json_formats_saved_battle_schema, guide_backend_source_of_truth_battles [EXTRACTED 1.00]
 - **Dokploy Production Deployment Stack** — dokploy_dokploy_deployment, compose_prod_app_service, compose_prod_mariadb_service, compose_prod_redis_service, compose_prod_required_secrets [EXTRACTED 1.00]
 
-## Communities (284 total, 45 thin omitted)
+## Communities (274 total, 44 thin omitted)
 
 ### Community 0 - "Internal Scheduler Quest Scheduler"
-Cohesion: 0.09
-Nodes (34): generatedRolePlayChapter, RolePlayQuestArcInput, RolePlayQuestChapterInput, CronJobState, CronLogEntry, CronSnapshot, generatedBattleQuest, generatedRolePlayArc (+26 more)
+Cohesion: 0.06
+Nodes (90): Conn, Context, DB, Duration, generatedRolePlayArc, generatedRolePlayChapter, RolePlayQuestArcInput, RolePlayQuestChapterInput (+82 more)
 
 ### Community 1 - "Internal Service Battle Service"
 Cohesion: 0.07
@@ -338,20 +328,20 @@ Cohesion: 0.10
 Nodes (30): gameApplyFilters(), gameJSON(), gameLimit(), gameMustJSON(), gameParam(), gameChartPoint, Server, Context (+22 more)
 
 ### Community 3 - "Server AI Services Service"
-Cohesion: 0.05
-Nodes (32): NewHandler(), DB, DB, RouterGroup, Context, DB, Prompt, Time (+24 more)
+Cohesion: 0.06
+Nodes (23): Context, Prompt, Time, ScheduleAttackRequest, ServerAIAttack, ServerAIBroadcast, ServerAICallLog, ServerAICity (+15 more)
 
 ### Community 4 - "Internal Service Coop Service"
-Cohesion: 0.11
-Nodes (20): chunkedReader, NewRedisServiceFromEnv(), parseRedisURL(), readRESP(), redactRedisURL(), TestReadRESPBulkStringReadsFullPayload(), TestRedactRedisURL(), TestRedisDisabledDoesNotErrorForFallbackOperations() (+12 more)
+Cohesion: 0.07
+Nodes (32): chunkedReader, NewRedisServiceFromEnv(), parseRedisURL(), readRESP(), redactRedisURL(), TestReadRESPBulkStringReadsFullPayload(), TestRedactRedisURL(), TestRedisDisabledDoesNotErrorForFallbackOperations() (+24 more)
 
 ### Community 5 - "Internal Service World Game Service"
 Cohesion: 0.06
-Nodes (27): BuildingManifestDefinition, ChatMessage, DailyAIMessage, Guild, GuildHelpRequest, GuildInvite, GuildQuest, GuildResearch (+19 more)
+Nodes (26): BuildingCatalogVersion, BuildingManifestDefinition, ChatMessage, DailyAIMessage, Guild, GuildHelpRequest, GuildInvite, GuildQuest (+18 more)
 
 ### Community 6 - "Server AI Handlers Handler"
-Cohesion: 0.10
-Nodes (16): devPlayerID(), isEnabled(), protected(), RegisterRoutes(), validToken(), Handler, intFromQuery(), uintFromParam() (+8 more)
+Cohesion: 0.08
+Nodes (23): devPlayerID(), isEnabled(), protected(), RegisterRoutes(), validToken(), Handler, intFromQuery(), NewHandler() (+15 more)
 
 ### Community 7 - "Internal Router World Game Handlers"
 Cohesion: 0.17
@@ -375,11 +365,11 @@ Nodes (44): accountSummaryData, adminProviderTimeout(), adminRolePlayGenerationB
 
 ### Community 12 - "Internal Service World Army Service"
 Cohesion: 0.12
-Nodes (24): ArmyUnit, Context, JSON, WorldGameService, Time, ArmyTrainInput, ArmyTrainResult, ArmyUnitCatalog (+16 more)
+Nodes (25): ArmyUnit, Context, JSON, WorldGameService, Time, ArmyTrainInput, ArmyTrainResult, ArmyUnitCatalog (+17 more)
 
 ### Community 13 - "Internal Service World Game Service"
 Cohesion: 0.08
-Nodes (29): BuildingCatalogVersion, GuildContribution, JSON, PlayerSave, Time, ChatInput, ConflictInput, EventReward (+21 more)
+Nodes (31): GuildContribution, JSON, PlayerSave, Time, ChatInput, ConflictInput, EventActionInput, EventReward (+23 more)
 
 ### Community 14 - "Internal Router Construction Contract"
 Cohesion: 0.10
@@ -398,8 +388,8 @@ Cohesion: 0.07
 Nodes (44): DbConnect(), getEnv(), getEnvInt(), jsonValue(), seedDefaultBuildingDefinitions(), gameResearchDescription(), parseResearchSeedProgression(), parseResearchSeedRows() (+36 more)
 
 ### Community 18 - "Internal Generated Live Sessions Gen"
-Cohesion: 0.07
-Nodes (7): liveSessionBelongsToArenaTx, liveSessionBelongsToBattleSaveTx, liveSessionBelongsToCoopPartyTx, liveSessionBelongsToRolePlaySessionTx, liveSessionHasManyEventsTx, CoopParty, ResultInfo
+Cohesion: 0.06
+Nodes (11): liveSessionBelongsToArenaTx, liveSessionBelongsToBattleSaveTx, liveSessionBelongsToCoopPartyTx, liveSessionBelongsToRolePlaySessionTx, liveSessionHasManyEventsTx, BattleArena, BattleSave, CoopParty (+3 more)
 
 ### Community 19 - "Internal Provider Provider IA"
 Cohesion: 0.10
@@ -514,7 +504,7 @@ Cohesion: 0.12
 Nodes (4): liveSessionDo, Dao, DO, Tabler
 
 ### Community 47 - "Internal Generated Role Play Quest"
-Cohesion: 0.13
+Cohesion: 0.12
 Nodes (3): rolePlayQuestRunDo, DO, Tabler
 
 ### Community 48 - "Internal Generated Users Gen"
@@ -523,7 +513,7 @@ Nodes (4): usersDo, Dao, DO, Tabler
 
 ### Community 49 - "Internal Service World Game Service"
 Cohesion: 0.09
-Nodes (25): BuildingManifestAsset, BuildingAsset, Reader, BuildingManifestAsset, BuildingManifestDefinition, EventRequirements, FourPillarActionCounts, FourPillarPressure (+17 more)
+Nodes (25): BuildingManifestAsset, BuildingAsset, Reader, AIProviderStatus, BuildingManifestAsset, BuildingManifestDefinition, EventRequirements, PlayerActionsSyncInput (+17 more)
 
 ### Community 50 - "Nexus Game Handlers Content Handler"
 Cohesion: 0.09
@@ -562,8 +552,8 @@ Cohesion: 0.10
 Nodes (5): rolePlaySessionBelongsToOwnerTx, rolePlaySessionHasManyLiveSessionsTx, rolePlaySessionHasManyQuestRunsTx, rolePlaySessionHasManyTurnsTx, ResultInfo
 
 ### Community 59 - "Nexus Game Services World Service"
-Cohesion: 0.17
-Nodes (9): Context, Continent, ProfileGamer, Prompt, World, isNonNegativeIntString(), profileWorldPlayerPayload(), WorldPlayersQuery (+1 more)
+Cohesion: 0.33
+Nodes (5): FourPillarActionCounts, FourPillarPressure, FourPillarScore, minInt(), scorePlayerFourPillars()
 
 ### Community 60 - "Internal Generated Battle Arenas Gen"
 Cohesion: 0.13
@@ -614,8 +604,8 @@ Cohesion: 0.08
 Nodes (14): rolePlayQuestRun, Asterisk, Columns, Dao, Expr, Field, Int, OrderExpr (+6 more)
 
 ### Community 72 - "Internal Generated Role Play Quest"
-Cohesion: 0.11
-Nodes (4): rolePlayQuestRunBelongsToRolePlaySessionTx, rolePlayQuestRunBelongsToTemplateTx, rolePlayQuestRunBelongsToUserTx, ResultInfo
+Cohesion: 0.09
+Nodes (7): rolePlayQuestRunBelongsToRolePlaySessionTx, rolePlayQuestRunBelongsToTemplateTx, rolePlayQuestRunBelongsToUserTx, ResultInfo, RolePlayQuestTemplate, RolePlaySession, Users
 
 ### Community 73 - "Internal Generated Role Play Quest"
 Cohesion: 0.13
@@ -638,8 +628,8 @@ Cohesion: 0.13
 Nodes (3): coopPartyMemberDo, DO, Tabler
 
 ### Community 78 - "Internal Service World Game Service"
-Cohesion: 0.11
-Nodes (19): AIWorldDecision, Continent, Duration, World, nexusDecision, asSliceMap(), decisionContinentID(), defaultMap() (+11 more)
+Cohesion: 0.12
+Nodes (17): AIWorldDecision, Continent, World, nexusDecision, asSliceMap(), decisionContinentID(), defaultMap(), defaultWeatherEffects() (+9 more)
 
 ### Community 79 - "Internal Generated Battle Arena Members"
 Cohesion: 0.09
@@ -658,8 +648,8 @@ Cohesion: 0.13
 Nodes (22): Conflict, DB, JSON, RouterGroup, WorldGameService, T, apiError, conflictError() (+14 more)
 
 ### Community 83 - "Internal Service World Game Service"
-Cohesion: 0.12
-Nodes (22): Conflict, WeatherEvent, PlayerWorldMetric, AIProviderStatus, normalizeProviderName(), averageRelationScore(), clamp(), defaultText() (+14 more)
+Cohesion: 0.17
+Nodes (17): Conflict, PlayerWorldMetric, normalizeProviderName(), averageRelationScore(), clamp(), defaultText(), deterministicRoutineDecision(), diplomacyStanceFromScore() (+9 more)
 
 ### Community 84 - "Internal Generated Battle Save Turns"
 Cohesion: 0.09
@@ -686,16 +676,12 @@ Cohesion: 0.20
 Nodes (9): Context, DB, QuestIaBattle, RolePlayQuestArc, RolePlayQuestTemplate, applyQuestQuery(), createRolePlayQuestStructure(), NewQuestRepository() (+1 more)
 
 ### Community 90 - "Nexus Game Repositories Resource Repository"
-Cohesion: 0.15
-Nodes (10): DailyGrantConfig, Context, DailyGrantClaim, PlayerResource, PlayerCityStats, DailyGrantClaimRepository, PlayerResourceRepository, ResourceTransactionRepository (+2 more)
+Cohesion: 0.13
+Nodes (17): DailyGrantConfig, Context, DailyGrantClaim, DB, PlayerResource, PlayerCityStats, DailyGrantClaimRepository, DailyGrantConfigRepository (+9 more)
 
 ### Community 91 - "Nexus Game Handlers World Handler"
-Cohesion: 0.16
-Nodes (7): NewWorldHandler(), WorldHandler, Context, DB, RedisService, ServerAIService, WorldService
-
-### Community 92 - "Nexus Game Services Server AI"
-Cohesion: 0.21
-Nodes (12): Context, DB, Prompt, RedisService, getInt(), getInt64(), getString(), getUint() (+4 more)
+Cohesion: 0.06
+Nodes (38): NewWorldHandler(), WorldHandler, Context, DB, RedisService, ServerAIService, WorldService, DB (+30 more)
 
 ### Community 93 - "Internal Generated Battle Arena Members"
 Cohesion: 0.12
@@ -710,8 +696,8 @@ Cohesion: 0.18
 Nodes (11): DeletedAt, Time, TranslationBatch, TranslationDomain, TranslationImport, TranslationImportError, TranslationImportRow, TranslationKey (+3 more)
 
 ### Community 96 - "Internal Service World Game Service"
-Cohesion: 0.17
-Nodes (21): T, containsJSONKey(), TestApplyPenaltyToSaveClampsResources(), TestApplyRewardToSaveUpdatesOfficialResources(), TestBeginnerProtectionCoversNewLowLevelPlayer(), TestBuildingAssetHashChangesWithVersion(), TestDeduplicateDailyTasksByNormalizedTypeAndTitle(), TestDefaultWeatherEffectsVaryByProfile() (+13 more)
+Cohesion: 0.18
+Nodes (20): T, TestApplyPenaltyToSaveClampsResources(), TestApplyRewardToSaveUpdatesOfficialResources(), TestBeginnerProtectionCoversNewLowLevelPlayer(), TestBuildingAssetHashChangesWithVersion(), TestDeduplicateDailyTasksByNormalizedTypeAndTitle(), TestDefaultWeatherEffectsVaryByProfile(), TestDeterministicNexusDecisionHasPlayableDurationsInputs() (+12 more)
 
 ### Community 97 - "Admin Package"
 Cohesion: 0.11
@@ -801,10 +787,6 @@ Nodes (7): adminGeneratedRolePlayQuestInput(), defaultSlug(), defaultValue(), fo
 Cohesion: 0.13
 Nodes (15): queryCtx, battleArenaDo, battleArenaMemberDo, battleSaveDo, battleSaveTurnDo, coopPartyDo, coopPartyMemberDo, liveEventDo (+7 more)
 
-### Community 119 - "Nexus Game Services World Tick"
-Cohesion: 0.18
-Nodes (12): DB, RedisService, Context, DB, ProfileGamer, RedisService, ServerAIService, WorldService (+4 more)
-
 ### Community 120 - "Nexus Tribunal Adapters AI Provider"
 Cohesion: 0.34
 Nodes (9): defaultAdapterText(), IsLocalProvider(), NormalizeProviderType(), AIProviderAdapter, GenerateRequest, GenerateResponse, resolvedAIProvider, Context (+1 more)
@@ -830,8 +812,8 @@ Cohesion: 0.27
 Nodes (6): BattleSave, BattleSaveTurn, Context, DB, NewBattleRepository(), BattleRepository
 
 ### Community 126 - "Internal Service World Game Service"
-Cohesion: 0.21
-Nodes (8): AIWorldFaction, DB, GameEvent, persistMarketSaveTx(), routineEventItems(), sameEventScope(), validateRequirementsPayload(), validEventDifficulty()
+Cohesion: 0.19
+Nodes (9): AIWorldFaction, DB, Duration, GameEvent, persistMarketSaveTx(), routineEventItems(), sameEventScope(), validEventDifficulty() (+1 more)
 
 ### Community 127 - "Internal Generated Battle Save Turns"
 Cohesion: 0.15
@@ -894,8 +876,8 @@ Cohesion: 0.50
 Nodes (4): T, applyStreakMultiplier(), TestApplyStreakMultiplier(), TestOfficialResourceDefinitionsIncludeRequiredStarts()
 
 ### Community 142 - "Nexus Game Services Resource Service"
-Cohesion: 0.26
-Nodes (13): DB, Context, DB, PlayerResource, DailyGrantConfigRepository, PlayerCityStatsRepository, NewDailyGrantConfigRepository(), NewPlayerCityStatsRepository() (+5 more)
+Cohesion: 0.42
+Nodes (6): Context, DB, PlayerResource, NewPlayerResourceRepository(), NewResourceTransactionRepository(), ResourceService
 
 ### Community 143 - "Nexus Game Services Resource Service"
 Cohesion: 0.36
@@ -1045,10 +1027,6 @@ Nodes (5): JSON, Model, Time, TribunalCaseGenerationBatch, TribunalGeneratedCase
 Cohesion: 0.22
 Nodes (8): A faire, Completed Admin CRUD, Completed Anti-Cheat Sync, Completed Asset Upload, Completed Guild Rules, Fait, Remaining Real DB Integration Tests, TODO Monde IA Multijoueur
 
-### Community 196 - "Internal Admin Admin Test"
-Cohesion: 0.16
-Nodes (18): RolePlayQuestInput, Time, T, cronProviderRotation(), ensureMetadata(), generatedRolePlayQuestInput(), providerAttempts(), providerAttemptsWithExclusions() (+10 more)
-
 ### Community 197 - "Internal Admin Admin"
 Cohesion: 0.40
 Nodes (5): recentData, BattleSave, LiveSession, QuestIaBattle, RolePlayQuestTemplate
@@ -1145,14 +1123,6 @@ Nodes (11): RolePlay Quests, RolePlay Sessions API, RolePlaySession, 7. Contrats
 Cohesion: 0.20
 Nodes (11): Diplomacy Endpoints, Trade Endpoints, Weather Endpoints, World Endpoints, Commerce International Page, Current Conflicts Page, Diplomacy Page, Weather and Risks Page (+3 more)
 
-### Community 253 - "Community 253"
-Cohesion: 0.42
-Nodes (15): Conn, Context, aiProviderConfig, cronTrace, acquireLock(), callProvider(), callProviderWithFallbacks(), callProviderWithFallbacksExcluding() (+7 more)
-
-### Community 254 - "Community 254"
-Cohesion: 0.22
-Nodes (4): BattleArena, BattleSave, LiveEvent, RolePlaySession
-
 ### Community 255 - "Community 255"
 Cohesion: 0.20
 Nodes (10): Creer une live session, Historique live par channel, Lister et lire une live session, Live Sessions, LiveEvent, Schema Live, Security and HTTP Queue, Stream WebSocket (+2 more)
@@ -1184,10 +1154,6 @@ Nodes (6): NexusCoinEstimate, NexusCoinPlan, NexusCoinResponse, NexusCoinPage(),
 ### Community 262 - "Community 262"
 Cohesion: 0.33
 Nodes (7): IAProfile, applyProfileToBattleRequest(), deleteIAProfile(), findOwnedIAProfile(), getIAProfile(), hydrateBattleProfiles(), battleRequest
-
-### Community 263 - "Community 263"
-Cohesion: 0.20
-Nodes (15): DB, Duration, Location, env(), firstNonEmpty(), loadLocation(), parseLogInt(), providerConfig() (+7 more)
 
 ### Community 264 - "Community 264"
 Cohesion: 0.33
@@ -1222,28 +1188,16 @@ Cohesion: 0.67
 Nodes (3): 11. Modèles JSON attendus par Flutter, Réponse erreur, Réponse succès
 
 ### Community 277 - "Community 277"
-Cohesion: 0.27
-Nodes (12): PlayerBuilding, ProfileGamer, buildingEffect, productionAccumulator, applyBuildingEffects(), applyScaledDelta(), applyStarterFallbackProduction(), newProductionAccumulator() (+4 more)
+Cohesion: 0.24
+Nodes (18): PlayerBuilding, ProfileGamer, buildingEffect, productionAccumulator, researchModifiers, applyBuildingEffects(), applyPercentBonus(), applyResearchBuildingBonuses() (+10 more)
 
 ### Community 278 - "Community 278"
 Cohesion: 0.24
 Nodes (12): ImportPayload, Context, DB, Engine, RouterGroup, DB, bindImportPayload(), RegisterAdminRoutes() (+4 more)
 
-### Community 279 - "Community 279"
-Cohesion: 0.29
-Nodes (3): RolePlayQuestTemplate, RolePlaySession, Users
-
 ### Community 280 - "Community 280"
 Cohesion: 0.50
 Nodes (3): battleArenaMemberBelongsToArenaTx, battleArenaMemberBelongsToUserTx, Association
-
-### Community 281 - "Community 281"
-Cohesion: 0.50
-Nodes (4): generatedRolePlayArc, generatedRolePlayQuest, hasGeneratedRolePlayStructure(), rolePlayStructureBounds()
-
-### Community 282 - "Community 282"
-Cohesion: 0.67
-Nodes (3): BuildNarrativeCasesPrompt(), BuildSingleNarrativeCasePrompt(), promptsForTribunalCases()
 
 ## Ambiguous Edges - Review These
 - `Arenas` → `Arena and Coop Route Implementation Status`  [AMBIGUOUS]
@@ -1252,9 +1206,9 @@ Nodes (3): BuildNarrativeCasesPrompt(), BuildSingleNarrativeCasePrompt(), prompt
   API_ENDPOINTS.md · relation: references
 
 ## Knowledge Gaps
-- **890 isolated node(s):** `PreToolUse`, `NavItem`, `navSections`, `metadata`, `LiveResponse` (+885 more)
+- **891 isolated node(s):** `PreToolUse`, `NavItem`, `navSections`, `metadata`, `LiveResponse` (+886 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **45 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **44 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -1264,12 +1218,12 @@ _Questions this graph is uniquely positioned to answer:_
 - **What is the exact relationship between `Coop` and `Arena and Coop Route Implementation Status`?**
   _Edge tagged AMBIGUOUS (relation: references) - confidence is low._
 - **Why does `Use()` connect `Internal Generated Gen` to `Internal Generated Battle Arenas Gen`, `Internal Generated Battle Saves Gen`, `Internal Generated Role Play Sessions`, `Internal Generated Battle Save Turns`, `Internal Generated Live Events Gen`, `Internal Generated Coop Parties Gen`, `Internal Generated Live Sessions Gen`, `Internal Generated Role Play Quest`, `Internal Generated Role Play Session`, `Internal Generated Battle Arena Members`, `Internal Generated Coop Party Members`, `Internal Generated Role Play Quest`, `Internal Generated Users Gen`, `Internal Generated Quest IA Battles`?**
-  _High betweenness centrality (0.141) - this node is a cross-community bridge._
+  _High betweenness centrality (0.137) - this node is a cross-community bridge._
 - **Why does `RegisterRoutes()` connect `Nexus Game Routes Routes` to `Nexus Game Handlers Bootstrap Handler`, `Internal Service Coop Service`, `Nexus Game Handlers Resource Handler`, `Nexus Game Repositories Resource Repository`, `Nexus Game Handlers Faction Handler`, `Nexus Game Handlers Health`, `Nexus Game Handlers Profile Handler`, `Nexus Game Handlers Avatar Handler`, `Nexus Game Handlers Content Handler`, `Nexus Game Services Content Service`, `Nexus Game Handlers IA Companion`, `Nexus Game Handlers World Handler`?**
-  _High betweenness centrality (0.077) - this node is a cross-community bridge._
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
 - **Why does `RouterApp()` connect `Internal Router Middleware` to `Internal Router API Handlers`, `Community 262`, `Nexus Game Routes Routes`, `Internal Router API Handlers`, `Internal Router Router`, `Internal DB Research Seed`, `Internal Admin Admin`, `Internal Router API Handlers`, `Community 278`, `Community 249`, `Internal Router API Handlers`?**
-  _High betweenness centrality (0.072) - this node is a cross-community bridge._
+  _High betweenness centrality (0.047) - this node is a cross-community bridge._
 - **What connects `PreToolUse`, `NavItem`, `navSections` to the rest of the system?**
-  _892 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _893 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Internal Scheduler Quest Scheduler` be split into smaller, more focused modules?**
-  _Cohesion score 0.09009009009009009 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05710162853019996 - nodes in this community are weakly interconnected._

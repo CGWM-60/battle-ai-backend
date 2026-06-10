@@ -270,6 +270,64 @@ La croissance dépend d’un score de base multiplié par des facteurs de contex
 
 La capacité de population vient principalement du `building_modular_habitat` et de ses bonus de recherche.
 
+### Paliers population (mode MMO difficile)
+
+Le système population doit utiliser des paliers de pression urbaine basés sur :
+
+- `L_hab` = niveau total des `building_modular_habitat`
+- `L_farm` = niveau total des `building_vertical_farm`
+- `L_sec` = niveau total des bâtiments défensifs/sécurité
+- `R_pop` = ratio de charge population = `population / populationCapacity`
+
+#### Palier 1 — Colonie fragile (L_hab 1-5)
+
+- croissance de base faible
+- vulnérable au moindre déficit énergétique
+- si `R_pop > 0.85` : malus direct de croissance
+
+Règle recommandée :
+- bonus croissance : `+0%`
+- malus surpopulation : `-35%`
+
+#### Palier 2 — Ville naissante (L_hab 6-12)
+
+- croissance stabilisée si nourriture et énergie sont positives
+- pénalité réduite en cas de tension légère
+
+Règle recommandée :
+- bonus croissance : `+12%`
+- malus surpopulation (`R_pop > 0.9`) : `-25%`
+
+#### Palier 3 — Métropole sous tension (L_hab 13-20)
+
+- forte capacité, mais exige sécurité + alimentation solides
+- si sécurité basse, risque de stagnation massive
+
+Règle recommandée :
+- bonus croissance : `+25%`
+- si sécurité < 45 : `-30%` croissance
+
+#### Palier 4 — Mégapole Nexus (L_hab 21+)
+
+- très gros potentiel démographique
+- système plus exigeant : la moindre crise énergétique ou alimentaire coûte cher
+
+Règle recommandée :
+- bonus croissance : `+40%`
+- si énergie négative pendant 2 ticks consécutifs : `-2%` population immédiate
+- si nourriture négative pendant 2 ticks consécutifs : `-3%` population immédiate
+
+### Synergies population-bâtiments
+
+- `building_vertical_farm` : réduit les malus de croissance liés à la nourriture
+- `building_solar_plant` : réduit les malus de panique urbaine
+- bâtiments sécurité/défense : absorbent les pénalités sur morale/sécurité aux paliers élevés
+
+Règle hardcore recommandée :
+
+- si `L_farm < (L_hab / 2)` alors `-15%` croissance population
+- si `L_sec < (L_hab / 3)` alors `-10%` croissance + `-5` sécurité par tick
+
 ---
 
 ## 9) Morale, sécurité et énergie
@@ -290,6 +348,81 @@ La capacité de population vient principalement du `building_modular_habitat` et
 - consommée par l’activité de la ville
 - si le bilan est négatif, la réserve peut être drainée
 - si la réserve ne suffit plus, la balance d’énergie devient problématique pour le reste de la ville
+
+### Paliers énergie (mode MMO difficile)
+
+Le système énergie doit être piloté par :
+
+- `L_solar` = niveau total des `building_solar_plant`
+- `L_industry` = niveau total des bâtiments de production lourde
+- `L_data` = niveau total des bâtiments IA / data
+- `E_ratio` = `energyProduction / max(1, energyConsumption)`
+
+#### Palier E0 — Survie énergétique (`E_ratio < 0.75`)
+
+- état critique
+- consommation prioritaire des services vitaux
+- fortes pénalités globales
+
+Pénalités recommandées :
+- `-30%` croissance population
+- `-20` morale
+- `-15` sécurité
+- `-25%` production non-énergie
+
+#### Palier E1 — Tension (`0.75 <= E_ratio < 1.00`)
+
+- déficit gérable à court terme
+- la réserve compense mais s’érode vite
+
+Pénalités recommandées :
+- `-12%` croissance population
+- `-8` morale
+- `-5%` production globale
+
+#### Palier E2 — Équilibre instable (`1.00 <= E_ratio < 1.20`)
+
+- état nominal de progression lente
+- aucun bonus majeur
+
+Effets recommandés :
+- croissance normale
+- pas de bonus/malus énergétique majeur
+
+#### Palier E3 — Excédent contrôlé (`1.20 <= E_ratio < 1.50`)
+
+- ville optimisée
+- bonus modérés sur économie et stabilité
+
+Bonus recommandés :
+- `+10%` production ressources
+- `+5` morale
+- `+5%` vitesse de recherche
+
+#### Palier E4 — Suprématie énergétique (`E_ratio >= 1.50`)
+
+- apex techno
+- très puissant mais coûteux à maintenir
+
+Bonus/Mécaniques recommandés :
+- `+20%` production ressources
+- `+12%` vitesse de recherche
+- surcharge : si ce palier dure > 6 ticks sans upgrade réseau, risque d’événement panne (`5%`/tick)
+
+### Coût exponentiel de montée énergétique
+
+Pour garder un MMO difficile, le coût d’entretien doit croître avec les niveaux :
+
+- consommation de base par ville : croissante avec population
+- surcharge par bâtiment haut niveau :
+  - bâtiment lvl 1-10 : surcharge faible
+  - lvl 11-20 : surcharge moyenne
+  - lvl 21+ : surcharge forte
+
+Règle recommandée :
+
+- coût énergie additionnel par bâtiment = `floor(level^1.25)`
+- au-delà du lvl 20, multiplicateur crise = `x1.2`
 
 ---
 

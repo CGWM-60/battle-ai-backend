@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/cache"
@@ -29,6 +30,69 @@ func NewWorldTickService(db *gorm.DB, redis *cache.RedisService) *WorldTickServi
 		ai:    NewServerAIService(db, redis),
 		ws:    NewWorldService(db, redis),
 	}
+}
+
+type cityTierContext struct {
+	HabitatLevelTotal   int
+	FarmLevelTotal      int
+	SecurityLevelTotal  int
+	EnergyRatio         float64
+	FoodBalance         float64
+	EnergyDeficitStreak int
+	FoodDeficitStreak   int
+}
+
+func (s *WorldTickService) updateDeficitStreak(ctx context.Context, key string, isDeficit bool) int {
+	if s.redis == nil {
+		if isDeficit {
+			return 1
+		}
+		return 0
+	}
+	if !isDeficit {
+		_ = s.redis.SetString(ctx, key, "0", 48*time.Hour)
+		return 0
+	}
+	currentStr, _, _ := s.redis.GetString(ctx, key)
+	current := 0
+	fmt.Sscanf(currentStr, "%d", &current)
+	current++
+	_ = s.redis.SetString(ctx, key, fmt.Sprintf("%d", current), 48*time.Hour)
+	return current
+}
+
+func (s *WorldTickService) loadCityTierContext(ctx context.Context, profile models.ProfileGamer) cityTierContext {
+	result := cityTierContext{}
+	if profile.EnergyConsumption > 0 {
+		result.EnergyRatio = float64(profile.EnergyProduction) / float64(profile.EnergyConsumption)
+	} else if profile.EnergyProduction > 0 {
+		result.EnergyRatio = 2.0
+	} else {
+		result.EnergyRatio = 0
+	}
+
+	var stats models.PlayerCityStats
+	if err := s.db.WithContext(ctx).Where("profile_gamer_id = ?", profile.ID).First(&stats).Error; err == nil {
+		result.FoodBalance = stats.FoodBalance
+	}
+
+	var buildings []models.PlayerBuilding
+	if err := s.db.WithContext(ctx).Where("profile_gamer_id = ? AND level > 0 AND is_constructing = ?", profile.ID, false).Find(&buildings).Error; err == nil {
+		for _, b := range buildings {
+			switch b.ContentID {
+			case "building_modular_habitat":
+				result.HabitatLevelTotal += b.Level
+			case "building_vertical_farm":
+				result.FarmLevelTotal += b.Level
+			case "building_holo_wall", "building_surveillance_tower", "building_tribunal_nexus", "building_guild_hq", "building_barracks":
+				result.SecurityLevelTotal += b.Level
+			}
+		}
+	}
+
+	result.EnergyDeficitStreak = s.updateDeficitStreak(ctx, fmt.Sprintf("nexus:profile:%d:energy_deficit_streak", profile.ID), profile.EnergyBalance < 0)
+	result.FoodDeficitStreak = s.updateDeficitStreak(ctx, fmt.Sprintf("nexus:profile:%d:food_deficit_streak", profile.ID), result.FoodBalance < 0)
+	return result
 }
 
 // RunWorldTick - call this periodically (e.g. from cron/job).
@@ -87,7 +151,8 @@ func (s *WorldTickService) RunWorldTick(ctx context.Context, worldID uint) error
 			if err := s.db.First(&profiles[i], profiles[i].ID).Error; err != nil {
 				continue
 			}
-			s.evolveCityStats(&profiles[i])
+			tierCtx := s.loadCityTierContext(ctx, profiles[i])
+			s.evolveCityStats(&profiles[i], tierCtx)
 			s.db.Save(&profiles[i])
 		}
 	}
@@ -96,23 +161,40 @@ func (s *WorldTickService) RunWorldTick(ctx context.Context, worldID uint) error
 	return nil
 }
 
-// evolveCityStats applies the evolutionary rules for Population, Morale, Energy, Security.
-// Formulas from spec: growth with factors, decline, deltas, clamp, priorities, relations.
-// Called per tick for profiles in the world.
-func (s *WorldTickService) evolveCityStats(p *models.ProfileGamer) {
+// evolveCityStats applies hard MMO tier rules for Population, Morale, Energy and Security.
+// Tiers are driven by building levels + energy pressure and are server-authoritative.
+func (s *WorldTickService) evolveCityStats(p *models.ProfileGamer, ctx cityTierContext) {
+	energyTier := "E2"
+	energyFactor := 1.0
+	if ctx.EnergyRatio < 0.75 {
+		energyTier = "E0"
+		energyFactor = 0.45
+	} else if ctx.EnergyRatio < 1.0 {
+		energyTier = "E1"
+		energyFactor = 0.75
+	} else if ctx.EnergyRatio < 1.2 {
+		energyTier = "E2"
+		energyFactor = 1.0
+	} else if ctx.EnergyRatio < 1.5 {
+		energyTier = "E3"
+		energyFactor = 1.10
+	} else {
+		energyTier = "E4"
+		energyFactor = 1.20
+	}
+
 	if p.PopulationCapacity > 0 {
 		baseGrowth := 10
 		housingFactor := 1.0
-		if p.PopulationCapacity > 0 {
-			free := float64(p.PopulationCapacity-p.Population) / float64(p.PopulationCapacity)
-			if free > 0.5 {
-				housingFactor = 1.2
-			} else if free < 0.1 {
-				housingFactor = 0.2
-			} else if free <= 0 {
-				housingFactor = 0
-			}
+		free := float64(p.PopulationCapacity-p.Population) / float64(p.PopulationCapacity)
+		if free > 0.5 {
+			housingFactor = 1.2
+		} else if free < 0.1 {
+			housingFactor = 0.2
+		} else if free <= 0 {
+			housingFactor = 0
 		}
+
 		foodFactor := 1.0
 		if p.Morale < 25 {
 			foodFactor = -1.0
@@ -135,16 +217,49 @@ func (s *WorldTickService) evolveCityStats(p *models.ProfileGamer) {
 		} else if p.Security < 50 {
 			securityFactor = 0.5
 		}
-		energyFactor := 1.0
-		if p.EnergyBalance < 0 {
-			energyFactor = 0.6
-		}
-		if p.EnergyBalance < -20 {
-			energyFactor = -0.7
-		}
-		weatherFactor := 1.0 // stub, integrate real weather later
 
-		growth := int(float64(baseGrowth) * housingFactor * foodFactor * moraleFactor * securityFactor * energyFactor * weatherFactor)
+		// Population tier by modular habitat level (hard MMO progression curve)
+		populationTierMultiplier := 1.0
+		popLoadRatio := 0.0
+		if p.PopulationCapacity > 0 {
+			popLoadRatio = float64(p.Population) / float64(p.PopulationCapacity)
+		}
+		switch {
+		case ctx.HabitatLevelTotal >= 21:
+			populationTierMultiplier = 1.40
+			if ctx.EnergyDeficitStreak >= 2 && p.Population > 0 {
+				p.Population = int(math.Max(0, float64(p.Population)*0.98))
+			}
+			if ctx.FoodDeficitStreak >= 2 && p.Population > 0 {
+				p.Population = int(math.Max(0, float64(p.Population)*0.97))
+			}
+		case ctx.HabitatLevelTotal >= 13:
+			populationTierMultiplier = 1.25
+			if p.Security < 45 {
+				populationTierMultiplier *= 0.70
+			}
+		case ctx.HabitatLevelTotal >= 6:
+			populationTierMultiplier = 1.12
+			if popLoadRatio > 0.90 {
+				populationTierMultiplier *= 0.75
+			}
+		default:
+			populationTierMultiplier = 1.00
+			if popLoadRatio > 0.85 {
+				populationTierMultiplier *= 0.65
+			}
+		}
+
+		// Synergies (hard requirements)
+		if ctx.HabitatLevelTotal > 0 && ctx.FarmLevelTotal*2 < ctx.HabitatLevelTotal {
+			populationTierMultiplier *= 0.85
+		}
+		if ctx.HabitatLevelTotal > 0 && ctx.SecurityLevelTotal*3 < ctx.HabitatLevelTotal {
+			populationTierMultiplier *= 0.90
+		}
+
+		weatherFactor := 1.0
+		growth := int(float64(baseGrowth) * housingFactor * foodFactor * moraleFactor * securityFactor * energyFactor * weatherFactor * populationTierMultiplier)
 
 		decline := 0
 		if p.Morale < 25 {
@@ -155,6 +270,11 @@ func (s *WorldTickService) evolveCityStats(p *models.ProfileGamer) {
 		}
 		if p.EnergyBalance < -10 {
 			decline += 3
+		}
+		if energyTier == "E0" {
+			decline += 4
+		} else if energyTier == "E1" {
+			decline += 2
 		}
 
 		newPop := p.Population + growth - decline
@@ -182,10 +302,18 @@ func (s *WorldTickService) evolveCityStats(p *models.ProfileGamer) {
 	if p.Population > p.PopulationCapacity {
 		moraleDelta -= 3
 	}
+	if energyTier == "E0" {
+		moraleDelta -= 8
+	} else if energyTier == "E1" {
+		moraleDelta -= 4
+	} else if energyTier == "E3" {
+		moraleDelta += 2
+	} else if energyTier == "E4" {
+		moraleDelta += 4
+	}
 	p.Morale = clamp(p.Morale+moraleDelta, 0, 100)
 
 	// Energy - use real production/consumption from SyncBuildingProduction (already set on profile).
-	// Just recompute balance and handle stored energy drain.
 	if p.EnergyProduction > 0 || p.EnergyConsumption > 0 {
 		p.EnergyBalance = p.EnergyProduction - p.EnergyConsumption
 		if p.EnergyBalance < 0 && p.EnergyStored > 0 {
@@ -210,6 +338,18 @@ func (s *WorldTickService) evolveCityStats(p *models.ProfileGamer) {
 	}
 	if p.Population > p.PopulationCapacity*2/3 {
 		secDelta -= 1
+	}
+	if energyTier == "E0" {
+		secDelta -= 6
+	} else if energyTier == "E1" {
+		secDelta -= 3
+	} else if energyTier == "E3" {
+		secDelta += 1
+	} else if energyTier == "E4" {
+		secDelta += 2
+	}
+	if ctx.HabitatLevelTotal > 0 && ctx.SecurityLevelTotal*3 < ctx.HabitatLevelTotal {
+		secDelta -= 5
 	}
 	p.Security = clamp(p.Security+secDelta, 0, 100)
 

@@ -403,28 +403,57 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 		}
 	}
 
+	habitatLevelTotal := 0
+	farmLevelTotal := 0
+	solarLevelTotal := 0
+	industryLevelTotal := 0
+	dataLevelTotal := 0
+	buildingEnergySurcharge := 0
+
 	for _, building := range buildings {
+		if building.Level <= 0 {
+			continue
+		}
 		local := newProductionAccumulator()
 		def, ok := definitionsByContentID[building.ContentID]
 		if !ok || strings.TrimSpace(def.EffectsJSON) == "" {
 			applyStarterFallbackProduction(&local, building)
 			mergeProductionAccumulator(&acc, local)
-			continue
+		} else {
+			var effects []buildingEffect
+			if err := json.Unmarshal([]byte(def.EffectsJSON), &effects); err != nil {
+				applyStarterFallbackProduction(&local, building)
+				mergeProductionAccumulator(&acc, local)
+			} else {
+				applyBuildingEffects(&local, effects, building.Level)
+				if bonusEffects := mods.BuildingBonuses[strings.ToLower(building.ContentID)]; len(bonusEffects) > 0 {
+					applyResearchBuildingBonuses(&local, bonusEffects, building.Level)
+				}
+				if bonusEffects := mods.BuildingBonuses["all"]; len(bonusEffects) > 0 {
+					applyResearchBuildingBonuses(&local, bonusEffects, building.Level)
+				}
+				mergeProductionAccumulator(&acc, local)
+			}
 		}
-		var effects []buildingEffect
-		if err := json.Unmarshal([]byte(def.EffectsJSON), &effects); err != nil {
-			applyStarterFallbackProduction(&local, building)
-			mergeProductionAccumulator(&acc, local)
-			continue
+
+		surcharge := int(math.Floor(math.Pow(float64(building.Level), 1.25)))
+		if building.Level > 20 {
+			surcharge = int(math.Floor(float64(surcharge) * 1.2))
 		}
-		applyBuildingEffects(&local, effects, building.Level)
-		if bonusEffects := mods.BuildingBonuses[strings.ToLower(building.ContentID)]; len(bonusEffects) > 0 {
-			applyResearchBuildingBonuses(&local, bonusEffects, building.Level)
+		buildingEnergySurcharge += surcharge
+
+		switch building.ContentID {
+		case "building_modular_habitat":
+			habitatLevelTotal += building.Level
+		case "building_vertical_farm":
+			farmLevelTotal += building.Level
+		case "building_solar_plant":
+			solarLevelTotal += building.Level
+		case "building_composite_mine", "building_quantum_refinery", "building_drone_factory", "building_logistic_station":
+			industryLevelTotal += building.Level
+		case "building_ai_center", "building_research_lab", "building_data_bank", "building_world_relay":
+			dataLevelTotal += building.Level
 		}
-		if bonusEffects := mods.BuildingBonuses["all"]; len(bonusEffects) > 0 {
-			applyResearchBuildingBonuses(&local, bonusEffects, building.Level)
-		}
-		mergeProductionAccumulator(&acc, local)
 	}
 
 	if acc.EnergyProduction <= 0 {
@@ -435,9 +464,35 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 
 	foodConsumption := math.Max(0, float64(profile.Population)*0.08)
 	energyConsumption := 5 + max(0, profile.Population/20)
+	energyConsumption += buildingEnergySurcharge
+	energyConsumption += max(0, industryLevelTotal*2+dataLevelTotal-solarLevelTotal)
+	if habitatLevelTotal > 0 && farmLevelTotal*2 < habitatLevelTotal {
+		energyConsumption += max(1, habitatLevelTotal/3)
+	}
 	acc.EnergyConsumption = energyConsumption
 	acc.ResourceConsumption["food"] = foodConsumption
 	acc.ResourceConsumption["energy"] = float64(energyConsumption)
+
+	energyRatio := float64(acc.EnergyProduction) / math.Max(1, float64(acc.EnergyConsumption))
+	resourceMultiplier := 1.0
+	switch {
+	case energyRatio < 0.75:
+		resourceMultiplier = 0.75
+	case energyRatio < 1.0:
+		resourceMultiplier = 0.95
+	case energyRatio < 1.2:
+		resourceMultiplier = 1.0
+	case energyRatio < 1.5:
+		resourceMultiplier = 1.10
+	default:
+		resourceMultiplier = 1.20
+	}
+	for code, value := range acc.ResourceProduction {
+		if code == "energy" {
+			continue
+		}
+		acc.ResourceProduction[code] = value * resourceMultiplier
+	}
 
 	if acc.PopulationCapacity < profile.Population {
 		acc.PopulationCapacity = profile.Population
