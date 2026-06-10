@@ -8,6 +8,8 @@ import (
 
 	"cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/nexus_game/models"
+	saimodels "cgwm/battle/internal/nexus_game/server_ai/models"
+	saiservices "cgwm/battle/internal/nexus_game/server_ai/services"
 
 	"gorm.io/gorm"
 )
@@ -33,9 +35,27 @@ func NewServerAIService(db *gorm.DB, redis *cache.RedisService) *ServerAIService
 func (s *ServerAIService) logAICall(ctx context.Context, feature, promptVersion string, tokensIn, tokensOut int, latencyMs int64, status, linkedType string, linkedID uint) {
 	// Use Redis for fast log or persist to DB.
 	key := fmt.Sprintf("nexus:ai:log:%d", time.Now().UnixNano())
-	s.redis.SetString(ctx, key, fmt.Sprintf("feature=%s version=%s tokens=%d/%d latency=%d status=%s linked=%s:%d",
-		feature, promptVersion, tokensIn, tokensOut, latencyMs, status, linkedType, linkedID), 24*time.Hour)
-	// In prod, also INSERT to ai_logs table.
+	if s.redis != nil {
+		_ = s.redis.SetString(ctx, key, fmt.Sprintf("feature=%s version=%s tokens=%d/%d latency=%d status=%s linked=%s:%d",
+			feature, promptVersion, tokensIn, tokensOut, latencyMs, status, linkedType, linkedID), 24*time.Hour)
+	}
+	if s.db != nil {
+		_ = saiservices.NewService(s.db).LogCall(ctx, saimodels.ServerAICallLog{
+			Feature:       feature,
+			Provider:      "local",
+			Model:         "server_ai_stub",
+			PromptKey:     feature,
+			PromptVersion: 1,
+			InputSummary:  linkedType,
+			OutputSummary: status,
+			TokensIn:      tokensIn,
+			TokensOut:     tokensOut,
+			LatencyMs:     latencyMs,
+			Status:        status,
+			LinkedType:    linkedType,
+			LinkedID:      linkedID,
+		})
+	}
 }
 
 // GenerateQuestSeed - transforms player quest report or world state into controlled quest seed.
@@ -71,17 +91,17 @@ Evolve based on universe: make it fit current day tensions.`, playerReport, regi
 	// For demo, return enriched stub. (prompt var used in real call)
 	_ = prompt
 	seed := map[string]interface{}{
-		"title":                "Echoes of the Fractured Spire",
-		"summary":              "Detailed enriching summary based on player report and current world state: the ancient spire whispers secrets of lost factions, drawing adventurers into moral dilemmas that could shift regional power.",
-		"regionId":             regionID,
-		"type":                 "world",
-		"difficulty":           "5",
-		"hooks":                []string{"Explore the whispering ruins for lore fragments", "Negotiate with local spirits for alliance"},
-		"allowedOutcomes":      []string{"Success: uncover canon lore, +prestige", "Failure: spawn minor rumor with risk"},
-		"maxRewards":           map[string]int{"xp": 120, "resources": 40},
-		"worldImpactRules":     map[string]int{"max_faction_tension": 3},
+		"title":                 "Echoes of the Fractured Spire",
+		"summary":               "Detailed enriching summary based on player report and current world state: the ancient spire whispers secrets of lost factions, drawing adventurers into moral dilemmas that could shift regional power.",
+		"regionId":              regionID,
+		"type":                  "world",
+		"difficulty":            "5",
+		"hooks":                 []string{"Explore the whispering ruins for lore fragments", "Negotiate with local spirits for alliance"},
+		"allowedOutcomes":       []string{"Success: uncover canon lore, +prestige", "Failure: spawn minor rumor with risk"},
+		"maxRewards":            map[string]int{"xp": 120, "resources": 40},
+		"worldImpactRules":      map[string]int{"max_faction_tension": 3},
 		"requiredPrerequisites": []string{},
-		"prompt_version":       promptVersion,
+		"prompt_version":        promptVersion,
 	}
 
 	latency := time.Since(start).Milliseconds()
@@ -98,14 +118,14 @@ func (s *ServerAIService) GenerateWorldEvent(ctx context.Context, worldState map
 	promptVersion := "v1.1-world-event-optimized"
 	// ... similar detailed prompt ...
 	event := map[string]interface{}{
-		"type":        "weather_anomaly",
-		"title":       "The Veiled Tempest over Eurasia",
-		"summary":     "Enriching narrative: Storms carry echoes of ancient betrayals, forcing factions to unite or fracture. Constructive for lore growth.",
-		"duration_h":  6,
-		"difficulty":  6,
-		"rewards_cap": map[string]int{"xp": 200},
+		"type":           "weather_anomaly",
+		"title":          "The Veiled Tempest over Eurasia",
+		"summary":        "Enriching narrative: Storms carry echoes of ancient betrayals, forcing factions to unite or fracture. Constructive for lore growth.",
+		"duration_h":     6,
+		"difficulty":     6,
+		"rewards_cap":    map[string]int{"xp": 200},
 		"prompt_version": promptVersion,
-		"world_id":    worldID,
+		"world_id":       worldID,
 	}
 	latency := time.Since(start).Milliseconds()
 	s.logAICall(ctx, "event_generation", promptVersion, 90, 60, latency, "success", "world_event", 0)
@@ -126,10 +146,10 @@ func (s *ServerAIService) GenerateLivingLore(ctx context.Context, sourceType str
 	promptVersion := "v1.0-living-lore-enriched"
 	_ = fmt.Sprintf("System: Generate enriching Living Lore entry from source. Detailed, constructive, fit universe state: %v", worldState)
 	lore := map[string]interface{}{
-		"title":         "The Whispered Betrayal in Eurasia",
-		"content":       "Enriching lore text based on player contributions and current tensions: ancient pacts broken, new alliances forming. Evolves daily with world events.",
-		"source_type":   sourceType,
-		"canon_level":   "local_canon",
+		"title":          "The Whispered Betrayal in Eurasia",
+		"content":        "Enriching lore text based on player contributions and current tensions: ancient pacts broken, new alliances forming. Evolves daily with world events.",
+		"source_type":    sourceType,
+		"canon_level":    "local_canon",
 		"prompt_version": promptVersion,
 	}
 	latency := time.Since(start).Milliseconds()
@@ -144,11 +164,11 @@ func (s *ServerAIService) PrepareTribunalCase(ctx context.Context, conflictData 
 	start := time.Now()
 	promptVersion := "v1.0-tribunal-prep"
 	caseData := map[string]interface{}{
-		"title":       "Faction Dispute over Resource Crisis",
-		"accusation":  "Detailed accusation based on logs and contributions.",
-		"defense":     "Enriching defense narrative.",
+		"title":                 "Faction Dispute over Resource Crisis",
+		"accusation":            "Detailed accusation based on logs and contributions.",
+		"defense":               "Enriching defense narrative.",
 		"proposed_consequences": []string{"reputation loss", "temporary sanctions"},
-		"prompt_version": promptVersion,
+		"prompt_version":        promptVersion,
 	}
 	latency := time.Since(start).Milliseconds()
 	s.logAICall(ctx, "tribunal_bridge", promptVersion, 100, 120, latency, "success", "conflict", 0)
@@ -182,7 +202,10 @@ func (s *ServerAIService) StoreAIOutput(ctx context.Context, output map[string]i
 
 	// Also to Redis for quick access (last 100)
 	key := "nexus:ai:outputs"
-	existing, _, _ := s.redis.GetString(ctx, key)
+	existing := ""
+	if s.redis != nil {
+		existing, _, _ = s.redis.GetString(ctx, key)
+	}
 	var list []map[string]interface{}
 	if existing != "" {
 		json.Unmarshal([]byte(existing), &list)
@@ -194,6 +217,9 @@ func (s *ServerAIService) StoreAIOutput(ctx context.Context, output map[string]i
 		list = list[len(list)-100:]
 	}
 	data, _ := json.Marshal(list)
+	if s.redis == nil {
+		return nil
+	}
 	return s.redis.SetString(ctx, key, string(data), 0)
 }
 
@@ -219,6 +245,9 @@ func (s *ServerAIService) GetAIOutputs(ctx context.Context) ([]map[string]interf
 
 	// Fallback to Redis
 	key := "nexus:ai:outputs"
+	if s.redis == nil {
+		return []map[string]interface{}{}, nil
+	}
 	data, ok, err := s.redis.GetString(ctx, key)
 	if err != nil || !ok || data == "" {
 		return []map[string]interface{}{}, nil
@@ -305,17 +334,17 @@ func (s *ServerAIService) RunAIGeneration(ctx context.Context, feature string, w
 	// Stub generation (enrichie avec référence au prompt utilisé). En prod: appel réel Mistral/OpenAI + parsing.
 	// Le texte généré est toujours "textuel" et persiste pour l'affichage admin.
 	generated := map[string]interface{}{
-		"feature":        feature,
-		"world_id":       worldID,
-		"prompt_version": promptVersion,
-		"used_prompt_id": usedPromptID,
-		"generated_at":   time.Now().UTC().Format(time.RFC3339),
-		"title":          fmt.Sprintf("[%s] %s (via %s)", feature, "Génération IA serveur", promptVersion),
-		"summary":        fmt.Sprintf("Sortie enrichissante construite avec le prompt manuel/admin. Extrait système: %s... Contexte monde intégré. Impact limité (politiques respectées).", truncateForLog(systemPrompt, 120)),
-		"details":        "Contenu détaillé (hooks lore, outcomes, conséquences constructives) serait produit par le LLM avec le prompt sélectionné. Évolue avec l'état du monde.",
+		"feature":                  feature,
+		"world_id":                 worldID,
+		"prompt_version":           promptVersion,
+		"used_prompt_id":           usedPromptID,
+		"generated_at":             time.Now().UTC().Format(time.RFC3339),
+		"title":                    fmt.Sprintf("[%s] %s (via %s)", feature, "Génération IA serveur", promptVersion),
+		"summary":                  fmt.Sprintf("Sortie enrichissante construite avec le prompt manuel/admin. Extrait système: %s... Contexte monde intégré. Impact limité (politiques respectées).", truncateForLog(systemPrompt, 120)),
+		"details":                  "Contenu détaillé (hooks lore, outcomes, conséquences constructives) serait produit par le LLM avec le prompt sélectionné. Évolue avec l'état du monde.",
 		"effective_prompt_snippet": truncateForLog(effective, 300),
-		"extra":          extraInput,
-		"status":         "success",
+		"extra":                    extraInput,
+		"status":                   "success",
 	}
 
 	latency := time.Since(start).Milliseconds()

@@ -5,6 +5,7 @@ import (
 	"cgwm/battle/internal/nexus_game/handlers"
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/seeds"
+	serverairoutes "cgwm/battle/internal/nexus_game/server_ai/routes"
 	"cgwm/battle/internal/nexus_game/services"
 	"context"
 	"io"
@@ -106,6 +107,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 			&models.ResourceCatalog{}, &models.PlayerResource{}, &models.PlayerCityStats{},
 			&models.ResourceTransaction{}, &models.DailyGrantClaim{}, &models.DailyGrantConfig{},
 			&models.InitialAllocationLog{})
+		_ = serverairoutes.AutoMigrate(database)
 
 		// Seed initial content for dev (full reference v2.0: buildings, units, research).
 		// In prod: use admin CRUD + asset upload for the complete catalogs.
@@ -114,6 +116,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 		_ = seeds.SeedInitialUnits(database, contentSvc)
 		_ = seeds.SeedInitialResearch(database, contentSvc)
 		_ = services.NewResourceService(database).SeedDefaults(context.Background())
+		_ = serverairoutes.SeedDefaults(database)
 		// Full catalogue from reference v2.0 seeded for buildings (20), units (15), research (11 branches x7). Use admin to add/update images and data.
 	}
 
@@ -194,6 +197,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/daily-grant/status", resourceH.DailyGrantStatus)
 	group.POST("/daily-grant/claim", resourceH.DailyGrantClaim)
 	group.GET("/daily-grant/history", resourceH.DailyGrantHistory)
+	serverairoutes.Register(group, database)
 
 	// Content system (Buildings first, extensible to Units/Research per NEXUS GAME CONTENT REFERENCE v2.0).
 	// Admin CRUD + asset upload (images served by this server after upload).

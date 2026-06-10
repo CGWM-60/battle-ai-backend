@@ -83,3 +83,47 @@ func TestRegisterRoutesMountsContentCRUDRoutes(t *testing.T) {
 		}
 	}
 }
+
+func TestRegisterRoutesMountsServerAIRoutes(t *testing.T) {
+	t.Setenv("REDIS_URL", "")
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	RegisterRoutes(router, nil)
+
+	mounted := make(map[string]bool)
+	for _, route := range router.Routes() {
+		mounted[route.Method+" "+route.Path] = true
+	}
+
+	expected := []string{
+		"GET /api/nexus-game/ai-server/cities",
+		"GET /api/nexus-game/ai-server/threat-level",
+		"GET /api/nexus-game/ai-server/attacks",
+		"GET /api/nexus-game/ai-server/daily-broadcast",
+		"GET /api/nexus-game/seasonal-events/active",
+		"GET /api/nexus-game/admin/ai-server/dashboard",
+		"POST /api/nexus-game/admin/ai-server/worlds/:worldId/ensure-cities",
+		"GET /api/nexus-game/admin/ai-server/cities",
+		"GET /api/nexus-game/admin/ai-server/memory",
+		"GET /api/nexus-game/admin/ai-server/player-memory",
+		"GET /api/nexus-game/admin/ai-server/attacks",
+		"POST /api/nexus-game/admin/ai-server/attacks/schedule",
+		"GET /api/nexus-game/admin/ai-server/sabotages",
+		"GET /api/nexus-game/admin/ai-server/espionage",
+		"GET /api/nexus-game/admin/ai-server/broadcasts",
+		"POST /api/nexus-game/admin/ai-server/broadcasts/generate",
+		"GET /api/nexus-game/admin/ai-server/prompts",
+		"POST /api/nexus-game/admin/ai-server/prompts/seed",
+		"GET /api/nexus-game/admin/ai-server/call-logs",
+		"GET /api/nexus-game/admin/ai-server/costs",
+		"GET /api/nexus-game/admin/seasonal-events",
+		"POST /api/nexus-game/admin/seasonal-events/propose-by-ai",
+	}
+
+	for _, route := range expected {
+		if !mounted[route] {
+			t.Fatalf("%s was not mounted", route)
+		}
+	}
+}
