@@ -298,8 +298,9 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/worlds/:id", worldH.GetWorld)
 	group.GET("/worlds/:id/players", worldH.ListPlayersByWorld)
 	group.GET("/continents", worldH.ListContinents)
-	group.POST("/worlds/:id/generate-event", worldH.GenerateWorldEvent) // IA serveur trigger for gestion des world
-	group.POST("/worlds/:id/trigger-tick", worldH.TriggerWorldTick)     // Integration point for World Tick with IA
+	group.POST("/worlds/:id/generate-event", worldH.GenerateWorldEvent)   // IA serveur trigger for gestion des world
+	group.POST("/worlds/:id/trigger-tick", worldH.TriggerWorldTick)       // Integration point for World Tick with IA
+	group.POST("/worlds/:id/sync-production", worldH.SyncWorldProduction) // Manual: sync building production + complete ready constructions
 
 	// Prompt CRUD for IA serveur (modifiable in world management "gestion des world").
 	// GET /prompts?domain=... -> list versioned optimized prompts

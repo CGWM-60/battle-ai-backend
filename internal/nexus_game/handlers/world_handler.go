@@ -267,3 +267,58 @@ func (h *WorldHandler) RunAIGeneration(c *gin.Context) {
 		"note":        "Output persisted to ai_outputs (GORM DB + Redis). Visible in IA Outputs admin page and in-tab history. Uses the exact manual prompt SystemPrompt when provided.",
 	})
 }
+
+// SyncWorldProduction - admin manual trigger: re-sync production for all profiles
+// in a world (or all worlds if world_id=0). Also completes any ready constructions.
+// POST /admin/worlds/:id/sync-production  (id=0 → all worlds)
+func (h *WorldHandler) SyncWorldProduction(c *gin.Context) {
+	idStr := c.Param("id")
+	worldID, _ := strconv.Atoi(idStr)
+
+	ctx := c.Request.Context()
+	resourceSvc := services.NewResourceService(h.db)
+	contentSvc := services.NewContentService(h.db, "")
+
+	var profiles []models.ProfileGamer
+	query := h.db.WithContext(ctx)
+	if worldID > 0 {
+		query = query.Where("world_id = ?", worldID)
+	}
+	if err := query.Find(&profiles).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	synced := 0
+	completedBuildings := 0
+	errs := []string{}
+
+	for _, p := range profiles {
+		// Complete ready constructions first
+		var buildings []models.PlayerBuilding
+		if err := h.db.Where("profile_gamer_id = ? AND is_constructing = ?", p.ID, true).Find(&buildings).Error; err == nil {
+			for i := range buildings {
+				done, err := contentSvc.CompleteConstructionIfReady(&buildings[i])
+				if err != nil {
+					errs = append(errs, err.Error())
+				} else if done {
+					completedBuildings++
+				}
+			}
+		}
+
+		if err := resourceSvc.SyncBuildingProduction(ctx, p.ID, true); err != nil {
+			errs = append(errs, err.Error())
+		} else {
+			synced++
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"synced_profiles":     synced,
+		"completed_buildings": completedBuildings,
+		"errors":              errs,
+		"world_id":            worldID,
+		"note":                "Production synced from EffectsJSON of completed buildings. Accrual applied since last sync.",
+	})
+}

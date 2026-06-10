@@ -408,6 +408,60 @@ export default function NexusWorldControlPage() {
       </section>
 
       <section className="panel">
+        <h2>Actions manuelles (sans cron)</h2>
+        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>
+          Déclenchez les actions serveur manuellement. A utiliser jusqu'à la mise en place d'un cron/scheduler.
+        </p>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {state.worlds.map((world: any) => (
+            <div key={world.id} style={{ display: "flex", gap: 6, alignItems: "center", border: "1px solid #e2e8f0", borderRadius: 8, padding: "8px 12px" }}>
+              <strong style={{ fontSize: 13 }}>{world.name || `Monde #${world.id}`}</strong>
+              <button
+                type="button"
+                style={{ padding: "5px 10px", fontSize: 12, background: "#0f172a", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}
+                onClick={async () => {
+                  setManualError("");
+                  const r = await fetch(`${API_BASE}/api/nexus-game/worlds/${world.id}/trigger-tick`, { method: "POST", credentials: "same-origin" });
+                  const txt = await r.text();
+                  setManualError(`[Tick ${world.name || world.id}] ${r.ok ? "OK" : "Erreur"}: ${txt.slice(0, 200)}`);
+                  load();
+                }}
+              >
+                Tick Monde
+              </button>
+              <button
+                type="button"
+                style={{ padding: "5px 10px", fontSize: 12, background: "#16a34a", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}
+                onClick={async () => {
+                  setManualError("");
+                  const r = await fetch(`${API_BASE}/api/nexus-game/worlds/${world.id}/sync-production`, { method: "POST", credentials: "same-origin" });
+                  const txt = await r.text();
+                  setManualError(`[Sync Prod ${world.name || world.id}] ${r.ok ? "OK" : "Erreur"}: ${txt.slice(0, 300)}`);
+                  load();
+                }}
+              >
+                Sync Production
+              </button>
+              <button
+                type="button"
+                style={{ padding: "5px 10px", fontSize: 12, background: "#7c3aed", color: "white", border: "none", borderRadius: 6, cursor: "pointer" }}
+                onClick={async () => {
+                  setManualError("");
+                  const r = await fetch(`${API_BASE}/api/nexus-game/worlds/${world.id}/generate-event`, { method: "POST", credentials: "same-origin" });
+                  const txt = await r.text();
+                  setManualError(`[Event ${world.name || world.id}] ${r.ok ? "OK" : "Erreur"}: ${txt.slice(0, 300)}`);
+                  load();
+                }}
+              >
+                Générer Événement IA
+              </button>
+            </div>
+          ))}
+          {state.worlds.length === 0 ? <p style={{ fontSize: 12, color: "#94a3b8" }}>Aucun monde chargé.</p> : null}
+        </div>
+      </section>
+
+      <section className="panel">
         <h2>Postes de controle Nexus World</h2>
         <div className="quick-grid control-links">
           {commandLinks.map((link) => (

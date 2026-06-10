@@ -77,18 +77,20 @@ func (s *WorldTickService) RunWorldTick(ctx context.Context, worldID uint) error
 		// In real: persist event, notify via notifications.
 	}
 
-	// Evolve evolutionary base stats for player profiles (population, morale, energy, security)
-	// per the detailed rules (growth/decline formulas, factors, priorities, relations, paliers).
+	// Sync building production for all profiles in the world (accrual + per-tick rates)
+	resourceSvc := NewResourceService(s.db)
 	var profiles []models.ProfileGamer
 	if err := s.db.Where("world_id = ?", worldID).Find(&profiles).Error; err == nil {
 		for i := range profiles {
+			_ = resourceSvc.SyncBuildingProduction(ctx, profiles[i].ID, true)
+			// Re-fetch updated profile (production sync may have updated energy balance etc.)
+			if err := s.db.First(&profiles[i], profiles[i].ID).Error; err != nil {
+				continue
+			}
 			s.evolveCityStats(&profiles[i])
 			s.db.Save(&profiles[i])
 		}
 	}
-
-	// Persist log or update world.
-	// TODO: full production/consumption using existing engines if integrated.
 
 	fmt.Printf("[WORLD_TICK] Tick for world %d completed.\n", worldID)
 	return nil
@@ -182,9 +184,9 @@ func (s *WorldTickService) evolveCityStats(p *models.ProfileGamer) {
 	}
 	p.Morale = clamp(p.Morale+moraleDelta, 0, 100)
 
-	// Energy - simple evolution (production/consumption stub; full from buildings later)
-	if p.EnergyProduction > 0 {
-		p.EnergyConsumption += 1 // stub consumption growth
+	// Energy - use real production/consumption from SyncBuildingProduction (already set on profile).
+	// Just recompute balance and handle stored energy drain.
+	if p.EnergyProduction > 0 || p.EnergyConsumption > 0 {
 		p.EnergyBalance = p.EnergyProduction - p.EnergyConsumption
 		if p.EnergyBalance < 0 && p.EnergyStored > 0 {
 			drain := -p.EnergyBalance
