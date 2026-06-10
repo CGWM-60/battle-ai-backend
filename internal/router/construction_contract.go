@@ -20,16 +20,18 @@ import (
 
 // ConstructionJobDTO is the canonical queue item returned by construction endpoints.
 type ConstructionJobDTO struct {
-	ID          string     `json:"id"`
-	BuildingKey string     `json:"buildingKey"`
-	BuildingID  string     `json:"buildingId,omitempty"`
-	FromLevel   int        `json:"fromLevel"`
-	TargetLevel int        `json:"targetLevel"`
-	Type        string     `json:"type"`   // construct | upgrade
-	Status      string     `json:"status"` // queued | in_progress | completed | cancelled
-	QueuedAt    *time.Time `json:"queuedAt,omitempty"`
-	StartedAt   *time.Time `json:"startedAt,omitempty"`
-	CompletedAt *time.Time `json:"completedAt,omitempty"`
+	ID              string     `json:"id"`
+	BuildingKey     string     `json:"buildingKey"`
+	BuildingID      string     `json:"buildingId,omitempty"`
+	FromLevel       int        `json:"fromLevel"`
+	TargetLevel     int        `json:"targetLevel"`
+	Type            string     `json:"type"`   // construct | upgrade
+	Status          string     `json:"status"` // queued | in_progress | completed | cancelled
+	DurationSeconds int64      `json:"durationSeconds,omitempty"`
+	DurationMinutes int64      `json:"durationMinutes,omitempty"`
+	QueuedAt        *time.Time `json:"queuedAt,omitempty"`
+	StartedAt       *time.Time `json:"startedAt,omitempty"`
+	CompletedAt     *time.Time `json:"completedAt,omitempty"`
 }
 
 // ConstructionQueueResponse is shared by all 6 endpoints to keep Flutter sync simple.
@@ -132,15 +134,17 @@ func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm
 
 			jobID := fmt.Sprintf("c_%d", now.UnixNano())
 			job := ConstructionJobDTO{
-				ID:          jobID,
-				BuildingKey: strings.TrimSpace(input.BuildingKey),
-				FromLevel:   fromLevel,
-				TargetLevel: input.TargetLevel,
-				Type:        "construct",
-				Status:      status,
-				QueuedAt:    ptrTime(now),
-				StartedAt:   startedAt,
-				CompletedAt: completedAt,
+				ID:              jobID,
+				BuildingKey:     strings.TrimSpace(input.BuildingKey),
+				FromLevel:       fromLevel,
+				TargetLevel:     input.TargetLevel,
+				Type:            "construct",
+				Status:          status,
+				DurationSeconds: int64(duration.Seconds()),
+				DurationMinutes: int64(duration / time.Minute),
+				QueuedAt:        ptrTime(now),
+				StartedAt:       startedAt,
+				CompletedAt:     completedAt,
 			}
 			jobs = append(jobs, job)
 
@@ -193,6 +197,8 @@ func registerConstructionContractRoutes(private *gin.RouterGroup, database *gorm
 			if err != nil {
 				return err
 			}
+			job.DurationSeconds = int64(duration.Seconds())
+			job.DurationMinutes = int64(duration / time.Minute)
 			job.StartedAt = ptrTime(now)
 			end := now.Add(duration)
 			job.CompletedAt = ptrTime(end)
@@ -900,8 +906,15 @@ func reconcileConstructionQueueSchedule(tx *gorm.DB, jobs []ConstructionJobDTO, 
 				if err != nil {
 					return nil, err
 				}
+				jobs[i].DurationSeconds = int64(duration.Seconds())
+				jobs[i].DurationMinutes = int64(duration / time.Minute)
 				end := jobs[i].StartedAt.UTC().Add(duration)
 				jobs[i].CompletedAt = ptrTime(end)
+			}
+			if jobs[i].DurationSeconds <= 0 && jobs[i].StartedAt != nil && jobs[i].CompletedAt != nil {
+				duration := jobs[i].CompletedAt.Sub(*jobs[i].StartedAt)
+				jobs[i].DurationSeconds = int64(duration.Seconds())
+				jobs[i].DurationMinutes = int64(duration / time.Minute)
 			}
 			jobs[i].Status = "in_progress"
 			activeTeams++
@@ -925,6 +938,8 @@ func reconcileConstructionQueueSchedule(tx *gorm.DB, jobs []ConstructionJobDTO, 
 			return nil, err
 		}
 		jobs[i].Status = "in_progress"
+		jobs[i].DurationSeconds = int64(duration.Seconds())
+		jobs[i].DurationMinutes = int64(duration / time.Minute)
 		jobs[i].StartedAt = ptrTime(now)
 		end := now.Add(duration)
 		jobs[i].CompletedAt = ptrTime(end)

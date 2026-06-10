@@ -29,14 +29,90 @@ type ArmyTrainInput struct {
 	Quantity int    `json:"quantity"`
 }
 
+type ArmyUnitCatalogItem struct {
+	UnitType                string           `json:"unitType"`
+	Name                    string           `json:"name"`
+	Description             string           `json:"description"`
+	Role                    string           `json:"role"`
+	RequiredBarracksLevel   int              `json:"requiredBarracksLevel"`
+	TrainingDurationSeconds int              `json:"trainingDurationSeconds"`
+	TrainingDurationMinutes int              `json:"trainingDurationMinutes"`
+	TrainingCost            map[string]int64 `json:"trainingCost"`
+	UpkeepPerHour           map[string]int64 `json:"upkeepPerHour"`
+	Stats                   map[string]int   `json:"stats"`
+	Constraints             map[string]any   `json:"constraints"`
+}
+
+type ArmyUnitCatalog struct {
+	Units       []ArmyUnitCatalogItem `json:"units"`
+	Constraints map[string]any        `json:"constraints"`
+}
+
 type ArmyTrainResult struct {
-	TrainingID uint           `json:"trainingId"`
-	UnitType   string         `json:"unitType"`
-	Quantity   int            `json:"quantity"`
-	StartedAt  time.Time      `json:"startedAt"`
-	FinishesAt time.Time      `json:"finishesAt"`
-	Cost       datatypes.JSON `json:"cost"`
-	Status     string         `json:"status"`
+	TrainingID      uint           `json:"trainingId"`
+	UnitType        string         `json:"unitType"`
+	Quantity        int            `json:"quantity"`
+	StartedAt       time.Time      `json:"startedAt"`
+	FinishesAt      time.Time      `json:"finishesAt"`
+	DurationSeconds int64          `json:"durationSeconds"`
+	DurationMinutes int64          `json:"durationMinutes"`
+	Cost            datatypes.JSON `json:"cost"`
+	Status          string         `json:"status"`
+}
+
+func (s *WorldGameService) ArmyUnitCatalog(ctx context.Context, playerID uint) (ArmyUnitCatalog, error) {
+	save, err := s.EnsurePlayerSave(ctx, playerID)
+	if err != nil {
+		return ArmyUnitCatalog{}, err
+	}
+	barracksLevel := playerBuildingLevelFromJSON(save.BuildingsJSON, "barracks")
+	items := make([]ArmyUnitCatalogItem, 0, len(supportedArmyUnitTypes()))
+	for _, unitType := range supportedArmyUnitTypes() {
+		stats := baseStatsForUnit(unitType)
+		requiredLevel := minBarracksLevelForUnit(unitType)
+		items = append(items, ArmyUnitCatalogItem{
+			UnitType:                unitType,
+			Name:                    armyUnitDisplayName(unitType),
+			Description:             armyUnitGameplayDescription(unitType),
+			Role:                    armyUnitRole(unitType),
+			RequiredBarracksLevel:   requiredLevel,
+			TrainingDurationSeconds: stats.TrainingDurationSeconds,
+			TrainingDurationMinutes: ceilMinutes(stats.TrainingDurationSeconds),
+			TrainingCost: map[string]int64{
+				"credits": stats.CreditCostTrain,
+				"food":    stats.FoodCost,
+				"energy":  stats.EnergyCost,
+			},
+			UpkeepPerHour: map[string]int64{
+				"food":    stats.FoodConsumption,
+				"energy":  stats.EnergyConsumption,
+				"credits": stats.CreditCost,
+			},
+			Stats: map[string]int{
+				"health":   stats.Health,
+				"attack":   stats.Attack,
+				"defense":  stats.Defense,
+				"speed":    stats.Speed,
+				"range":    stats.Range,
+				"maxCarry": stats.MaxCarry,
+			},
+			Constraints: map[string]any{
+				"unlocked":              barracksLevel >= requiredLevel,
+				"currentBarracksLevel":  barracksLevel,
+				"requiredBarracksLevel": requiredLevel,
+				"maxQuantityPerRequest": 500,
+			},
+		})
+	}
+	return ArmyUnitCatalog{
+		Units: items,
+		Constraints: map[string]any{
+			"buildingKey":                "barracks",
+			"currentBarracksLevel":       barracksLevel,
+			"maxQuantityPerRequest":      500,
+			"durationScalesWithQuantity": true,
+		},
+	}, nil
 }
 
 func (s *WorldGameService) CalculateBuildingUpgradeCost(buildingType string, currentLevel int) (BuildingUpgradeCost, error) {
@@ -104,7 +180,7 @@ func (s *WorldGameService) TrainArmy(ctx context.Context, playerID uint, input A
 
 	unitStats := baseStatsForUnit(unitType)
 	cost := map[string]any{
-		"credits": unitStats.CreditCost * int64(input.Quantity),
+		"credits": unitStats.CreditCostTrain * int64(input.Quantity),
 		"food":    unitStats.FoodCost * int64(input.Quantity),
 		"energy":  unitStats.EnergyCost * int64(input.Quantity),
 	}
@@ -143,13 +219,15 @@ func (s *WorldGameService) TrainArmy(ctx context.Context, playerID uint, input A
 	}
 
 	return &ArmyTrainResult{
-		TrainingID: queue.Id,
-		UnitType:   queue.UnitType,
-		Quantity:   queue.Quantity,
-		StartedAt:  queue.StartedAt,
-		FinishesAt: queue.FinishesAt,
-		Cost:       queue.CostJSON,
-		Status:     queue.Status,
+		TrainingID:      queue.Id,
+		UnitType:        queue.UnitType,
+		Quantity:        queue.Quantity,
+		StartedAt:       queue.StartedAt,
+		FinishesAt:      queue.FinishesAt,
+		DurationSeconds: totalSeconds,
+		DurationMinutes: int64(ceilMinutes(int(totalSeconds))),
+		Cost:            queue.CostJSON,
+		Status:          queue.Status,
 	}, nil
 }
 
@@ -395,13 +473,17 @@ type unitProfile struct {
 	CreditCostTrain         int64
 }
 
+func supportedArmyUnitTypes() []string {
+	return []string{"infanterie_legere", "infanterie_lourde", "tireur_longue_portee", "unite_logistique", "unite_elite"}
+}
+
 func isSupportedUnitType(unitType string) bool {
-	switch unitType {
-	case "infanterie_legere", "infanterie_lourde", "tireur_longue_portee", "unite_logistique", "unite_elite":
-		return true
-	default:
-		return false
+	for _, supported := range supportedArmyUnitTypes() {
+		if unitType == supported {
+			return true
+		}
 	}
+	return false
 }
 
 func minBarracksLevelForUnit(unitType string) int {
@@ -419,6 +501,64 @@ func minBarracksLevelForUnit(unitType string) int {
 	default:
 		return 99
 	}
+}
+
+func armyUnitDisplayName(unitType string) string {
+	switch unitType {
+	case "infanterie_legere":
+		return "Infanterie légère"
+	case "infanterie_lourde":
+		return "Infanterie lourde"
+	case "tireur_longue_portee":
+		return "Tireur longue portée"
+	case "unite_logistique":
+		return "Unité logistique"
+	case "unite_elite":
+		return "Unité d'élite"
+	default:
+		return strings.Title(strings.ReplaceAll(unitType, "_", " "))
+	}
+}
+
+func armyUnitRole(unitType string) string {
+	switch unitType {
+	case "infanterie_legere":
+		return "assaut"
+	case "infanterie_lourde":
+		return "ligne"
+	case "tireur_longue_portee":
+		return "tir"
+	case "unite_logistique":
+		return "support"
+	case "unite_elite":
+		return "elite"
+	default:
+		return "polyvalent"
+	}
+}
+
+func armyUnitGameplayDescription(unitType string) string {
+	switch unitType {
+	case "infanterie_legere":
+		return "Des éclaireurs rapides pour sécuriser les premières rues, tenir les avant-postes et répondre vite aux alertes."
+	case "infanterie_lourde":
+		return "Des soldats blindés qui encaissent le choc quand la ligne de front arrive aux portes de la cité."
+	case "tireur_longue_portee":
+		return "Des spécialistes perchés sur les hauteurs, parfaits pour briser une offensive avant le contact."
+	case "unite_logistique":
+		return "Le nerf de la guerre: ravitaillement, extraction et transport sous pression quand les combats durent."
+	case "unite_elite":
+		return "Un commando NEXUS rare, cher et décisif, réservé aux crises que les troupes ordinaires ne peuvent pas tenir."
+	default:
+		return "Unité militaire prête à rejoindre les conflits du monde NEXUS."
+	}
+}
+
+func ceilMinutes(seconds int) int {
+	if seconds <= 0 {
+		return 0
+	}
+	return int(math.Ceil(float64(seconds) / 60.0))
 }
 
 func baseStatsForUnit(unitType string) unitProfile {

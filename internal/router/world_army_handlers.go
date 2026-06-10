@@ -22,6 +22,11 @@ func registerArmyRoutes(private *gin.RouterGroup, database *gorm.DB, world *serv
 		writeWorldResponse(c, overview, err)
 	})
 
+	private.GET("/army/catalog", func(c *gin.Context) {
+		catalog, err := world.ArmyUnitCatalog(c.Request.Context(), currentUserID(c))
+		writeWorldResponse(c, catalog, err)
+	})
+
 	private.GET("/army/units", func(c *gin.Context) {
 		units, err := world.ListArmyUnits(c.Request.Context(), currentUserID(c), limitFromQuery(c))
 		writeWorldResponse(c, gin.H{"units": units}, err)

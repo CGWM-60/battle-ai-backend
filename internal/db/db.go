@@ -124,7 +124,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "habitation",
 			Name:                   "Habitation",
-			Description:            "Logements modulaires pour stabiliser la population urbaine.",
+			Description:            "Des modules d'habitat qui font grandir la cité sans la faire craquer: plus de citoyens, plus de vie, plus de pression à gérer.",
 			Category:               "residential",
 			ResearchTreeKey:        "construction_genie_civil",
 			MaxLevel:               30,
@@ -138,7 +138,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "solar_park",
 			Name:                   "Parc solaire",
-			Description:            "Infrastructure d'energie propre adaptee aux villes futuristes.",
+			Description:            "Un champ de panneaux et de batteries qui garde les lumières allumées quand le continent entre en crise.",
 			Category:               "energy",
 			ResearchTreeKey:        "durabilite_energie",
 			MaxLevel:               30,
@@ -152,7 +152,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "vertical_farm",
 			Name:                   "Ferme verticale",
-			Description:            "Production alimentaire dense pour continents sous pression.",
+			Description:            "Des tours de culture sous verrière: de la nourriture locale, même quand les routes commerciales brûlent.",
 			Category:               "food",
 			ResearchTreeKey:        "durabilite_energie",
 			MaxLevel:               30,
@@ -166,7 +166,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "research_center",
 			Name:                   "Centre de recherche",
-			Description:            "Laboratoire avance pour accelerer les technologies urbaines.",
+			Description:            "Le cerveau scientifique de la ville, là où les prototypes deviennent des avantages décisifs.",
 			Category:               "research",
 			ResearchTreeKey:        "technologie_science",
 			MaxLevel:               30,
@@ -180,7 +180,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "ai_center",
 			Name:                   "Centre IA",
-			Description:            "Noeud de calcul urbain capable d'analyser les crises NEXUS.",
+			Description:            "Un noyau d'IA qui lit les signaux faibles, anticipe les crises et donne une longueur d'avance au joueur.",
 			Category:               "ai",
 			ResearchTreeKey:        "technologie_science",
 			MaxLevel:               30,
@@ -194,7 +194,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "defense_grid",
 			Name:                   "Grille de defense",
-			Description:            "Reseau defensif contre conflits, sabotage et pression des factions.",
+			Description:            "Un maillage de tourelles, drones et boucliers pour tenir la ville quand les factions testent tes murs.",
 			Category:               "defense",
 			ResearchTreeKey:        "defense_militaire",
 			MaxLevel:               30,
@@ -208,7 +208,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "city_hall",
 			Name:                   "Hotel de ville",
-			Description:            "Centre administratif pour la stabilite civile, la gouvernance et les services publics.",
+			Description:            "Le centre de commandement civil: lois, ordres d'urgence et décisions qui gardent la population soudée.",
 			Category:               "civic",
 			ResearchTreeKey:        "stabilite_civile",
 			MaxLevel:               30,
@@ -222,7 +222,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "trade_hub",
 			Name:                   "Hub commercial",
-			Description:            "Noeud economique pour commerce local, industrie, finance et echanges internationaux.",
+			Description:            "Le coeur marchand de la cité, où les convois, les contrats et les paris économiques se transforment en crédits.",
 			Category:               "economy",
 			ResearchTreeKey:        "prosperite_economique",
 			MaxLevel:               30,
@@ -236,7 +236,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "diplomacy_center",
 			Name:                   "Centre diplomatique",
-			Description:            "Batiment dedie aux relations, alliances, renseignement et influence globale.",
+			Description:            "Salons feutrés, canaux secrets et tables de négociation pour gagner sans toujours tirer le premier.",
 			Category:               "diplomacy",
 			ResearchTreeKey:        "diplomatie_influence",
 			MaxLevel:               30,
@@ -250,7 +250,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "engineering_office",
 			Name:                   "Bureau d'ingenierie",
-			Description:            "Pole de genie civil pour infrastructures, manufactures et megastructures.",
+			Description:            "Des ingénieurs, des plans et des machines lourdes pour bâtir plus haut, plus vite et plus solide.",
 			Category:               "engineering",
 			ResearchTreeKey:        "construction_genie_civil",
 			MaxLevel:               30,
@@ -264,7 +264,7 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 		{
 			Key:                    "barracks",
 			Name:                   "Caserne",
-			Description:            "Infrastructure militaire dédiée à la formation des soldats.",
+			Description:            "La forge des troupes: chaque niveau ouvre des unités plus lourdes et prépare la ville aux vrais conflits.",
 			Category:               "military",
 			ResearchTreeKey:        "defense_militaire",
 			MaxLevel:               30,
@@ -290,6 +290,9 @@ func seedDefaultBuildingDefinitions(db *gorm.DB) error {
 			return err
 		}
 		updates := map[string]any{}
+		if seed.Description != "" && existing.Description != seed.Description {
+			updates["description"] = seed.Description
+		}
 		if !existing.IsActive {
 			updates["is_active"] = true
 		}

@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -81,5 +82,36 @@ func TestNormalizeBuildingKeyAcceptsRechercheAlias(t *testing.T) {
 	}
 	if got := normalizeBuildingKey("lab"); got != "research_center" {
 		t.Fatalf("expected lab to map to research_center, got %q", got)
+	}
+}
+
+func TestConstructionJobDTOExposesDurationForFlutter(t *testing.T) {
+	startedAt := time.Date(2026, 6, 10, 10, 0, 0, 0, time.UTC)
+	completedAt := startedAt.Add(90 * time.Minute)
+	job := ConstructionJobDTO{
+		ID:              "c_1",
+		BuildingKey:     "research_center",
+		FromLevel:       1,
+		TargetLevel:     2,
+		Type:            "upgrade",
+		Status:          "in_progress",
+		DurationSeconds: int64((90 * time.Minute).Seconds()),
+		DurationMinutes: 90,
+		StartedAt:       &startedAt,
+		CompletedAt:     &completedAt,
+	}
+	payload, err := json.Marshal(job)
+	if err != nil {
+		t.Fatalf("construction job should marshal: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		t.Fatalf("construction job payload should unmarshal: %v", err)
+	}
+	if parsed["durationSeconds"].(float64) != 5400 {
+		t.Fatalf("expected durationSeconds 5400, got %v", parsed["durationSeconds"])
+	}
+	if parsed["durationMinutes"].(float64) != 90 {
+		t.Fatalf("expected durationMinutes 90, got %v", parsed["durationMinutes"])
 	}
 }

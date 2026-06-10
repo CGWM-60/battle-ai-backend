@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -38,6 +39,68 @@ func TestWorldAIProviderStatusesExposePrimaryAndFallbackWithoutSecrets(t *testin
 	if !fallbackFound {
 		t.Fatalf("expected configured masked openai fallback provider")
 	}
+}
+
+func TestArmyUnitCatalogDefinitionsExposeFlutterContract(t *testing.T) {
+	for _, unitType := range supportedArmyUnitTypes() {
+		stats := baseStatsForUnit(unitType)
+		item := ArmyUnitCatalogItem{
+			UnitType:                unitType,
+			Name:                    armyUnitDisplayName(unitType),
+			Description:             armyUnitGameplayDescription(unitType),
+			Role:                    armyUnitRole(unitType),
+			RequiredBarracksLevel:   minBarracksLevelForUnit(unitType),
+			TrainingDurationSeconds: stats.TrainingDurationSeconds,
+			TrainingDurationMinutes: ceilMinutes(stats.TrainingDurationSeconds),
+			TrainingCost: map[string]int64{
+				"credits": stats.CreditCostTrain,
+				"food":    stats.FoodCost,
+				"energy":  stats.EnergyCost,
+			},
+			UpkeepPerHour: map[string]int64{
+				"credits": stats.CreditCost,
+				"food":    stats.FoodConsumption,
+				"energy":  stats.EnergyConsumption,
+			},
+			Stats: map[string]int{
+				"health": stats.Health,
+				"attack": stats.Attack,
+			},
+			Constraints: map[string]any{
+				"requiredBarracksLevel": minBarracksLevelForUnit(unitType),
+			},
+		}
+		if item.Name == "" || item.Description == "" || item.Role == "" {
+			t.Fatalf("%s missing playable catalog text", unitType)
+		}
+		if item.RequiredBarracksLevel <= 0 {
+			t.Fatalf("%s missing barracks constraint", unitType)
+		}
+		if item.TrainingDurationSeconds <= 0 || item.TrainingDurationMinutes <= 0 {
+			t.Fatalf("%s missing training duration", unitType)
+		}
+		if item.TrainingCost["credits"] != stats.CreditCostTrain {
+			t.Fatalf("%s should expose training credit cost, not upkeep", unitType)
+		}
+		payload, err := json.Marshal(item)
+		if err != nil {
+			t.Fatalf("catalog item should marshal for Flutter: %v", err)
+		}
+		for _, key := range []string{"unitType", "description", "requiredBarracksLevel", "trainingDurationSeconds", "trainingDurationMinutes", "trainingCost", "constraints"} {
+			if !json.Valid(payload) || !containsJSONKey(payload, key) {
+				t.Fatalf("%s missing json key %s in %s", unitType, key, string(payload))
+			}
+		}
+	}
+}
+
+func containsJSONKey(payload []byte, key string) bool {
+	var parsed map[string]any
+	if err := json.Unmarshal(payload, &parsed); err != nil {
+		return false
+	}
+	_, ok := parsed[key]
+	return ok
 }
 
 func TestWorldAIProviderOrderDefaultsToMistralThenOpenAI(t *testing.T) {

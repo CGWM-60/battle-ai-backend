@@ -78,6 +78,11 @@ Voir world_routines.go et world_game_service.go pour détails.
 ### GET `/api/v1/buildings`
 - Objectif: état bâtiments joueur.
 
+### GET `/api/v1/buildings/catalog`
+- Objectif: catalogue complet des bâtiments constructibles par Flutter.
+- Retour par bâtiment: `key`, `name`, `description`, `category`, `researchTreeKey`, `maxLevel`, `baseCostJson`, `levelCostFormulaJson`, `effectsJson`, `unlockRequirementsJson`, `assets`.
+- Les assets existants restent séparés dans `assets`; une mise à jour de description ne doit pas écraser les images des piliers.
+
 ### POST `/api/v1/buildings/build`
 - Entrée: `type`, `level`.
 - Retour: action queue + coût calculé.
@@ -100,6 +105,11 @@ Règles métier:
 ### GET `/api/v1/army/overview`
 - Retour: total unités, répartition, puissance.
 
+### GET `/api/v1/army/catalog`
+- Objectif: catalogue unités pour Flutter avant entraînement.
+- Retour par unité: `unitType`, `name`, `description`, `role`, `requiredBarracksLevel`, `trainingDurationSeconds`, `trainingDurationMinutes`, `trainingCost`, `upkeepPerHour`, `stats`, `constraints`.
+- Contraintes globales: `buildingKey = barracks`, `currentBarracksLevel`, `maxQuantityPerRequest = 500`, `durationScalesWithQuantity = true`.
+
 ### GET `/api/v1/army/units`
 - Retour: unités du joueur.
 
@@ -117,6 +127,8 @@ Règles métier:
   - `quantity`
   - `startedAt`
   - `finishesAt`
+  - `durationSeconds`
+  - `durationMinutes`
   - `cost`
   - `status`
 
@@ -227,12 +239,14 @@ Compatibilité legacy conservée via `/api/v1/world/weather/*`.
 ## 13. Règles métier
 
 - Tous les bâtiments: niveau max `30`.
+- Jobs construction: `durationSeconds` et `durationMinutes` sont renvoyés avec `startedAt` / `completedAt` pour éviter tout calcul ambigu côté Flutter.
 - Formule coût upgrade niveau N:
   - `baseCost * pow(1.28, N-1)`
 - Formule durée upgrade niveau N:
   - `baseDuration * pow(1.22, N-1)`
   - cap à 30 jours.
 - Caserne (`barracks`) de niveau 1 à 30, paliers de déblocage unités implémentés.
+- Recherches: `levelProgressionJson` contient `durationMinutes` et `cumulativeMinutes`; une recherche active renvoie aussi `durationSeconds` et `durationMinutes`.
 - Validations backend strictes appliquées sur actions critiques:
   - ownership des unités et routes
   - statut compatible (`active`, `available`, etc.)

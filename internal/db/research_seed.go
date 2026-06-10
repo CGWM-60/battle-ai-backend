@@ -187,6 +187,9 @@ func seedResearchNode(db *gorm.DB, seed models.ResearchNodeDefinition) error {
 		return err
 	}
 	updates := map[string]any{}
+	if seed.Description != "" && existing.Description != seed.Description {
+		updates["description"] = seed.Description
+	}
 	if existing.ResearchTreeDefinitionID == 0 {
 		updates["research_tree_definition_id"] = seed.ResearchTreeDefinitionID
 	}
@@ -230,7 +233,7 @@ func parseResearchSeedRows(raw string) ([]researchSeedNode, error) {
 			BuildingKey: parts[2],
 			Key:         parts[3],
 			Name:        parts[4],
-			Description: parts[5],
+			Description: gameResearchDescription(parts[1], parts[4], parts[5], strings.Split(parts[6], ",")),
 			Resources:   strings.Split(parts[6], ","),
 			SortOrder:   sortOrder,
 			Progression: progression,
@@ -283,6 +286,35 @@ func researchSeedSlug(value string) string {
 		value = strings.ReplaceAll(value, "__", "_")
 	}
 	return strings.Trim(value, "_")
+}
+
+func gameResearchDescription(domain string, name string, original string, resources []string) string {
+	resourceText := strings.TrimSpace(strings.Join(resources, ", "))
+	if resourceText == "" {
+		resourceText = "la stratégie de la cité"
+	}
+	domainText := strings.ToLower(strings.TrimSpace(domain))
+	switch {
+	case strings.Contains(domainText, "stabilit"):
+		return name + " renforce le contrôle civil: moins de panique, plus d'ordre, et une population qui tient quand la pression monte. Ressources clés: " + resourceText + "."
+	case strings.Contains(domainText, "prosp"):
+		return name + " transforme la ville en machine économique: plus de routes, de crédits et d'opportunités à exploiter. Ressources clés: " + resourceText + "."
+	case strings.Contains(domainText, "durabil"):
+		return name + " donne de l'air à la cité: énergie plus fiable, meilleure résilience et moins de dépendance aux convois. Ressources clés: " + resourceText + "."
+	case strings.Contains(domainText, "diplom"):
+		return name + " ouvre de nouvelles cartes diplomatiques: alliances, influence et coups d'avance sur les factions rivales. Ressources clés: " + resourceText + "."
+	case strings.Contains(domainText, "défense") || strings.Contains(domainText, "defense"):
+		return name + " prépare l'armée aux conflits sérieux: meilleures troupes, meilleures doctrines et pertes plus contrôlées. Ressources clés: " + resourceText + "."
+	case strings.Contains(domainText, "construction"):
+		return name + " accélère l'expansion urbaine: chantiers plus solides, mégastructures et bâtiments qui montent plus vite. Ressources clés: " + resourceText + "."
+	case strings.Contains(domainText, "technologie"):
+		return name + " pousse la cité vers la rupture technologique: science, IA et prototypes capables de changer la partie. Ressources clés: " + resourceText + "."
+	default:
+		if strings.TrimSpace(original) != "" {
+			return name + " débloque un nouvel avantage stratégique: " + strings.TrimSpace(original) + ". Ressources clés: " + resourceText + "."
+		}
+		return name + " débloque un nouvel avantage stratégique pour la cité. Ressources clés: " + resourceText + "."
+	}
 }
 
 const defaultResearchSeedRows = `

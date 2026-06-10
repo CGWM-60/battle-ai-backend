@@ -34,10 +34,12 @@ type ResearchNodeProgress struct {
 }
 
 type ActiveResearchProgress struct {
-	NodeKey     string    `json:"nodeKey"`
-	TargetLevel int       `json:"targetLevel"`
-	StartedAt   time.Time `json:"startedAt"`
-	FinishAt    time.Time `json:"finishAt"`
+	NodeKey         string    `json:"nodeKey"`
+	TargetLevel     int       `json:"targetLevel"`
+	StartedAt       time.Time `json:"startedAt"`
+	FinishAt        time.Time `json:"finishAt"`
+	DurationSeconds int64     `json:"durationSeconds"`
+	DurationMinutes int64     `json:"durationMinutes"`
 }
 
 type ResearchActionResult struct {
@@ -113,10 +115,12 @@ func (s *WorldGameService) StartResearch(ctx context.Context, playerID uint, nod
 		duration := researchDuration(node.LevelProgressionJSON, targetLevel)
 		now := time.Now()
 		progress.Active = &ActiveResearchProgress{
-			NodeKey:     node.Key,
-			TargetLevel: targetLevel,
-			StartedAt:   now,
-			FinishAt:    now.Add(duration),
+			NodeKey:         node.Key,
+			TargetLevel:     targetLevel,
+			StartedAt:       now,
+			FinishAt:        now.Add(duration),
+			DurationSeconds: int64(duration.Seconds()),
+			DurationMinutes: int64(duration / time.Minute),
 		}
 		current.Status = "researching"
 		current.StartedAt = &now
