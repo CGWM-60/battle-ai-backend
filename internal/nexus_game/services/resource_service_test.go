@@ -9,8 +9,11 @@ func TestOfficialResourceDefinitionsIncludeRequiredStarts(t *testing.T) {
 		byCode[def.Code] = def
 	}
 
-	if got := len(defs); got != 16 {
-		t.Fatalf("expected 16 official resources, got %d", got)
+	if got := len(defs); got != 17 {
+		t.Fatalf("expected 17 official resources, got %d", got)
+	}
+	if byCode["credits"].InitialAmount != 450 {
+		t.Fatalf("credits initial amount mismatch: %d", byCode["credits"].InitialAmount)
 	}
 	if byCode["population"].InitialAmount != 0 {
 		t.Fatalf("population must start at 0, got %d", byCode["population"].InitialAmount)

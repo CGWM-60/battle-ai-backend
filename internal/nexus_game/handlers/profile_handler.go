@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -64,7 +65,8 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		}
 		// not found -> empty profile (allowed). This First() is expected for new users and was producing the "record not found" log.
 		c.JSON(http.StatusOK, gin.H{
-			"exists": false,
+			"exists":             false,
+			"starter_allocation": services.Level1StarterAllocation(),
 			"profile": models.ProfileGamer{
 				UserID:             uint(uid),
 				Level:              1,
@@ -78,7 +80,7 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 				EnergyStored:       0,
 				Security:           50,
 			},
-			"daily_plan_context": buildDailyPlanContext(models.ProfileGamer{
+			"daily_plan_context": buildDailyPlanContextWithResources(models.ProfileGamer{
 				UserID:             uint(uid),
 				Level:              1,
 				Power:              0,
@@ -90,13 +92,15 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 				EnergyBalance:      0,
 				EnergyStored:       0,
 				Security:           50,
-			}),
+			}, services.Level1StarterAllocation(), nil),
 		})
 		return
 	}
 	if err := services.NewResourceService(h.db).EnsureInitialAllocation(c.Request.Context(), p.ID); err == nil {
 		_ = h.db.First(&p, p.ID).Error
 	}
+
+	resourceBalances, cityStatsPayload := h.profileResourcePayload(c, p.ID)
 
 	// Enrich for MmoEntryScreen (same as SaveProfile)
 	avatarURL := ""
@@ -122,13 +126,16 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"exists":       true,
-		"profile":      p,
-		"avatar_url":   avatarURL,
-		"world_name":   worldName,
-		"faction_name": factionName,
+		"exists":             true,
+		"profile":            p,
+		"avatar_url":         avatarURL,
+		"world_name":         worldName,
+		"faction_name":       factionName,
+		"starter_allocation": services.Level1StarterAllocation(),
+		"resources":          resourceBalances,
+		"city_stats":         cityStatsPayload,
 		// Daily plan context sent on first load for player's AI (provider/local/governor > server fallback).
-		"daily_plan_context": buildDailyPlanContext(p),
+		"daily_plan_context": buildDailyPlanContextWithResources(p, resourceBalances, cityStatsPayload),
 	})
 }
 
@@ -250,6 +257,8 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 	}
 
 	// Enrich for MmoEntryScreen: avatar URL + world name (so we can show real chosen avatar, pseudo, lvl, power, world name)
+	resourceBalances, cityStatsPayload := h.profileResourcePayload(c, p.ID)
+
 	avatarURL := ""
 	if p.AvatarID > 0 {
 		var av models.Avatar
@@ -273,13 +282,16 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"profile":      p,
-		"exists":       true,
-		"avatar_url":   avatarURL,
-		"world_name":   worldName,
-		"faction_name": factionName,
+		"profile":            p,
+		"exists":             true,
+		"avatar_url":         avatarURL,
+		"world_name":         worldName,
+		"faction_name":       factionName,
+		"starter_allocation": services.Level1StarterAllocation(),
+		"resources":          resourceBalances,
+		"city_stats":         cityStatsPayload,
 		// Daily plan context sent on first load for player's AI (provider/local/governor > server fallback).
-		"daily_plan_context": buildDailyPlanContext(p),
+		"daily_plan_context": buildDailyPlanContextWithResources(p, resourceBalances, cityStatsPayload),
 	})
 }
 
@@ -374,6 +386,11 @@ func (h *ProfileHandler) GetDailyPlanContext(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 		return
 	}
+	resourceBalances, cityStatsPayload := h.profileResourcePayload(c, p.ID)
+	foodBalance := cityStatFloat(cityStatsPayload, "foodBalance")
+	if foodBalance == 0 {
+		foodBalance = cityStatFloat(cityStatsPayload, "food_balance")
+	}
 
 	// Build safe context (use current profile stats; in full impl enrich with resources, queues from other services)
 	ctx := models.DailyPlanContext{
@@ -385,13 +402,13 @@ func (h *ProfileHandler) GetDailyPlanContext(c *gin.Context) {
 			"morale":             p.Morale,
 			"security":           p.Security,
 			"energyBalance":      p.EnergyBalance,
-			"foodBalance":        0, // TODO: from resources
+			"foodBalance":        foodBalance,
 		},
 		Resources: map[string]interface{}{
-			"credits": 0, // TODO
-			"metal":   0,
-			"energy":  p.EnergyStored,
-			"food":    0,
+			"credits": resourceBalances["credits"],
+			"metal":   resourceBalances["metal"],
+			"energy":  resourceBalances["energy"],
+			"food":    resourceBalances["food"],
 		},
 		ActiveQueues: map[string]interface{}{
 			"construction": []interface{}{},
@@ -415,6 +432,20 @@ func (h *ProfileHandler) GetDailyPlanContext(c *gin.Context) {
 // It prepares the safe context for the player's AI Daily Plan generation.
 // Implements the rules: Player provider > local > Governor > server fallback > algorithmic.
 func buildDailyPlanContext(p models.ProfileGamer) map[string]interface{} {
+	return buildDailyPlanContextWithResources(p, map[string]int64{}, nil)
+}
+
+func buildDailyPlanContextWithResources(p models.ProfileGamer, resources map[string]int64, cityStats map[string]any) map[string]interface{} {
+	foodBalance := cityStatFloat(cityStats, "foodBalance")
+	if foodBalance == 0 {
+		foodBalance = cityStatFloat(cityStats, "food_balance")
+	}
+
+	energyValue := resources["energy"]
+	if energyValue == 0 {
+		energyValue = int64(p.EnergyStored)
+	}
+
 	return map[string]interface{}{
 		"profile_gamer_id": p.ID,
 		"player_style":     "balanced", // TODO: persist per profile
@@ -424,13 +455,13 @@ func buildDailyPlanContext(p models.ProfileGamer) map[string]interface{} {
 			"morale":             p.Morale,
 			"security":           p.Security,
 			"energyBalance":      p.EnergyBalance,
-			"foodBalance":        0, // TODO from resources
+			"foodBalance":        foodBalance,
 		},
 		"resources": map[string]interface{}{
-			"credits": 0,
-			"metal":   0,
-			"energy":  p.EnergyStored,
-			"food":    0,
+			"credits": resources["credits"],
+			"metal":   resources["metal"],
+			"energy":  energyValue,
+			"food":    resources["food"],
 		},
 		"active_queues": map[string]interface{}{
 			"construction": []interface{}{},
@@ -671,5 +702,91 @@ func min(a, b int) int {
 func (h *ProfileHandler) buildDailyPlanContextForID(profileID uint) map[string]interface{} {
 	var p models.ProfileGamer
 	h.db.First(&p, profileID)
-	return buildDailyPlanContext(p)
+	resourceBalances, cityStatsPayload := h.profileResourcePayload(nil, p.ID)
+	return buildDailyPlanContextWithResources(p, resourceBalances, cityStatsPayload)
+}
+
+func (h *ProfileHandler) profileResourcePayload(c *gin.Context, profileID uint) (map[string]int64, map[string]any) {
+	balances := map[string]int64{}
+	if profileID == 0 {
+		return balances, map[string]any{}
+	}
+
+	snapshot, err := services.NewResourceService(h.db).PlayerSnapshot(contextForRequest(c), profileID)
+	if err != nil {
+		return balances, map[string]any{}
+	}
+
+	resourcesRaw, ok := snapshot["resources"]
+	if ok {
+		switch list := resourcesRaw.(type) {
+		case []models.PlayerResource:
+			for _, item := range list {
+				balances[item.ResourceCode] = item.Amount
+			}
+		case []interface{}:
+			for _, item := range list {
+				entry, isMap := item.(map[string]interface{})
+				if !isMap {
+					continue
+				}
+				code, _ := entry["resourceCode"].(string)
+				if code == "" {
+					code, _ = entry["resource_code"].(string)
+				}
+				if code == "" {
+					continue
+				}
+				if amount, ok := entry["amount"].(float64); ok {
+					balances[code] = int64(amount)
+				}
+			}
+		}
+	}
+
+	cityStats := map[string]any{}
+	if raw, ok := snapshot["cityStats"]; ok {
+		switch typed := raw.(type) {
+		case map[string]any:
+			cityStats = typed
+		case models.PlayerCityStats:
+			cityStats = map[string]any{
+				"storageCapacity": typed.StorageCapacity,
+				"foodProduction":  typed.FoodProduction,
+				"foodConsumption": typed.FoodConsumption,
+				"foodBalance":     typed.FoodBalance,
+			}
+		}
+	}
+
+	return balances, cityStats
+}
+
+func contextForRequest(c *gin.Context) context.Context {
+	if c == nil || c.Request == nil {
+		return context.Background()
+	}
+	return c.Request.Context()
+}
+
+func cityStatFloat(stats map[string]any, key string) float64 {
+	if stats == nil {
+		return 0
+	}
+	value, ok := stats[key]
+	if !ok {
+		return 0
+	}
+	switch typed := value.(type) {
+	case float64:
+		return typed
+	case float32:
+		return float64(typed)
+	case int:
+		return float64(typed)
+	case int64:
+		return float64(typed)
+	default:
+		return 0
+	}
 }

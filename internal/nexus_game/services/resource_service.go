@@ -31,6 +31,7 @@ type ResourceDefinition struct {
 
 var officialResourceDefinitions = []ResourceDefinition{
 	{Code: "population", Name: "Population", Category: "city", IsStorageLimited: false, InitialAmount: 0, SortOrder: 10},
+	{Code: "credits", Name: "Credits", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 450, DailyGrantAmount: 120, SortOrder: 15},
 	{Code: "food", Name: "Food", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 500, DailyGrantAmount: 150, SortOrder: 20},
 	{Code: "energy", Name: "Energy", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 300, DailyGrantAmount: 100, SortOrder: 30},
 	{Code: "metal", Name: "Metal", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 800, DailyGrantAmount: 120, SortOrder: 40},
@@ -52,6 +53,18 @@ func OfficialResourceDefinitions() []ResourceDefinition {
 	defs := make([]ResourceDefinition, len(officialResourceDefinitions))
 	copy(defs, officialResourceDefinitions)
 	return defs
+}
+
+// Level1StarterAllocation returns the starter resources granted once when a profile
+// receives its initial allocation. Only positive starter amounts are exposed.
+func Level1StarterAllocation() map[string]int64 {
+	starter := map[string]int64{}
+	for _, def := range officialResourceDefinitions {
+		if def.InitialAmount > 0 {
+			starter[def.Code] = def.InitialAmount
+		}
+	}
+	return starter
 }
 
 func resourceDefinitionByCode(code string) (ResourceDefinition, bool) {
@@ -113,7 +126,10 @@ func (s *ResourceService) EnsureInitialAllocation(ctx context.Context, profileID
 		var log models.InitialAllocationLog
 		err := tx.Where("profile_gamer_id = ?", profileID).First(&log).Error
 		if err == nil {
-			return s.ensureMissingResourceRows(ctx, tx, profileID, false)
+			if err := s.ensureMissingResourceRows(ctx, tx, profileID, true); err != nil {
+				return err
+			}
+			return s.ensureNexusCore(ctx, tx, profileID)
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return err
@@ -122,23 +138,100 @@ func (s *ResourceService) EnsureInitialAllocation(ctx context.Context, profileID
 		if err := s.ensureInitialCityStats(ctx, tx, profileID); err != nil {
 			return err
 		}
-		if err := s.ensureMissingResourceRows(ctx, tx, profileID, true); err != nil {
+		grantedResources, err := s.ensureStarterAllocation(ctx, tx, profileID)
+		if err != nil {
 			return err
 		}
 		if err := s.ensureNexusCore(ctx, tx, profileID); err != nil {
 			return err
 		}
 
-		resources := map[string]int64{}
-		for _, def := range officialResourceDefinitions {
-			resources[def.Code] = def.InitialAmount
-		}
 		return tx.Create(&models.InitialAllocationLog{
 			ProfileGamerID: profileID,
-			Resources:      resources,
+			Resources:      grantedResources,
 			CreatedAt:      time.Now().UTC(),
 		}).Error
 	})
+}
+
+func (s *ResourceService) ensureStarterAllocation(ctx context.Context, tx *gorm.DB, profileID uint) (map[string]int64, error) {
+	resourceRepo := repositories.NewPlayerResourceRepository(tx)
+	transactionRepo := repositories.NewResourceTransactionRepository(tx)
+	now := time.Now().UTC()
+	granted := map[string]int64{}
+
+	for _, def := range officialResourceDefinitions {
+		capacity := DefaultStorageCapacity
+		if !def.IsStorageLimited {
+			capacity = 0
+		}
+
+		resource, err := resourceRepo.Get(ctx, profileID, def.Code)
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, err
+			}
+			resource = &models.PlayerResource{
+				ProfileGamerID: profileID,
+				ResourceCode:   def.Code,
+				Amount:         def.InitialAmount,
+				Capacity:       capacity,
+				CreatedAt:      now,
+				UpdatedAt:      now,
+			}
+			if err := resourceRepo.Create(ctx, resource); err != nil {
+				return nil, err
+			}
+			granted[def.Code] = def.InitialAmount
+			if def.InitialAmount > 0 {
+				if err := transactionRepo.Create(ctx, &models.ResourceTransaction{
+					ProfileGamerID:  profileID,
+					ResourceCode:    def.Code,
+					AmountDelta:     def.InitialAmount,
+					BalanceAfter:    resource.Amount,
+					TransactionType: "initial_allocation",
+					Source:          "system",
+					CreatedAt:       now,
+				}); err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
+
+		capacityChanged := false
+		if resource.Capacity != capacity {
+			resource.Capacity = capacity
+			capacityChanged = true
+		}
+
+		delta := int64(0)
+		if def.InitialAmount > 0 && resource.Amount < def.InitialAmount {
+			delta = def.InitialAmount - resource.Amount
+			resource.Amount = def.InitialAmount
+		}
+		if delta > 0 || capacityChanged {
+			if err := resourceRepo.Save(ctx, resource); err != nil {
+				return nil, err
+			}
+		}
+		if delta > 0 {
+			granted[def.Code] = delta
+			if err := transactionRepo.Create(ctx, &models.ResourceTransaction{
+				ProfileGamerID:  profileID,
+				ResourceCode:    def.Code,
+				AmountDelta:     delta,
+				BalanceAfter:    resource.Amount,
+				TransactionType: "initial_allocation_topup",
+				Source:          "system",
+				CreatedAt:       now,
+			}); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return granted, nil
 }
 
 func (s *ResourceService) ensureInitialCityStats(ctx context.Context, tx *gorm.DB, profileID uint) error {

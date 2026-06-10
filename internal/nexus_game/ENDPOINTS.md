@@ -175,8 +175,8 @@ Blocage action:
 
 | Method | Path | Attendu | Retour JSON |
 | --- | --- | --- | --- |
-| GET | `/profile?user_id=7` | Query `user_id` | `{ "exists": true, "profile": ProfileGamer, "avatar_url": "...", "world_name": "...", "faction_name": "...", "daily_plan_context": {...} }` |
-| POST | `/profile` | `{ "user_id": 7, "avatar_id": 1, "faction_id": 2, "ia_companion_id": 3, "pseudo": "Neo", "city_name": "Neon Spire" }` | `{ "exists": true, "profile": ProfileGamer, "avatar_url": "...", "world_name": "...", "faction_name": "...", "daily_plan_context": {...} }` |
+| GET | `/profile?user_id=7` | Query `user_id` | `{ "exists": true, "profile": ProfileGamer, "avatar_url": "...", "world_name": "...", "faction_name": "...", "starter_allocation": {"credits":450,...}, "resources": {"credits":450,...}, "city_stats": {...}, "daily_plan_context": {...} }` |
+| POST | `/profile` | `{ "user_id": 7, "avatar_id": 1, "faction_id": 2, "ia_companion_id": 3, "pseudo": "Neo", "city_name": "Neon Spire" }` | `{ "exists": true, "profile": ProfileGamer, "avatar_url": "...", "world_name": "...", "faction_name": "...", "starter_allocation": {"credits":450,...}, "resources": {"credits":450,...}, "city_stats": {...}, "daily_plan_context": {...} }` |
 | POST | `/profile/ia-agents` | `{ "profile_gamer_id": 12, "name": "...", "role": "...", "personality": "...", "provider": "...", "model": "...", "avatar_id": 1, "is_companion": false }` | `{ "agent": MmoIAAgent, "message": "ia agent/companion saved" }` |
 | GET | `/profile/:id/ia-agents` | Path profile id | `{ "agents": [MmoIAAgent] }` |
 | GET | `/profile/:id/daily-plan/context` | Path profile id | `{ "context": DailyPlanContext, "note": "..." }` |
@@ -226,9 +226,9 @@ Blocage action:
 | DELETE | `/admin/content/research/by-id/:id` | Aucun | `{ "ok": true }` |
 | POST | `/admin/content/research/:contentId/delete` | Aucun | `{ "ok": true }` |
 | GET | `/admin/resources/catalog` | Aucun | `{ "resources": [ResourceCatalog] }` |
-| POST | `/admin/resources/seed/preview` | Aucun | `{ "resources": [...], "count": 16 }` |
-| POST | `/admin/resources/seed/commit` | Aucun | `{ "status": "seeded", "count": 16 }` |
-| GET | `/admin/resources/seed/status` | Aucun | `{ "expected": 16, "current": 16, "complete": true }` |
+| POST | `/admin/resources/seed/preview` | Aucun | `{ "resources": [...], "count": 17 }` |
+| POST | `/admin/resources/seed/commit` | Aucun | `{ "status": "seeded", "count": 17 }` |
+| GET | `/admin/resources/seed/status` | Aucun | `{ "expected": 17, "current": 17, "complete": true }` |
 
 Pages HTML dev existantes:
 
