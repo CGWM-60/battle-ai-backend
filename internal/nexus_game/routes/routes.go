@@ -234,6 +234,30 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/profile/:id/construction/start", contentH.StartConstruction)
 	group.POST("/profile/:id/construction/complete-ready", contentH.CompleteReadyConstructions)
 
+	// === /api/v1/buildings and construction endpoints for Flutter (public client) ===
+	// Matches the requested contract. Implemented on top of existing service.
+	v1 := router.Group("/api/v1")
+	// Catalog
+	v1.GET("/buildings/catalog", contentH.ListBuildingsV1)
+	v1.GET("/buildings/catalog/version", contentH.CatalogVersionV1)
+	v1.GET("/buildings/:key", contentH.GetBuildingV1)
+	v1.GET("/buildings/:key/research-tree", contentH.GetBuildingResearchTreeV1)
+	// Assets
+	v1.GET("/assets/buildings/manifest", contentH.BuildingsAssetsManifestV1)
+	v1.GET("/assets/buildings/updates", contentH.BuildingsAssetsUpdatesV1)
+	// Player buildings
+	v1.GET("/buildings", contentH.ListPlayerBuildingsV1) // requires ?profileGamerId= or auth later
+	// Legacy build/upgrade preview (can be no-op or call service calc)
+	v1.POST("/buildings/build", contentH.LegacyBuildPreviewV1)
+	v1.POST("/buildings/:id/upgrade", contentH.LegacyUpgradePreviewV1)
+	// Construction
+	v1.GET("/construction/queue", contentH.ConstructionQueueV1)
+	v1.POST("/construction/start", contentH.StartConstructionV1)
+	v1.POST("/construction/:id/upgrade", contentH.StartUpgradeV1)
+	v1.POST("/construction/:id/speedup", contentH.SpeedupConstructionV1)
+	v1.POST("/construction/:id/cancel", contentH.CancelConstructionV1)
+	v1.POST("/construction/:id/complete", contentH.CompleteConstructionV1)
+
 	// NOTE: Both /nexus-assets (game content images) and /admin (Next.js MMO admin UI) are now registered
 	// EARLY by the central router (see RegisterAdminStatic + the call in internal/router/router.go).
 	// This must happen before any Group("/api/...") to avoid Gin's "*filepath catch-all conflicts with existing 'api'" panic.

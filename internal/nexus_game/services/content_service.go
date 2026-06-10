@@ -521,6 +521,150 @@ func (s *ContentService) ListPlayerBuildings(profileID uint) ([]models.PlayerBui
 	return list, err
 }
 
+// === v1 contract additions for buildings / construction ===
+
+func (s *ContentService) CatalogVersion() map[string]interface{} {
+	return map[string]interface{}{
+		"version":        "v2.0.1",
+		"balanceVersion": "ref-2.0",
+		"updatedAt":      time.Now().Format(time.RFC3339),
+	}
+}
+
+func (s *ContentService) GetBuildingResearchTree(contentID string) (map[string]interface{}, error) {
+	def, err := s.GetBuilding(contentID)
+	if err != nil {
+		return nil, err
+	}
+	// Parse required research and return a simple tree stub (extend with full ResearchDefinition later)
+	var required []map[string]interface{}
+	if def.RequiredResearchJSON != "" {
+		// simple parse, in real use json unmarshal to list
+		required = []map[string]interface{}{{"contentId": def.RequiredResearchJSON, "level": 1}}
+	}
+	return map[string]interface{}{
+		"buildingContentId": contentID,
+		"linkedResearch":    required,
+		"unlocks":           []string{}, // future
+	}, nil
+}
+
+func (s *ContentService) BuildingsAssetsManifest() (map[string]interface{}, error) {
+	// Use existing asset status logic but focused on buildings
+	// For simplicity return list of assets from DB
+	buildings, _ := s.ListBuildings(false)
+	manifest := []map[string]string{}
+	for _, b := range buildings {
+		if b.AssetID != "" {
+			manifest = append(manifest, map[string]string{"contentId": b.ContentID, "assetId": b.AssetID})
+		}
+		for k, v := range b.AssetsByTier {
+			manifest = append(manifest, map[string]string{"contentId": b.ContentID, "tier": k, "asset": v})
+		}
+	}
+	return map[string]interface{}{"manifest": manifest, "version": "v1"}, nil
+}
+
+func (s *ContentService) BuildingsAssetsUpdates(sinceVersion string) (map[string]interface{}, error) {
+	// Stub: return full for now, in real compare versions or timestamps
+	m, _ := s.BuildingsAssetsManifest()
+	return map[string]interface{}{
+		"updates": m["manifest"],
+		"version": "v1",
+		"since":   sinceVersion,
+	}, nil
+}
+
+func (s *ContentService) ConstructionQueue(profileID uint) ([]map[string]interface{}, error) {
+	pbs, err := s.ListPlayerBuildings(profileID)
+	if err != nil {
+		return nil, err
+	}
+	queue := []map[string]interface{}{}
+	for _, pb := range pbs {
+		if !pb.IsConstructing || pb.ConstructionEndsAt == nil {
+			continue
+		}
+		remaining := int(time.Until(*pb.ConstructionEndsAt).Seconds())
+		if remaining < 0 {
+			remaining = 0
+		}
+		queue = append(queue, map[string]interface{}{
+			"id":            pb.ID,
+			"contentId":     pb.ContentID,
+			"level":         pb.Level,
+			"startedAt":     pb.ConstructionStartedAt,
+			"endsAt":        pb.ConstructionEndsAt,
+			"remainingSec":  remaining,
+			"assignedWorkers": pb.AssignedWorkers,
+		})
+	}
+	return queue, nil
+}
+
+// StartConstructionV1 for /construction/start body {profileGamerId, contentId, targetLevel?}
+func (s *ContentService) StartConstructionV1(profileID uint, contentID string, targetLevel int) (*models.PlayerBuilding, error) {
+	return s.StartConstruction(profileID, contentID, targetLevel)
+}
+
+// Similar for upgrade (reuse start or separate logic)
+func (s *ContentService) StartUpgrade(profileID uint, playerBuildingID uint, targetLevel int) (*models.PlayerBuilding, error) {
+	// Find the pb
+	var pb models.PlayerBuilding
+	if err := s.db.First(&pb, playerBuildingID).Error; err != nil {
+		return nil, err
+	}
+	if pb.ProfileGamerID != profileID {
+		return nil, errors.New("not owner")
+	}
+	def, err := s.GetBuilding(pb.ContentID)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
+	ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, "common")) * time.Second)
+	pb.IsConstructing = true
+	pb.ConstructionStartedAt = &now
+	pb.ConstructionEndsAt = &ends
+	pb.Level = targetLevel - 1
+	if err := s.db.Save(&pb).Error; err != nil {
+		return nil, err
+	}
+	return &pb, nil
+}
+
+func (s *ContentService) SpeedupConstruction(playerBuildingID uint, speedupSeconds int) error {
+	var pb models.PlayerBuilding
+	if err := s.db.First(&pb, playerBuildingID).Error; err != nil {
+		return err
+	}
+	if pb.ConstructionEndsAt != nil {
+		newEnd := pb.ConstructionEndsAt.Add(-time.Duration(speedupSeconds) * time.Second)
+		pb.ConstructionEndsAt = &newEnd
+		return s.db.Save(&pb).Error
+	}
+	return nil
+}
+
+func (s *ContentService) CancelConstruction(playerBuildingID uint) error {
+	var pb models.PlayerBuilding
+	if err := s.db.First(&pb, playerBuildingID).Error; err != nil {
+		return err
+	}
+	pb.IsConstructing = false
+	pb.ConstructionStartedAt = nil
+	pb.ConstructionEndsAt = nil
+	return s.db.Save(&pb).Error
+}
+
+func (s *ContentService) CompleteConstruction(playerBuildingID uint) (bool, error) {
+	var pb models.PlayerBuilding
+	if err := s.db.First(&pb, playerBuildingID).Error; err != nil {
+		return false, err
+	}
+	return s.CompleteConstructionIfReady(&pb)
+}
+
 // === Units (full CRUD + catalog from reference §5) ===
 func (s *ContentService) ListUnits(publishedOnly bool) ([]models.UnitDefinition, error) {
 	var list []models.UnitDefinition

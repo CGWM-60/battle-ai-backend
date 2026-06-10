@@ -506,3 +506,170 @@ func (h *ContentHandler) DeleteResearch(c *gin.Context) {
 
 // Note: Admin pages now render real tables from DB for all three (buildings full, units/research basic).
 // Seed the full catalogs from the reference to populate. Full CRUD (POST/PUT/DELETE) available for units and research too.
+
+// === V1 public endpoints for Flutter (buildings + construction) ===
+
+func (h *ContentHandler) ListBuildingsV1(c *gin.Context) {
+	// public catalog
+	h.ListBuildings(c)
+}
+
+func (h *ContentHandler) CatalogVersionV1(c *gin.Context) {
+	ver := h.contentSvc.CatalogVersion()
+	c.JSON(http.StatusOK, ver)
+}
+
+func (h *ContentHandler) GetBuildingV1(c *gin.Context) {
+	key := c.Param("key")
+	b, err := h.contentSvc.GetBuilding(key)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"building": b})
+}
+
+func (h *ContentHandler) GetBuildingResearchTreeV1(c *gin.Context) {
+	key := c.Param("key")
+	tree, err := h.contentSvc.GetBuildingResearchTree(key)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, tree)
+}
+
+func (h *ContentHandler) BuildingsAssetsManifestV1(c *gin.Context) {
+	m, err := h.contentSvc.BuildingsAssetsManifest()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, m)
+}
+
+func (h *ContentHandler) BuildingsAssetsUpdatesV1(c *gin.Context) {
+	since := c.DefaultQuery("sinceVersion", "0")
+	u, err := h.contentSvc.BuildingsAssetsUpdates(since)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, u)
+}
+
+func (h *ContentHandler) ListPlayerBuildingsV1(c *gin.Context) {
+	pidStr := c.Query("profileGamerId")
+	if pidStr == "" {
+		pidStr = c.Param("id")
+	}
+	pid, _ := strconv.ParseUint(pidStr, 10, 64)
+	list, err := h.contentSvc.ListPlayerBuildings(uint(pid))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"buildings": list})
+}
+
+func (h *ContentHandler) LegacyBuildPreviewV1(c *gin.Context) {
+	// simple preview using service calc (no side effects)
+	var body struct {
+		ProfileID   uint   `json:"profileId"`
+		ContentID   string `json:"contentId"`
+		TargetLevel int    `json:"targetLevel"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	def, err := h.contentSvc.GetBuilding(body.ContentID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unknown building"})
+		return
+	}
+	cost := h.contentSvc.CalculateBuildingCostAtLevel(def, body.TargetLevel, "common")
+	dur := h.contentSvc.CalculateBuildingDurationAtLevel(def, body.TargetLevel, "common")
+	c.JSON(http.StatusOK, gin.H{"cost": cost, "durationSeconds": dur, "preview": true})
+}
+
+func (h *ContentHandler) LegacyUpgradePreviewV1(c *gin.Context) {
+	h.LegacyBuildPreviewV1(c) // same logic for MVP
+}
+
+func (h *ContentHandler) ConstructionQueueV1(c *gin.Context) {
+	pidStr := c.Query("profileGamerId")
+	pid, _ := strconv.ParseUint(pidStr, 10, 64)
+	q, err := h.contentSvc.ConstructionQueue(uint(pid))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"queue": q})
+}
+
+func (h *ContentHandler) StartConstructionV1(c *gin.Context) {
+	var body struct {
+		ProfileGamerId uint   `json:"profileGamerId"`
+		ContentID      string `json:"contentId"`
+		TargetLevel    int    `json:"targetLevel"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	pb, err := h.contentSvc.StartConstructionV1(body.ProfileGamerId, body.ContentID, body.TargetLevel)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"playerBuilding": pb})
+}
+
+func (h *ContentHandler) StartUpgradeV1(c *gin.Context) {
+	idStr := c.Param("id")
+	id, _ := strconv.ParseUint(idStr, 10, 64)
+	var body struct {
+		ProfileGamerId uint `json:"profileGamerId"`
+		TargetLevel    int  `json:"targetLevel"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	pb, err := h.contentSvc.StartUpgrade(body.ProfileGamerId, uint(id), body.TargetLevel)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"playerBuilding": pb})
+}
+
+func (h *ContentHandler) SpeedupConstructionV1(c *gin.Context) {
+	idStr := c.Param("id")
+	id, _ := strconv.ParseUint(idStr, 10, 64)
+	var body struct {
+		Seconds int `json:"seconds"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	if err := h.contentSvc.SpeedupConstruction(uint(id), body.Seconds); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *ContentHandler) CancelConstructionV1(c *gin.Context) {
+	idStr := c.Param("id")
+	id, _ := strconv.ParseUint(idStr, 10, 64)
+	if err := h.contentSvc.CancelConstruction(uint(id)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (h *ContentHandler) CompleteConstructionV1(c *gin.Context) {
+	idStr := c.Param("id")
+	id, _ := strconv.ParseUint(idStr, 10, 64)
+	done, err := h.contentSvc.CompleteConstruction(uint(id))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"completed": done})
+}
