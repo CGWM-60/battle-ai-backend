@@ -2,8 +2,10 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
+	"strings"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/models"
@@ -80,8 +82,344 @@ type ResourceService struct {
 	db *gorm.DB
 }
 
+type buildingEffect struct {
+	EffectType    string  `json:"effectType"`
+	Target        string  `json:"target"`
+	Stat          string  `json:"stat"`
+	ValueBase     float64 `json:"valueBase"`
+	ValuePerLevel float64 `json:"valuePerLevel"`
+	Value         float64 `json:"value"`
+	IsPercentage  bool    `json:"isPercentage"`
+}
+
+type productionAccumulator struct {
+	ResourceProduction  map[string]float64
+	ResourceConsumption map[string]float64
+	PopulationCapacity  int
+	EnergyProduction    int
+	EnergyConsumption   int
+}
+
 func NewResourceService(db *gorm.DB) *ResourceService {
 	return &ResourceService{db: db}
+}
+
+func newProductionAccumulator() productionAccumulator {
+	return productionAccumulator{
+		ResourceProduction:  make(map[string]float64),
+		ResourceConsumption: make(map[string]float64),
+	}
+}
+
+func normalizeResourceCode(raw string) string {
+	key := strings.ToLower(strings.TrimSpace(raw))
+	key = strings.ReplaceAll(key, "-", "")
+	key = strings.ReplaceAll(key, "_", "")
+	key = strings.ReplaceAll(key, " ", "")
+
+	switch key {
+	case "food":
+		return "food"
+	case "energy", "energyproduction":
+		return "energy"
+	case "metal":
+		return "metal"
+	case "credits", "credit":
+		return "credits"
+	case "data", "dataproduction":
+		return "data"
+	case "components", "component":
+		return "components"
+	case "influence":
+		return "influence"
+	case "tokens", "token":
+		return "tokens"
+	case "population":
+		return "population"
+	case "providerbudget":
+		return "provider_budget"
+	case "inferencecredit":
+		return "inference_credit"
+	case "localcompute":
+		return "local_compute"
+	case "agentfocus":
+		return "agent_focus"
+	case "guildmarks":
+		return "guild_marks"
+	case "quantumcore", "quantumcoreproduction":
+		return "quantum_core"
+	case "neuralfiber":
+		return "neural_fiber"
+	case "voidfragment":
+		return "void_fragment"
+	default:
+		return ""
+	}
+}
+
+func resolveEffectValue(effect buildingEffect, level int) float64 {
+	if level < 1 {
+		level = 1
+	}
+	if effect.Value != 0 {
+		return effect.Value
+	}
+	return effect.ValueBase + float64(level-1)*effect.ValuePerLevel
+}
+
+func applyScaledDelta(base float64, delta float64, isPercentage bool) float64 {
+	if !isPercentage {
+		return base + delta
+	}
+	if base <= 0 {
+		return base
+	}
+	return base + (base * delta / 100.0)
+}
+
+func applyStarterFallbackProduction(acc *productionAccumulator, building models.PlayerBuilding) {
+	if building.Level <= 0 {
+		return
+	}
+	levelFactor := float64(building.Level)
+	switch building.ContentID {
+	case "building_modular_habitat":
+		acc.PopulationCapacity += 50 * building.Level
+	case "building_solar_plant":
+		acc.EnergyProduction += 80 * building.Level
+		acc.ResourceProduction["energy"] += 80 * levelFactor
+	case "building_vertical_farm":
+		acc.ResourceProduction["food"] += 70 * levelFactor
+	case "building_nexus_market":
+		acc.ResourceProduction["credits"] += 25 * levelFactor
+	}
+}
+
+func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, level int) {
+	for _, effect := range effects {
+		value := resolveEffectValue(effect, level)
+		if value == 0 {
+			continue
+		}
+
+		effectType := strings.ToLower(strings.TrimSpace(effect.EffectType))
+		target := strings.TrimSpace(effect.Target)
+		stat := strings.TrimSpace(effect.Stat)
+
+		switch effectType {
+		case "resourceproduction":
+			code := normalizeResourceCode(target)
+			if code == "" {
+				code = normalizeResourceCode(stat)
+			}
+			if code == "" {
+				continue
+			}
+			acc.ResourceProduction[code] = applyScaledDelta(acc.ResourceProduction[code], value, effect.IsPercentage)
+			if code == "energy" {
+				acc.EnergyProduction = int(math.Round(acc.ResourceProduction["energy"]))
+			}
+		case "statbonus":
+			metric := strings.ToLower(strings.TrimSpace(stat))
+			if metric == "" {
+				metric = strings.ToLower(strings.TrimSpace(target))
+			}
+			switch metric {
+			case "populationcapacity":
+				base := float64(acc.PopulationCapacity)
+				acc.PopulationCapacity = int(math.Round(applyScaledDelta(base, value, effect.IsPercentage)))
+			case "energyproduction":
+				base := float64(acc.EnergyProduction)
+				acc.EnergyProduction = int(math.Round(applyScaledDelta(base, value, effect.IsPercentage)))
+				acc.ResourceProduction["energy"] = float64(acc.EnergyProduction)
+			case "dataproduction":
+				acc.ResourceProduction["data"] = applyScaledDelta(acc.ResourceProduction["data"], value, effect.IsPercentage)
+			case "tradebonus":
+				acc.ResourceProduction["credits"] = applyScaledDelta(acc.ResourceProduction["credits"], value, effect.IsPercentage)
+			case "globalresourceproduction":
+				if effect.IsPercentage {
+					for resourceCode, current := range acc.ResourceProduction {
+						acc.ResourceProduction[resourceCode] = applyScaledDelta(current, value, true)
+					}
+				}
+			}
+		}
+	}
+}
+
+func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.DB, profile models.ProfileGamer) (productionAccumulator, error) {
+	acc := newProductionAccumulator()
+
+	var buildings []models.PlayerBuilding
+	if err := tx.WithContext(ctx).
+		Where("profile_gamer_id = ? AND level > 0 AND is_constructing = ?", profile.ID, false).
+		Find(&buildings).Error; err != nil {
+		return acc, err
+	}
+
+	contentIDs := make([]string, 0, len(buildings))
+	seen := map[string]bool{}
+	for _, b := range buildings {
+		if b.ContentID == "" || seen[b.ContentID] {
+			continue
+		}
+		seen[b.ContentID] = true
+		contentIDs = append(contentIDs, b.ContentID)
+	}
+
+	definitionsByContentID := map[string]models.BuildingDefinition{}
+	if len(contentIDs) > 0 {
+		var defs []models.BuildingDefinition
+		if err := tx.WithContext(ctx).Where("content_id IN ?", contentIDs).Find(&defs).Error; err != nil {
+			return acc, err
+		}
+		for _, def := range defs {
+			definitionsByContentID[def.ContentID] = def
+		}
+	}
+
+	for _, building := range buildings {
+		applyStarterFallbackProduction(&acc, building)
+		def, ok := definitionsByContentID[building.ContentID]
+		if !ok || strings.TrimSpace(def.EffectsJSON) == "" {
+			continue
+		}
+		var effects []buildingEffect
+		if err := json.Unmarshal([]byte(def.EffectsJSON), &effects); err != nil {
+			continue
+		}
+		applyBuildingEffects(&acc, effects, building.Level)
+	}
+
+	if acc.EnergyProduction <= 0 {
+		acc.EnergyProduction = int(math.Round(acc.ResourceProduction["energy"]))
+	} else {
+		acc.ResourceProduction["energy"] = float64(acc.EnergyProduction)
+	}
+
+	foodConsumption := math.Max(0, float64(profile.Population)*0.08)
+	energyConsumption := 5 + max(0, profile.Population/20)
+	acc.EnergyConsumption = energyConsumption
+	acc.ResourceConsumption["food"] = foodConsumption
+	acc.ResourceConsumption["energy"] = float64(energyConsumption)
+
+	if acc.PopulationCapacity < profile.Population {
+		acc.PopulationCapacity = profile.Population
+	}
+
+	return acc, nil
+}
+
+// SyncBuildingProduction recomputes production/consumption from completed buildings and
+// updates per-tick balances. When applyAccrual is true, elapsed production since the last
+// sync is applied directly to resource amounts.
+func (s *ResourceService) SyncBuildingProduction(ctx context.Context, profileID uint, applyAccrual bool) error {
+	if s.db == nil || profileID == 0 {
+		return nil
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := s.ensureMissingResourceRows(ctx, tx, profileID, false); err != nil {
+			return err
+		}
+
+		var profile models.ProfileGamer
+		if err := tx.WithContext(ctx).First(&profile, profileID).Error; err != nil {
+			return err
+		}
+
+		statsRepo := repositories.NewPlayerCityStatsRepository(tx)
+		stats, err := statsRepo.GetOrCreate(ctx, profileID)
+		if err != nil {
+			return err
+		}
+
+		acc, err := s.computeProductionState(ctx, tx, profile)
+		if err != nil {
+			return err
+		}
+
+		now := time.Now().UTC()
+		elapsedSeconds := 0.0
+		if applyAccrual {
+			lastSync := stats.LastProductionSyncAt
+			if !lastSync.IsZero() {
+				elapsedSeconds = now.Sub(lastSync).Seconds()
+				if elapsedSeconds < 0 {
+					elapsedSeconds = 0
+				}
+				if elapsedSeconds > 21600 {
+					elapsedSeconds = 21600
+				}
+			}
+		}
+
+		resourceRepo := repositories.NewPlayerResourceRepository(tx)
+		resources, err := resourceRepo.List(ctx, profileID)
+		if err != nil {
+			return err
+		}
+
+		capacityByCode := map[string]int64{}
+		for _, def := range officialResourceDefinitions {
+			capacity := int64(0)
+			if def.IsStorageLimited {
+				capacity = DefaultStorageCapacity
+			}
+			capacityByCode[def.Code] = capacity
+		}
+
+		for _, resource := range resources {
+			prod := acc.ResourceProduction[resource.ResourceCode]
+			cons := acc.ResourceConsumption[resource.ResourceCode]
+			balance := prod - cons
+
+			resource.ProductionPerTick = prod
+			resource.ConsumptionPerTick = cons
+			resource.BalancePerTick = balance
+
+			if applyAccrual && elapsedSeconds > 0 && balance != 0 {
+				delta := int64(math.Round(balance * elapsedSeconds))
+				if delta != 0 {
+					nextAmount := resource.Amount + delta
+					if nextAmount < 0 {
+						nextAmount = 0
+					}
+					if resource.Capacity > 0 && nextAmount > resource.Capacity {
+						nextAmount = resource.Capacity
+					}
+					resource.Amount = nextAmount
+				}
+			}
+
+			if resource.Capacity == 0 {
+				if capValue, ok := capacityByCode[resource.ResourceCode]; ok {
+					resource.Capacity = capValue
+				}
+			}
+
+			if err := resourceRepo.Save(ctx, &resource); err != nil {
+				return err
+			}
+		}
+
+		stats.FoodProduction = acc.ResourceProduction["food"]
+		stats.FoodConsumption = acc.ResourceConsumption["food"]
+		stats.FoodBalance = stats.FoodProduction - stats.FoodConsumption
+		stats.LastProductionSyncAt = now
+		if err := statsRepo.Save(ctx, stats); err != nil {
+			return err
+		}
+
+		updates := map[string]any{
+			"population_capacity": acc.PopulationCapacity,
+			"energy_production":   acc.EnergyProduction,
+			"energy_consumption":  acc.EnergyConsumption,
+			"energy_balance":      acc.EnergyProduction - acc.EnergyConsumption,
+			"updated_at":          now,
+		}
+		return tx.WithContext(ctx).Model(&models.ProfileGamer{}).Where("id = ?", profileID).Updates(updates).Error
+	})
 }
 
 func (s *ResourceService) SeedDefaults(ctx context.Context) error {
@@ -328,6 +666,9 @@ func (s *ResourceService) ensureNexusCore(ctx context.Context, tx *gorm.DB, prof
 
 func (s *ResourceService) PlayerSnapshot(ctx context.Context, profileID uint) (map[string]any, error) {
 	if err := s.EnsureInitialAllocation(ctx, profileID); err != nil {
+		return nil, err
+	}
+	if err := s.SyncBuildingProduction(ctx, profileID, true); err != nil {
 		return nil, err
 	}
 	catalogRepo := repositories.NewResourceCatalogRepository(s.db)

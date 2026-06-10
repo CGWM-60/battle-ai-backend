@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -562,23 +563,9 @@ func (s *ContentService) CompleteConstructionIfReady(pb *models.PlayerBuilding) 
 	if err := s.db.Save(pb).Error; err != nil {
 		return false, err
 	}
-	// Basic effect application (expand with full formulas/effects from reference)
-	// For demo: bump some profile stats based on known buildings
-	var p models.ProfileGamer
-	if err := s.db.First(&p, pb.ProfileGamerID).Error; err == nil {
-		switch pb.ContentID {
-		case "building_modular_habitat":
-			p.PopulationCapacity += 50
-			p.Morale = min(p.Morale+2, 100)
-		case "building_solar_plant":
-			p.EnergyProduction += 80
-			p.EnergyBalance += 80
-		case "building_vertical_farm":
-			// food etc.
-		}
-		s.db.Save(&p)
+	if err := NewResourceService(s.db).SyncBuildingProduction(context.Background(), pb.ProfileGamerID, false); err != nil {
+		return true, err
 	}
-	// TODO: notify, full effects from EffectsJSON, prerequisites check in Start
 	return true, nil
 }
 

@@ -196,6 +196,13 @@ Blocage action:
 | POST | `/daily-grant/claim?profileGamerId=12` | Query profil | Statut daily grant apres claim |
 | GET | `/daily-grant/history?profileGamerId=12&limit=30` | Query profil | `{ "claims": [DailyGrantClaim] }` |
 
+Notes sync économie temps réel:
+
+- Chaque appel `GET /resources` déclenche un recalcul serveur de la production/consommation à partir des bâtiments terminés (`EffectsJSON`).
+- Les montants sont ensuite accrétés côté serveur depuis `cityStats.lastProductionSyncAt`.
+- Les lignes `PlayerResource` renvoient `productionPerTick`, `consumptionPerTick`, `balancePerTick` pour l'affichage live côté client.
+- `GET /city/stats` renvoie aussi `lastProductionSyncAt`, `foodProduction`, `foodConsumption`, `foodBalance`.
+
 ## Admin contenu et ressources
 
 | Method | Path | Attendu | Retour JSON |

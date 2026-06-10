@@ -36,14 +36,15 @@ type PlayerResource struct {
 // PlayerCityStats stores Nexus resource-adjacent city stats not already owned by ProfileGamer.
 // ProfileGamer remains the source for population, capacity, morale, energy, and security.
 type PlayerCityStats struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	ProfileGamerID  uint      `gorm:"uniqueIndex;not null" json:"profileGamerId"`
-	StorageCapacity int64     `gorm:"default:1000" json:"storageCapacity"`
-	FoodProduction  float64   `json:"foodProduction"`
-	FoodConsumption float64   `json:"foodConsumption"`
-	FoodBalance     float64   `json:"foodBalance"`
-	CreatedAt       time.Time `json:"createdAt"`
-	UpdatedAt       time.Time `json:"updatedAt"`
+	ID                   uint      `gorm:"primaryKey" json:"id"`
+	ProfileGamerID       uint      `gorm:"uniqueIndex;not null" json:"profileGamerId"`
+	StorageCapacity      int64     `gorm:"default:1000" json:"storageCapacity"`
+	FoodProduction       float64   `json:"foodProduction"`
+	FoodConsumption      float64   `json:"foodConsumption"`
+	FoodBalance          float64   `json:"foodBalance"`
+	LastProductionSyncAt time.Time `json:"lastProductionSyncAt"`
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
 }
 
 // ResourceTransaction is the immutable resource audit trail.
