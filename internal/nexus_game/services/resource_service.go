@@ -544,11 +544,28 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 	}
 
 	foodConsumptionPerHour := math.Max(0, float64(profile.Population)*cfg.FoodPerPopulationPerHour)
-	energyConsumptionPerHour := cfg.EnergyBaseConsumptionPerHour + max(0, profile.Population/cfg.PopulationPerEnergy)
+
+	// Defensive guards: cfg fields are sanitized on load, but for safety on fresh/low-data
+	// profiles or during dev we protect every division. A zero divisor would otherwise
+	// cause runtime panic → 500 on /resources (exactly the error the user is seeing).
+	popPerEnergy := cfg.PopulationPerEnergy
+	if popPerEnergy <= 0 {
+		popPerEnergy = 20
+	}
+	energyConsumptionPerHour := cfg.EnergyBaseConsumptionPerHour + max(0, profile.Population/popPerEnergy)
 	energyConsumptionPerHour += buildingEnergySurcharge
 	energyConsumptionPerHour += max(0, industryLevelTotal*cfg.IndustryEnergyPerLevel+dataLevelTotal*cfg.DataEnergyPerLevel-solarLevelTotal*cfg.SolarEnergyReliefPerLevel)
-	if habitatLevelTotal > 0 && farmLevelTotal*cfg.HabitatFarmCoverageDivisor < habitatLevelTotal {
-		energyConsumptionPerHour += max(1, habitatLevelTotal/cfg.HabitatFarmEnergyPenaltyDivisor)
+
+	habitatDiv := cfg.HabitatFarmCoverageDivisor
+	if habitatDiv <= 0 {
+		habitatDiv = 2
+	}
+	penaltyDiv := cfg.HabitatFarmEnergyPenaltyDivisor
+	if penaltyDiv <= 0 {
+		penaltyDiv = 3
+	}
+	if habitatLevelTotal > 0 && farmLevelTotal*habitatDiv < habitatLevelTotal {
+		energyConsumptionPerHour += max(1, habitatLevelTotal/penaltyDiv)
 	}
 	acc.EnergyConsumption = energyConsumptionPerHour
 	acc.ResourceConsumption["food"] = foodConsumptionPerHour / 3600.0

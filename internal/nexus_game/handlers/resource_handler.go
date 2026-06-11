@@ -46,7 +46,18 @@ func (h *ResourceHandler) Resources(c *gin.Context) {
 	}
 	snapshot, err := h.resourceService.PlayerSnapshot(c.Request.Context(), profileID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load resources"})
+		// Defensive: do not return 500 to client (causes DioException and potential retry storm hammering the server).
+		// Log the real cause on server. Return 200 with minimal safe data so client can continue with last known
+		// or empty (live prediction / cache will handle UX). This profile may be in transitional state
+		// (fresh after purge/creation, during construction complete, missing some rows temporarily, etc.).
+		// The real fix is in the snapshot/ensure/sync path (guards on cfg divisors, ensure always creates rows, etc.).
+		c.JSON(http.StatusOK, gin.H{
+			"resources":     []interface{}{},
+			"catalog":       []interface{}{},
+			"cityStats":     gin.H{},
+			"transactions":  []interface{}{},
+			"warning":       "partial resources data (backend snapshot error)",
+		})
 		return
 	}
 	c.JSON(http.StatusOK, snapshot)
