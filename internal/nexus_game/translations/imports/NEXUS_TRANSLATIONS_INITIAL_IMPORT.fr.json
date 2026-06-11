@@ -30229,6 +30229,34 @@
     },
     {
       "domain": "nexus_game",
+      "key": "nexus_game.my_buildings.empty",
+      "locale": "fr",
+      "value": "Aucun bâtiment construit pour le moment.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.my_buildings.title",
+      "locale": "fr",
+      "value": "MES BÂTIMENTS",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.upgrade",
+      "locale": "fr",
+      "value": "AMÉLIORER",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.destroy",
+      "locale": "fr",
+      "value": "DÉTRUIRE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
       "key": "nexus_game.construction.status.in_construction",
       "locale": "fr",
       "value": "En construction",
