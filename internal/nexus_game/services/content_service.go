@@ -520,6 +520,47 @@ func isBuildingMilestoneLevel(level int) bool {
 	}
 }
 
+// deductConstructionCost checks current resources (after ensure) and deducts the calculated cost
+// for the targetLevel. Called when actually launching a construction (level 1 build or upgrade).
+// Server is authoritative: this is where the resources are really removed.
+// Uses negative ApplyResourceDelta so transactions are logged and live sync sees it.
+func (s *ContentService) deductConstructionCost(profileID uint, def *models.BuildingDefinition, targetLevel int) error {
+	ctx := context.Background()
+	if err := NewResourceService(s.db).EnsureInitialAllocation(ctx, profileID); err != nil {
+		return err
+	}
+
+	costs := s.CalculateBuildingCostAtLevel(def, targetLevel, def.Rarity)
+
+	// Fresh current amounts for the relevant resources
+	var prs []models.PlayerResource
+	if err := s.db.WithContext(ctx).
+		Where("profile_gamer_id = ? AND resource_code IN ?", profileID, []string{"credits", "metal", "data"}).
+		Find(&prs).Error; err != nil {
+		return err
+	}
+	curr := map[string]int64{"credits": 0, "metal": 0, "data": 0}
+	for _, pr := range prs {
+		curr[pr.ResourceCode] = pr.Amount
+	}
+
+	for code, need := range costs {
+		if int64(need) > curr[code] {
+			return fmt.Errorf("INSUFFICIENT_RESOURCES: not enough %s (need %d, have %d)", code, need, curr[code])
+		}
+	}
+
+	rs := NewResourceService(s.db)
+	for code, need := range costs {
+		if need > 0 {
+			if _, err := rs.ApplyResourceDelta(ctx, profileID, code, -int64(need), "construction_start", "player"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // === Player construction (depends on buildings) ===
 // Starts construction, enforces sequence/slots/prerequisites, and completes on tick or demand.
 
@@ -556,6 +597,11 @@ func (s *ContentService) StartConstruction(profileID uint, contentID string, tar
 			return nil, fmt.Errorf("BUILDING_SLOT_LIMIT_REACHED: %s limite a %d par cite.", contentID, slotsMax)
 		}
 
+		// Server must remove the resources when the construction is launched.
+		if err := s.deductConstructionCost(profileID, def, targetLevel); err != nil {
+			return nil, err
+		}
+
 		now := time.Now()
 		ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
 
@@ -578,6 +624,12 @@ func (s *ContentService) StartConstruction(profileID uint, contentID string, tar
 			if owned[i].IsConstructing {
 				return nil, errors.New("BUILDING_ALREADY_CONSTRUCTING: Une construction est deja en cours pour ce batiment.")
 			}
+
+			// Server must remove the resources when the construction (upgrade) is launched.
+			if err := s.deductConstructionCost(profileID, def, targetLevel); err != nil {
+				return nil, err
+			}
+
 			now := time.Now()
 			ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
 			owned[i].IsConstructing = true
@@ -1062,6 +1114,12 @@ func (s *ContentService) StartUpgrade(profileID uint, playerBuildingID uint, tar
 	if _, err := s.ValidatePrerequisites(profileID, "building", pb.ContentID); err != nil {
 		return nil, err
 	}
+
+	// Server must remove the resources when launching the upgrade construction.
+	if err := s.deductConstructionCost(profileID, def, targetLevel); err != nil {
+		return nil, err
+	}
+
 	now := time.Now()
 	ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
 	pb.IsConstructing = true
