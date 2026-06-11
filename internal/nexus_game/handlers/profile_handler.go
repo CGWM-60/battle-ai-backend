@@ -135,7 +135,12 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		"resources":          resourceBalances,
 		"city_stats":         cityStatsPayload,
 		// Daily plan context sent on first load for player's AI (provider/local/governor > server fallback).
-		"daily_plan_context": buildDailyPlanContextWithResources(p, resourceBalances, cityStatsPayload),
+		"daily_plan_context": func() interface{} {
+			if p.IACompanionID > 0 {
+				return buildDailyPlanContextWithResources(p, resourceBalances, cityStatsPayload)
+			}
+			return nil
+		}(),
 	})
 }
 
@@ -321,7 +326,12 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 		"resources":          resourceBalances,
 		"city_stats":         cityStatsPayload,
 		// Daily plan context sent on first load for player's AI (provider/local/governor > server fallback).
-		"daily_plan_context": buildDailyPlanContextWithResources(p, resourceBalances, cityStatsPayload),
+		"daily_plan_context": func() interface{} {
+			if p.IACompanionID > 0 {
+				return buildDailyPlanContextWithResources(p, resourceBalances, cityStatsPayload)
+			}
+			return nil
+		}(),
 	})
 }
 
