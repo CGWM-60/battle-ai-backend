@@ -30331,6 +30331,27 @@
       "locale": "fr",
       "value": "Merci de construire le bâtiment : {name}",
       "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.context_header",
+      "locale": "fr",
+      "value": "Contexte réel + recommandations de ton compagnon IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.real_context",
+      "locale": "fr",
+      "value": "Contexte réel IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.no_context_yet",
+      "locale": "fr",
+      "value": "Aucun contexte IA chargé pour aujourd’hui. Configure un compagnon IA pour recevoir un plan quotidien personnalisé.",
+      "language": "fr"
     }
   ]
 }
