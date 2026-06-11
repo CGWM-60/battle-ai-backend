@@ -67,3 +67,36 @@ func TestDisableTimedOutProviders(t *testing.T) {
 		t.Fatalf("did not expect openai to be disabled without timeout")
 	}
 }
+
+func TestParseGeneratedTribunalCasePayloadAcceptsCasesWrapper(t *testing.T) {
+	payload := `{"cases":[{"title":"Le reçu fantôme","synopsis":"Une preuve contredit le témoin.","level":3,"cast":[{"actorId":"w1"}],"evidence":[{"evidenceId":"e1"}]}]}`
+
+	got, err := parseGeneratedTribunalCasePayload(payload, 3)
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	if got.Title != "Le reçu fantôme" {
+		t.Fatalf("title = %q", got.Title)
+	}
+	if got.Synopsis == "" {
+		t.Fatal("expected synopsis to be preserved")
+	}
+}
+
+func TestFallbackGeneratedTribunalCaseIsPlayableAndVaried(t *testing.T) {
+	first := fallbackGeneratedTribunalCase(1, "seed-a")
+	second := fallbackGeneratedTribunalCase(2, "seed-b")
+
+	if first.Title == "" || second.Title == "" {
+		t.Fatal("fallback titles must be present")
+	}
+	if first.Title == second.Title {
+		t.Fatalf("fallback titles should vary, got %q", first.Title)
+	}
+	if len(first.Cast) == 0 || len(first.Evidence) == 0 || len(first.Scenes) == 0 || len(first.ProgressionRules) == 0 {
+		t.Fatalf("fallback case is not playable enough: %#v", first)
+	}
+	if isGenericTribunalTitle(first.Title) {
+		t.Fatalf("fallback title is generic: %q", first.Title)
+	}
+}

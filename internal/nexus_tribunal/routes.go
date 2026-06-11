@@ -2158,39 +2158,43 @@ func runManualTribunalGenerationBatch(db *gorm.DB, batch *tribunalmodels.Tribuna
 		if aerr != nil {
 			log.Printf("[tribunal-generate] single case level=%d failed: %v", lvl, aerr)
 			failed++
+			fallbackCase := fallbackTribunalCaseMap(lvl, fmt.Sprintf("provider:%s:%d:%d", providerType, lvl, time.Now().UnixNano()))
+			fallbackCase["level"] = lvl
+			allCases = append(allCases, fallbackCase)
+			seenLevels[lvl] = true
 			generationLogs = append(generationLogs, tribunalGenerationLogEntry{
 				At:        time.Now(),
 				Level:     lvl,
 				Step:      "provider_call",
-				Status:    "failed",
-				Message:   aerr.Error(),
+				Status:    "fallback",
+				Message:   "provider failed; deterministic playable case generated: " + aerr.Error(),
 				LatencyMs: time.Since(levelStarted).Milliseconds(),
 			})
 			saveTribunalGenerationProgress(db, batch, 0, failed, generationLogs, "")
-			// continue to next level instead of failing the whole batch
 			continue
 		}
 
 		cleaned := cleanJSONLocal(resp.Text)
-		var singleCase map[string]any
-		if uerr := json.Unmarshal([]byte(cleaned), &singleCase); uerr != nil {
+		singleCase, uerr := parseTribunalCaseMapPayload(cleaned, lvl)
+		if uerr != nil {
 			log.Printf("[tribunal-generate] single case level=%d json parse failed: %v preview=%s", lvl, uerr, preview(cleaned, 400))
 			failed++
+			singleCase = fallbackTribunalCaseMap(lvl, fmt.Sprintf("parse:%s:%d:%d", providerType, lvl, time.Now().UnixNano()))
 			generationLogs = append(generationLogs, tribunalGenerationLogEntry{
 				At:        time.Now(),
 				Level:     lvl,
 				Step:      "json_parse",
-				Status:    "failed",
-				Message:   uerr.Error(),
+				Status:    "fallback",
+				Message:   "invalid provider JSON; deterministic playable case generated: " + uerr.Error(),
 				Preview:   preview(cleaned, 700),
 				LatencyMs: resp.LatencyMs,
 			})
 			saveTribunalGenerationProgress(db, batch, 0, failed, generationLogs, "")
-			continue
 		}
 
 		// ensure level is correct
 		singleCase["level"] = lvl
+		singleCase = completeTribunalCaseMap(singleCase, lvl, fmt.Sprintf("%s:%d:%d", providerType, lvl, time.Now().UnixNano()))
 
 		lvlVal := intFromAny(singleCase["level"], lvl)
 		if seenLevels[lvlVal] {
@@ -2429,6 +2433,180 @@ func cleanJSONLocal(value string) string {
 		return clean[start : end+1]
 	}
 	return clean
+}
+
+func parseTribunalCaseMapPayload(cleaned string, level int) (map[string]any, error) {
+	var raw any
+	if err := json.Unmarshal([]byte(cleaned), &raw); err != nil {
+		return nil, err
+	}
+	candidates := tribunalCaseMapCandidates(raw)
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no tribunal case object found")
+	}
+	index := clampInt(level-1, 0, len(candidates)-1)
+	return candidates[index], nil
+}
+
+func tribunalCaseMapCandidates(raw any) []map[string]any {
+	out := []map[string]any{}
+	switch v := raw.(type) {
+	case []any:
+		for _, item := range v {
+			out = append(out, tribunalCaseMapCandidates(item)...)
+		}
+	case map[string]any:
+		for _, key := range []string{"cases", "case", "data", "result", "generatedCase"} {
+			if nested, ok := v[key]; ok {
+				out = append(out, tribunalCaseMapCandidates(nested)...)
+			}
+		}
+		if title := strings.TrimSpace(fmt.Sprint(v["title"])); title != "" && title != "<nil>" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+func completeTribunalCaseMap(raw map[string]any, level int, seed string) map[string]any {
+	fallback := fallbackTribunalCaseMap(level, seed)
+	for key, value := range fallback {
+		if !tribunalMapHasValue(raw[key]) {
+			raw[key] = value
+		}
+	}
+	if isGenericTribunalMapTitle(fmt.Sprint(raw["title"])) {
+		raw["title"] = fallback["title"]
+	}
+	raw["level"] = level
+	return raw
+}
+
+func tribunalMapHasValue(value any) bool {
+	switch v := value.(type) {
+	case nil:
+		return false
+	case string:
+		return strings.TrimSpace(v) != "" && strings.TrimSpace(v) != "<nil>"
+	case []any:
+		return len(v) > 0
+	case []map[string]any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	default:
+		return true
+	}
+}
+
+func isGenericTribunalMapTitle(title string) bool {
+	t := strings.ToLower(strings.TrimSpace(title))
+	if t == "" || t == "<nil>" {
+		return true
+	}
+	for _, generic := range []string{"affaire nexus", "tribunal nexus", "le jugement", "le proces de l'ia", "le procès de l'ia", "l'affaire du protocole", "affaire du protocole"} {
+		if t == generic {
+			return true
+		}
+	}
+	return len([]rune(t)) < 8
+}
+
+func fallbackTribunalCaseMap(level int, seed string) map[string]any {
+	level = clampInt(level, 1, 10)
+	themes := []struct {
+		title    string
+		caseType string
+		place    string
+		object   string
+		secret   string
+	}{
+		{"Les minutes manquantes du relais Kappa", "world_event", "relais Kappa", "journal de maintenance", "le delai de vingt-deux minutes cache une intervention humaine"},
+		{"Le contrat fantome de la serre Helix", "guild_conflict", "serre Helix", "contrat de rationnement", "la clause signee n'est valide qu'apres activation d'un badge vole"},
+		{"L'alibi froid de Sira Voss", "player_conflict", "clinique Nocturne", "scan biometrique", "le scan prouve une presence mais pas l'identite du corps"},
+		{"La dette rouge du marche orbital", "commercial", "marche orbital", "recu de transfert", "la dette a ete reglee par un tiers qui voulait provoquer le proces"},
+		{"Le silence du temoin synthetique", "moral", "tour de mediation", "enregistrement audio", "le temoin a ete bride pour proteger une victime"},
+		{"La signature impossible du bastion Aster", "faction_conflict", "bastion Aster", "signature cryptographique", "la signature est authentique mais rejouee depuis une sauvegarde"},
+		{"La pluie noire sur le quai 17", "absurd", "quai 17", "capteur meteo", "la pluie sert de couverture a une livraison interdite"},
+		{"Le verdict avant l'audience", "tribunal_integrity", "greffe central", "brouillon de verdict", "le document est une simulation, pas une decision finale"},
+		{"Le temoin qui n'avait pas d'ombre", "identity", "district holographique", "video de securite", "l'ombre absente vient d'un projecteur coupe au bon moment"},
+		{"La cle morte du coffre Nexus", "data_theft", "coffre Nexus", "cle d'acces expiree", "la cle morte ouvre seulement le journal des tentatives"},
+	}
+	theme := themes[(level-1)%len(themes)]
+	shortSeed := strconv.FormatInt(int64(len(seed)+level*41), 36)
+	evidenceID := fmt.Sprintf("preuve_%d", level)
+	witnessID := fmt.Sprintf("temoin_%d", level)
+	statementID := fmt.Sprintf("stmt_%d", level)
+	confrontationID := fmt.Sprintf("act1_confrontation_%d", level)
+	revealID := fmt.Sprintf("act1_reveal_%d", level)
+	statement := fmt.Sprintf("Je n'ai vu personne manipuler le %s apres la fermeture du %s.", theme.object, theme.place)
+	return map[string]any{
+		"title":                    fmt.Sprintf("%s [%s]", theme.title, shortSeed),
+		"synopsis":                 fmt.Sprintf("Dans %s, une preuve trop parfaite accuse la mauvaise personne. Le tribunal doit separer trace technique, mobile et intention.", theme.place),
+		"summary":                  fmt.Sprintf("Affaire de secours jouable: %s.", theme.secret),
+		"level":                    level,
+		"difficulty":               []string{"initiation", "easy", "standard", "intermediate", "confirmed", "hard", "expert", "master", "legendary", "nexus"}[level-1],
+		"estimatedDurationMinutes": 10 + level*4,
+		"caseType":                 theme.caseType,
+		"mode":                     "full_case",
+		"tone":                     "cyberpunk_serious",
+		"realTruth":                theme.secret,
+		"publicTruth":              "La ville croit que l'accuse a ete pris par une preuve technique incontestable.",
+		"finalReveal":              fmt.Sprintf("La contradiction finale montre que %s.", theme.secret),
+		"playerRoleSuggestion":     "defense",
+		"accusationPosition":       fmt.Sprintf("L'accusation affirme que le %s etablit une responsabilite directe.", theme.object),
+		"defensePosition":          "La defense doit montrer que la preuve est vraie mais interpretee trop vite.",
+		"tags":                     []string{"fallback", "cyberpunk", theme.caseType, fmt.Sprintf("niveau_%d", level)},
+		"witnesses": []map[string]any{{
+			"name":        fmt.Sprintf("Ilan Trace-%d", level),
+			"role":        "temoin cle",
+			"credibility": 62 + level,
+			"bias":        "protege sa reputation",
+			"personality": "precis, nerveux, evasif quand on parle des horaires",
+		}},
+		"evidence": []map[string]any{{
+			"evidenceId":        evidenceID,
+			"title":             strings.ReplaceAll(theme.object, "_", " "),
+			"description":       fmt.Sprintf("Piece centrale recuperee dans %s.", theme.place),
+			"details":           fmt.Sprintf("La piece semble accuser directement l'accuse, mais %s.", theme.secret),
+			"origin":            "registre Tribunal de secours",
+			"contradictionHint": fmt.Sprintf("A confronter avec la declaration %s sur l'heure et le lieu.", statementID),
+			"chainOfCustody":    "saisie automatique, scelle numerique, verification partielle",
+			"evidenceType":      "document",
+			"strength":          70,
+			"reliability":       76,
+			"supportsSide":      "neutral",
+			"assetId":           "tribunal.evidence.document",
+		}},
+		"testimonyStatements": []map[string]any{{"statementId": statementID, "speakerActorId": witnessID, "text": statement}},
+		"expectedContradictions": []map[string]any{{
+			"statementContent":  statement,
+			"evidenceTitle":     strings.ReplaceAll(theme.object, "_", " "),
+			"contradictionType": "time",
+		}},
+		"cast": []map[string]any{
+			{"actorId": "judge_ai", "actorType": "judge", "name": "Magistrat Ada-7", "personality": "calme, strict, sensible aux contradictions temporelles", "avatarAssetId": "tribunal.character.judge_ai"},
+			{"actorId": "prosecutor_ai", "actorType": "prosecutor", "name": "Procureur Nyx", "personality": "incisif, convaincu par les logs", "avatarAssetId": "tribunal.character.prosecutor_ai"},
+			{"actorId": witnessID, "actorType": "witness", "name": fmt.Sprintf("Ilan Trace-%d", level), "personality": "temoin technique sous pression", "avatarAssetId": "tribunal.character.witness_agent"},
+		},
+		"acts": []map[string]any{{"actIndex": 1, "title": "Audience sous tension", "objective": "Identifier la faille de la preuve principale.", "summary": "Le tribunal ouvre sur une preuve forte mais incomplete."}},
+		"scenes": []map[string]any{
+			{"sceneId": fmt.Sprintf("act1_intro_%d", level), "actIndex": 1, "sceneIndex": 0, "sceneType": "intro", "title": "Ouverture du dossier", "objective": "Comprendre l'accusation.", "narrativeText": fmt.Sprintf("Le tribunal examine %s. Le procureur presente le %s comme preuve decisive.", theme.place, theme.object), "activeWitnessId": nil, "activeActorIds": []string{"judge_ai", "prosecutor_ai"}, "availableEvidenceIds": []string{evidenceID}, "visibleStatementIds": []string{}, "visibleStatements": []map[string]any{}, "allowedActions": []string{"continue_story", "ai_analysis"}, "nextSceneId": confrontationID},
+			{"sceneId": confrontationID, "actIndex": 1, "sceneIndex": 1, "sceneType": "cross_examination", "title": "Contre-interrogatoire", "objective": "Trouver la contradiction horaire.", "narrativeText": "Le temoin confirme sa version. Sa certitude repose sur une horloge secondaire.", "activeWitnessId": witnessID, "activeActorIds": []string{witnessID}, "availableEvidenceIds": []string{evidenceID}, "visibleStatementIds": []string{statementID}, "visibleStatements": []map[string]any{{"statementId": statementID, "speakerActorId": witnessID, "text": statement}}, "allowedActions": []string{"press", "present_evidence", "objection", "ai_analysis", "expose_lie"}, "nextSceneId": revealID},
+			{"sceneId": revealID, "actIndex": 1, "sceneIndex": 2, "sceneType": "reveal", "title": "La preuve se retourne", "objective": "Formuler la verite cachee.", "narrativeText": fmt.Sprintf("La salle comprend que %s. Le verdict ne peut plus suivre la lecture publique.", theme.secret), "activeWitnessId": nil, "activeActorIds": []string{"judge_ai"}, "availableEvidenceIds": []string{evidenceID}, "visibleStatementIds": []string{}, "visibleStatements": []map[string]any{}, "allowedActions": []string{"continue_story"}, "nextSceneId": nil},
+		},
+		"progressionRules": []map[string]any{{
+			"sceneId": confrontationID, "triggerAction": "present_evidence", "requiredEvidenceId": evidenceID, "requiredStatementId": statementID, "resultType": "major_reveal", "isCritical": true, "unlockSceneId": revealID,
+			"narrativeResult": fmt.Sprintf("La preuve confirme la trace, mais revele surtout que %s.", theme.secret),
+			"scoreEffects":    map[string]any{"defenseScoreDelta": 10, "witnessCredibilityDelta": -8, "tribunalPressureDelta": 6},
+		}},
+		"failureRules":     []map[string]any{{"sceneId": confrontationID, "triggerAction": "objection", "penaltyType": "score_down", "maxFailuresBeforeHint": 2, "judgeWarningText": "Le tribunal exige un lien direct entre preuve et declaration.", "hintText": "La contradiction se trouve dans l'heure et la conservation de la piece.", "scoreEffects": map[string]any{"defenseScoreDelta": -3}, "stayOnScene": true}},
+		"crisisMoment":     map[string]any{"sceneId": confrontationID, "trigger": "wrong_objection", "effect": "la pression du tribunal augmente"},
+		"possibleVerdicts": []string{"defense_win", "partial_defense", "hidden_truth"},
+		"epilogue":         "Le tribunal ordonne une verification des protocoles de preuve avant toute sanction definitive.",
+		"verdictSummary":   fmt.Sprintf("Verdict provisoire: la preuve cle montre que %s.", theme.secret),
+		"nexusBridgeHints": []map[string]any{{"type": "trust_delta", "targetId": theme.caseType, "delta": -2}},
+	}
 }
 
 func preview(s string, max int) string {
