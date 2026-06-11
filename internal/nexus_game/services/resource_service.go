@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	DefaultStorageCapacity = int64(1000)
+	DefaultStorageCapacity = int64(2000)
 	NexusCoreContentID     = "building_nexus_core"
 )
 
@@ -33,12 +33,12 @@ type ResourceDefinition struct {
 
 var officialResourceDefinitions = []ResourceDefinition{
 	{Code: "population", Name: "Population", Category: "city", IsStorageLimited: false, InitialAmount: 0, SortOrder: 10},
-	{Code: "credits", Name: "Credits", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 450, DailyGrantAmount: 120, SortOrder: 15},
-	{Code: "food", Name: "Food", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 500, DailyGrantAmount: 150, SortOrder: 20},
-	{Code: "energy", Name: "Energy", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 300, DailyGrantAmount: 100, SortOrder: 30},
-	{Code: "metal", Name: "Metal", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 800, DailyGrantAmount: 120, SortOrder: 40},
-	{Code: "components", Name: "Components", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 120, DailyGrantAmount: 20, SortOrder: 50},
-	{Code: "data", Name: "Data", Category: "ai", IsConsumable: true, IsStorageLimited: true, InitialAmount: 100, DailyGrantAmount: 25, SortOrder: 60},
+	{Code: "credits", Name: "Credits", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 800, DailyGrantAmount: 120, SortOrder: 15},
+	{Code: "food", Name: "Food", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 800, DailyGrantAmount: 150, SortOrder: 20},
+	{Code: "energy", Name: "Energy", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 500, DailyGrantAmount: 100, SortOrder: 30},
+	{Code: "metal", Name: "Metal", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 1400, DailyGrantAmount: 120, SortOrder: 40},
+	{Code: "components", Name: "Components", Category: "basic", IsConsumable: true, IsStorageLimited: true, InitialAmount: 200, DailyGrantAmount: 20, SortOrder: 50},
+	{Code: "data", Name: "Data", Category: "ai", IsConsumable: true, IsStorageLimited: true, InitialAmount: 200, DailyGrantAmount: 25, SortOrder: 60},
 	{Code: "influence", Name: "Influence", Category: "social", IsConsumable: true, IsStorageLimited: true, InitialAmount: 25, DailyGrantAmount: 5, SortOrder: 70},
 	{Code: "guild_marks", Name: "Guild Marks", Category: "guild", IsConsumable: true, IsRare: true, IsStorageLimited: true, InitialAmount: 0, DailyGrantAmount: 0, SortOrder: 80},
 	{Code: "tokens", Name: "Tokens", Category: "ai", IsConsumable: true, IsStorageLimited: false, InitialAmount: 50, DailyGrantAmount: 25, SortOrder: 90},
@@ -744,6 +744,9 @@ func (s *ResourceService) EnsureInitialAllocation(ctx context.Context, profileID
 			if err := s.ensureMissingResourceRows(ctx, tx, profileID, true); err != nil {
 				return err
 			}
+			if err := s.ensureStarterAllocationUpgrade(ctx, tx, &log); err != nil {
+				return err
+			}
 			return s.ensureNexusCore(ctx, tx, profileID)
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -847,6 +850,66 @@ func (s *ResourceService) ensureStarterAllocation(ctx context.Context, tx *gorm.
 	}
 
 	return granted, nil
+}
+
+func (s *ResourceService) ensureStarterAllocationUpgrade(ctx context.Context, tx *gorm.DB, log *models.InitialAllocationLog) error {
+	if log == nil || log.ProfileGamerID == 0 {
+		return nil
+	}
+	upgrade := starterAllocationUpgrade(log.Resources, Level1StarterAllocation())
+	if len(upgrade) == 0 {
+		return nil
+	}
+
+	if log.Resources == nil {
+		log.Resources = map[string]int64{}
+	}
+	resourceRepo := repositories.NewPlayerResourceRepository(tx)
+	transactionRepo := repositories.NewResourceTransactionRepository(tx)
+	now := time.Now().UTC()
+	for code, delta := range upgrade {
+		def, ok := resourceDefinitionByCode(code)
+		if !ok || delta <= 0 {
+			continue
+		}
+		capacity := DefaultStorageCapacity
+		if !def.IsStorageLimited {
+			capacity = 0
+		}
+		resource, err := resourceRepo.Add(ctx, log.ProfileGamerID, code, delta, capacity, def.IsStorageLimited)
+		if err != nil {
+			return err
+		}
+		if err := transactionRepo.Create(ctx, &models.ResourceTransaction{
+			ProfileGamerID:  log.ProfileGamerID,
+			ResourceCode:    code,
+			AmountDelta:     delta,
+			BalanceAfter:    resource.Amount,
+			TransactionType: "initial_allocation_upgrade",
+			Source:          "system",
+			CreatedAt:       now,
+		}); err != nil {
+			return err
+		}
+		log.Resources[code] += delta
+	}
+	return tx.WithContext(ctx).Save(log).Error
+}
+
+func starterAllocationUpgrade(previous map[string]int64, target map[string]int64) map[string]int64 {
+	if previous == nil {
+		previous = map[string]int64{}
+	}
+	upgrade := map[string]int64{}
+	for code, targetAmount := range target {
+		if targetAmount <= 0 {
+			continue
+		}
+		if delta := targetAmount - previous[code]; delta > 0 {
+			upgrade[code] = delta
+		}
+	}
+	return upgrade
 }
 
 func (s *ResourceService) ensureInitialCityStats(ctx context.Context, tx *gorm.DB, profileID uint) error {
