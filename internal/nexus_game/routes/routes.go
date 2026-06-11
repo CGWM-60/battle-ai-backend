@@ -252,6 +252,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	v1.GET("/assets/buildings/updates", contentH.BuildingsAssetsUpdatesV1)
 	// Player buildings
 	v1.GET("/buildings", contentH.ListPlayerBuildingsV1) // requires ?profileGamerId= or auth later
+	v1.POST("/buildings/destroy", contentH.DestroyPlayerBuildingV1)
 	// Legacy build/upgrade preview (can be no-op or call service calc)
 	v1.POST("/buildings/build", contentH.LegacyBuildPreviewV1)
 	v1.POST("/buildings/:id/upgrade", contentH.LegacyUpgradePreviewV1)

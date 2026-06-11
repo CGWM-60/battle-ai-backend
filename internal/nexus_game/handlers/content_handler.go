@@ -710,6 +710,30 @@ func (h *ContentHandler) ListPlayerBuildingsV1(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"buildings": list})
 }
 
+func (h *ContentHandler) DestroyPlayerBuildingV1(c *gin.Context) {
+	pidStr := c.Query("profileGamerId")
+	if pidStr == "" {
+		pidStr = c.Param("id")
+	}
+	pid, _ := strconv.ParseUint(pidStr, 10, 64)
+	var body struct {
+		ContentID string `json:"contentId"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		// allow query too
+		body.ContentID = c.Query("contentId")
+	}
+	if body.ContentID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "contentId required"})
+		return
+	}
+	if err := h.contentSvc.DestroyPlayerBuilding(uint(pid), body.ContentID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
 func (h *ContentHandler) LegacyBuildPreviewV1(c *gin.Context) {
 	// simple preview using service calc (no side effects)
 	var body struct {

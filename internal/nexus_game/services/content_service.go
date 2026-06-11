@@ -615,6 +615,14 @@ func (s *ContentService) ListPlayerBuildings(profileID uint) ([]models.PlayerBui
 	return list, err
 }
 
+func (s *ContentService) DestroyPlayerBuilding(profileID uint, contentID string) error {
+	var pb models.PlayerBuilding
+	if err := s.db.Where("profile_gamer_id = ? AND content_id = ?", profileID, contentID).First(&pb).Error; err != nil {
+		return err
+	}
+	return s.db.Delete(&pb).Error
+}
+
 // === v1 contract additions for buildings / construction ===
 
 func (s *ContentService) CatalogVersion() map[string]interface{} {

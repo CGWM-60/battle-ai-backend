@@ -30219,6 +30219,34 @@
       "locale": "fr",
       "value": "LVL",
       "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.server_production_fallback",
+      "locale": "fr",
+      "value": "Production serveur (effets du bâtiment)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.status.in_construction",
+      "locale": "fr",
+      "value": "En construction",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.status.operational",
+      "locale": "fr",
+      "value": "Opérationnel",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.status.available",
+      "locale": "fr",
+      "value": "Disponible à construire",
+      "language": "fr"
     }
   ]
 }
