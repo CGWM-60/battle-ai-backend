@@ -30352,6 +30352,27 @@
       "locale": "fr",
       "value": "Aucun contexte IA chargé pour aujourd’hui. Configure un compagnon IA pour recevoir un plan quotidien personnalisé.",
       "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.recs_note",
+      "locale": "fr",
+      "value": "Les items viennent du plan IA du jour (sauvegardé après appel au compagnon). Ajoute de nouveaux types sans toucher la carte.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.applied",
+      "locale": "fr",
+      "value": "APPLIQUÉ",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.locked_once",
+      "locale": "fr",
+      "value": "VERROU 1×/JOUR",
+      "language": "fr"
     }
   ]
 }
