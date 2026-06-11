@@ -30373,6 +30373,41 @@
       "locale": "fr",
       "value": "VERROU 1×/JOUR",
       "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_title",
+      "locale": "fr",
+      "value": "Plan de base (état actuel de la ville)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_rec_pop",
+      "locale": "fr",
+      "value": "Stabiliser croissance population (logement + moral)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_rec_energy",
+      "locale": "fr",
+      "value": "Corriger balance énergétique (priorité production)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_rec_sec",
+      "locale": "fr",
+      "value": "Renforcer sécurité avant le prochain world tick",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_note",
+      "locale": "fr",
+      "value": "Plan de base généré à partir de l'état actuel de ta ville. Configure un compagnon IA pour des recommandations personnalisées et plus riches.",
+      "language": "fr"
     }
   ]
 }
