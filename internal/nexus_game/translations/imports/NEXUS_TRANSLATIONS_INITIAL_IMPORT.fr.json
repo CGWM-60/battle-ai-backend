@@ -30093,6 +30093,132 @@
       "locale": "fr",
       "value": "exemplaires",
       "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.back_to_construction",
+      "locale": "fr",
+      "value": "Retour à Construction / Bâtiments",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.bonus_actifs",
+      "locale": "fr",
+      "value": "BONUS ACTIFS",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.prochain_niveau",
+      "locale": "fr",
+      "value": "PROCHAIN NIVEAU",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.title",
+      "locale": "fr",
+      "value": "Détail bâtiment",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.production_batiment",
+      "locale": "fr",
+      "value": "Production du bâtiment",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.production_actuelle",
+      "locale": "fr",
+      "value": "Production actuelle",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.mise_a_jour_temps_reel",
+      "locale": "fr",
+      "value": "Mise à jour en temps réel (moteur central, toutes les secondes) : +",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.ajoute_ressources",
+      "locale": "fr",
+      "value": "— s'ajoute aux ressources globales (un \"cycle\" = 1s de prédiction client)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.production_stats",
+      "locale": "fr",
+      "value": "PRODUCTION STATS",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.acier_synthetique",
+      "locale": "fr",
+      "value": "Acier synthétique",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.nano_ceramique",
+      "locale": "fr",
+      "value": "Nano-céramique",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.dechets_radioactifs",
+      "locale": "fr",
+      "value": "Déchets radioactifs",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.production_reelle_note",
+      "locale": "fr",
+      "value": "↑ Production réelle collectée par le moteur central • visible live dans l'aperçu ville",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.niveau_suivant",
+      "locale": "fr",
+      "value": "Niveau",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.production_bonus_augmentes",
+      "locale": "fr",
+      "value": "Production et bonus augmentés (calculés par le serveur).",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.couts_duree_exactes",
+      "locale": "fr",
+      "value": "Coûts et durée exacts : lancez l'amélioration depuis la file de construction pour voir les valeurs serveur.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.effets_supplementaires",
+      "locale": "fr",
+      "value": "Effets supplémentaires, workers max, slots IA : mis à jour dynamiquement au niveau supérieur (données serveur).",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.building_detail.lvl",
+      "locale": "fr",
+      "value": "LVL",
+      "language": "fr"
     }
   ]
 }
