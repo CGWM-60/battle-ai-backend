@@ -8559,7 +8559,7 @@
       "domain": "building",
       "key": "building.nexus_core.description",
       "locale": "fr",
-      "value": "Noyau Nexus est un bâtiment spécial de rareté nexus. Coût L1 : Gratuit (spawn initial). Durée L1 : 5 min. Travailleurs : N/A. Apports : globalPowerBonus +5 % (+1 %/niv), cityLevelCap 5 (+1/niv (max 30)), moduleAccessTier 1 (+1 aux paliers 5, 10, 15, 20, 25, 30), allBuildingsBonusPercent +1 % (+0.5 %/niv), maxDistrictsUnlocked 1 (+1 aux niv 5, 10, 15, 20, 25, 30).",
+      "value": "Noyau Nexus est un bâtiment spécial de rareté nexus (indestructible et unique). Coût L1 : Gratuit (spawn initial). Durée L1 : 5 min. Travailleurs : N/A. Apports : globalPowerBonus +5 % (+1 %/niv), cityLevelCap 5 (+1/niv (max 30)), moduleAccessTier 1 (+1 aux paliers 5, 10, 15, 20, 25, 30), allBuildingsBonusPercent +1 % (+0.5 %/niv), maxDistrictsUnlocked 1 (+1 aux niv 5, 10, 15, 20, 25, 30).",
       "language": "fr"
     },
     {
@@ -30407,6 +30407,13 @@
       "key": "nexus_game.daily_plan.basic_note",
       "locale": "fr",
       "value": "Plan de base généré à partir de l'état actuel de ta ville. Configure un compagnon IA pour des recommandations personnalisées et plus riches.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.my_buildings.nexus_core_indestructible",
+      "locale": "fr",
+      "value": "INDÉSTRUCTIBLE (Noyau Nexus - coeur de la cité)",
       "language": "fr"
     }
   ]

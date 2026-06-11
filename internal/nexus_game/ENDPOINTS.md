@@ -132,7 +132,7 @@ Unites de temps envoyees:
 - `BuildingDefinition.productionBasePerHour` et `productionGrowth`: valeurs de catalogue par heure.
 - `ProfileGamer.energyProduction`, `energyConsumption`, `energyBalance`: valeurs par heure, pour l'affichage des limites energie.
 - `PlayerResource.productionPerTick`, `consumptionPerTick`, `balancePerTick`: valeurs par seconde, pour l'animation Flutter et l'accrual serveur.
-- `ProfileGamer.populationCapacity`: limite serveur calculee depuis les habitats termines. Un habitat donne `50 + 25 * (niveau - 1)`, avant bonus de recherche.
+- `ProfileGamer.populationCapacity`: limite serveur calculee depuis les habitats termines. Par defaut, un habitat donne `500 + 250 * (niveau - 1)`, avant bonus de recherche. Ces valeurs sont modifiables dans `/api/nexus-game/admin/game-config`.
 - nourriture consommee: `population * 0.08 / heure`, exposee dans `PlayerCityStats.foodConsumption` et convertie en `consumptionPerTick` pour la ressource `food`.
 
 ## Prerequis batiments, unites, recherches
@@ -331,6 +331,7 @@ Pages HTML dev existantes:
 | POST | `/worlds/repair-player-assignments` | Aucun | `{ "repaired": 0 }` |
 | GET | `/worlds/:id` | Path world id | `{ "world": {...} }` |
 | GET | `/worlds/:id/players?continent_id=2&search=neo&limit=50&offset=0` | Query optionnelle | Liste joueurs monde paginee |
+| DELETE | `/worlds/:id/players/:profileId` | Path world id + profile gamer id | `{ "deleted": true, "result": { "profileId": 12, "userId": 7, "worldId": 1, "continentId": 2, "deleted": { "...": 1 } } }` |
 | GET | `/continents` | Aucun | `{ "message": "use ListWorlds for full view with Redis capacities" }` |
 | POST | `/worlds/:id/generate-event` | Path world id | `{ "world_id": 1, "proposed_event": {...}, "note": "..." }` |
 | POST | `/worlds/:id/trigger-tick` | Path world id | `{ "message": "tick executed", "world_id": 1 }` |
@@ -339,6 +340,12 @@ Pages HTML dev existantes:
 | PUT | `/prompts/:id` | JSON champs prompt | `{ "message": "prompt updated" }` |
 | GET | `/ai-outputs` | Aucun | `{ "outputs": [...] }` |
 | POST | `/ai/generate` | `{ "world_id": 1, "feature": "quest_seed", "prompt_id": "...", "prompt_version": "...", "extra": {} }` | `{ "success": true, "feature": "...", "world_id": 1, "output": {...}, "used_prompt": Prompt|null, "note": "..." }` |
+
+Suppression joueur monde:
+
+- Ne supprime pas le compte utilisateur global.
+- Supprime en hard delete les donnees Nexus liees: `ProfileGamer`, ressources, stats ville, transactions, batiments, unites, recherches, allocation initiale, daily grants, daily plans, agents MMO IA, memoire/attaques/sabotages/espionnages IA serveur ciblees, avatars et compagnons Nexus rattaches au `userId`.
+- Refuse la suppression si `profileId` n'appartient pas au monde `:id`.
 
 ## IA serveur publique
 

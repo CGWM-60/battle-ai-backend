@@ -64,7 +64,7 @@ Important: `ProfileGamer.energy*` est horaire, alors que `PlayerResource.*PerTic
 
 Formules serveur utiles a afficher:
 
-- capacite habitat niveau N: `50 + 25*(N-1)` par `building_modular_habitat` termine, avant bonus de recherche.
+- capacite habitat niveau N: `500 + 250*(N-1)` par `building_modular_habitat` termine avec la configuration par defaut, avant bonus de recherche.
 - nourriture consommee: `population * 0.08 / heure`.
 - energie consommee: base `5/h + population/20`, plus surcharge des batiments termines.
 

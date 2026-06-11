@@ -97,6 +97,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	profileH := handlers.NewProfileHandler(database, redis)
 	worldH := handlers.NewWorldHandler(database, redis)
 	resourceH := handlers.NewResourceHandler(database)
+	gameConfigH := handlers.NewGameConfigHandler(database)
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
@@ -106,7 +107,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 			&models.ResearchDefinition{}, &models.PlayerResearch{},
 			&models.ResourceCatalog{}, &models.PlayerResource{}, &models.PlayerCityStats{},
 			&models.ResourceTransaction{}, &models.DailyGrantClaim{}, &models.DailyGrantConfig{},
-			&models.InitialAllocationLog{})
+			&models.InitialAllocationLog{}, &models.GameBalanceConfig{})
 		_ = serverairoutes.AutoMigrate(database)
 
 		// Seed initial content for dev (full reference v2.0: buildings, units, research).
@@ -116,6 +117,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 		_ = seeds.SeedInitialUnits(database, contentSvc)
 		_ = seeds.SeedInitialResearch(database, contentSvc)
 		_ = services.NewResourceService(database).SeedDefaults(context.Background())
+		_, _ = services.NewGameBalanceConfigService(database).GetActive(context.Background())
 		_ = serverairoutes.SeedDefaults(database)
 		// Full catalogue from reference v2.0 seeded for buildings (20), units (15), research (11 branches x7). Use admin to add/update images and data.
 	}
@@ -217,6 +219,8 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/admin/resources/seed/preview", resourceH.AdminSeedPreview)
 	group.POST("/admin/resources/seed/commit", resourceH.AdminSeedCommit)
 	group.GET("/admin/resources/seed/status", resourceH.AdminSeedStatus)
+	group.GET("/admin/game-config", gameConfigH.Get)
+	group.PUT("/admin/game-config", gameConfigH.Update)
 
 	group.GET("/admin/content/buildings", contentH.ListBuildings)
 	group.DELETE("/admin/content/buildings/by-id/:id", contentH.DeleteBuildingByID)
@@ -297,6 +301,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/worlds/repair-player-assignments", worldH.RepairPlayerAssignments)
 	group.GET("/worlds/:id", worldH.GetWorld)
 	group.GET("/worlds/:id/players", worldH.ListPlayersByWorld)
+	group.DELETE("/worlds/:id/players/:profileId", worldH.DeleteWorldPlayer)
 	group.GET("/continents", worldH.ListContinents)
 	group.POST("/worlds/:id/generate-event", worldH.GenerateWorldEvent)   // IA serveur trigger for gestion des world
 	group.POST("/worlds/:id/trigger-tick", worldH.TriggerWorldTick)       // Integration point for World Tick with IA

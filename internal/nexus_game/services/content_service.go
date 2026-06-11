@@ -488,17 +488,18 @@ func (s *ContentService) CalculateBuildingDurationAtLevel(def *models.BuildingDe
 	if level < 1 {
 		level = 1
 	}
+	cfg, _ := LoadGameBalanceConfig(context.Background(), s.db)
 	base := float64(def.DurationBaseSeconds)
 	if base <= 0 {
 		base = 600
 	}
 	multiplier := def.DurationMultiplier
 	if multiplier <= 0 {
-		multiplier = 1.28
+		multiplier = cfg.DefaultBuildingDurationMultiplier
 	}
 	reduction := def.MilestoneReduction
 	if reduction <= 0 {
-		reduction = 0.15
+		reduction = cfg.DefaultBuildingMilestoneReduction
 	}
 	if reduction > 0.75 {
 		reduction = 0.75
@@ -616,6 +617,9 @@ func (s *ContentService) ListPlayerBuildings(profileID uint) ([]models.PlayerBui
 }
 
 func (s *ContentService) DestroyPlayerBuilding(profileID uint, contentID string) error {
+	if contentID == NexusCoreContentID {
+		return errors.New("NEXUS_CORE_CANNOT_BE_DESTROYED: Le Noyau Nexus est le coeur indestructible de la cité, il ne peut pas être détruit.")
+	}
 	var pb models.PlayerBuilding
 	if err := s.db.Where("profile_gamer_id = ? AND content_id = ?", profileID, contentID).First(&pb).Error; err != nil {
 		return err

@@ -9,6 +9,7 @@ import (
 
 	"cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/nexus_game/models"
+	saimodels "cgwm/battle/internal/nexus_game/server_ai/models"
 
 	"gorm.io/gorm"
 )
@@ -26,6 +27,15 @@ type WorldPlayersQuery struct {
 	Search      string
 	WorldID     uint
 	ContinentID uint
+}
+
+type DeleteWorldPlayerResult struct {
+	ProfileID   uint           `json:"profileId"`
+	UserID      uint           `json:"userId"`
+	WorldID     uint           `json:"worldId"`
+	ContinentID uint           `json:"continentId"`
+	Pseudo      string         `json:"pseudo"`
+	Deleted     map[string]int `json:"deleted"`
 }
 
 func NewWorldService(db *gorm.DB, redis *cache.RedisService) *WorldService {
@@ -513,6 +523,112 @@ func (s *WorldService) ListWorldPlayers(ctx context.Context, query WorldPlayersQ
 			"repaired_on_this_request": repaired,
 		},
 	}, nil
+}
+
+func (s *WorldService) DeleteWorldPlayer(ctx context.Context, worldID uint, profileID uint) (DeleteWorldPlayerResult, error) {
+	result := DeleteWorldPlayerResult{Deleted: map[string]int{}}
+	if s.db == nil {
+		return result, errors.New("database unavailable")
+	}
+	if worldID == 0 || profileID == 0 {
+		return result, errors.New("world id and profile id are required")
+	}
+
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var profile models.ProfileGamer
+		if err := tx.First(&profile, profileID).Error; err != nil {
+			return err
+		}
+		if profile.WorldID != worldID {
+			return fmt.Errorf("profile %d is not assigned to world %d", profileID, worldID)
+		}
+
+		result.ProfileID = profile.ID
+		result.UserID = profile.UserID
+		result.WorldID = profile.WorldID
+		result.ContinentID = profile.ContinentID
+		result.Pseudo = profile.Pseudo
+
+		deleteWhere := func(label string, model interface{}, query string, args ...interface{}) error {
+			res := tx.Unscoped().Where(query, args...).Delete(model)
+			if res.Error != nil {
+				return res.Error
+			}
+			result.Deleted[label] = int(res.RowsAffected)
+			return nil
+		}
+
+		if err := deleteWhere("player_buildings", &models.PlayerBuilding{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("player_units", &models.PlayerUnit{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("player_research", &models.PlayerResearch{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("player_resources", &models.PlayerResource{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("player_city_stats", &models.PlayerCityStats{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("resource_transactions", &models.ResourceTransaction{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("daily_grant_claims", &models.DailyGrantClaim{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("initial_allocation_logs", &models.InitialAllocationLog{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("daily_plans", &models.DailyPlan{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("mmo_ia_agents", &models.MmoIAAgent{}, "profile_gamer_id = ?", profile.ID); err != nil {
+			return err
+		}
+		if err := deleteWhere("server_ai_player_memory", &saimodels.ServerAIPlayerMemory{}, "user_id = ?", profile.UserID); err != nil {
+			return err
+		}
+		if err := deleteWhere("server_ai_attacks", &saimodels.ServerAIAttack{}, "target_user_id = ?", profile.UserID); err != nil {
+			return err
+		}
+		if err := deleteWhere("server_ai_sabotages", &saimodels.ServerAISabotage{}, "target_user_id = ?", profile.UserID); err != nil {
+			return err
+		}
+		if err := deleteWhere("server_ai_espionage", &saimodels.ServerAIEspionage{}, "target_user_id = ?", profile.UserID); err != nil {
+			return err
+		}
+		if err := deleteWhere("avatars", &models.Avatar{}, "player_id = ?", profile.UserID); err != nil {
+			return err
+		}
+		if err := deleteWhere("ia_companions", &models.IACompanion{}, "player_id = ?", profile.UserID); err != nil {
+			return err
+		}
+		if err := tx.Unscoped().Delete(&models.ProfileGamer{}, profile.ID).Error; err != nil {
+			return err
+		}
+		result.Deleted["profile_gamers"] = 1
+		return nil
+	})
+	if err != nil {
+		return result, err
+	}
+
+	s.refreshContinentPlayerCounter(ctx, result.ContinentID)
+	return result, nil
+}
+
+func (s *WorldService) refreshContinentPlayerCounter(ctx context.Context, continentID uint) {
+	if s.redis == nil || s.db == nil || continentID == 0 {
+		return
+	}
+	var count int64
+	if err := s.db.WithContext(ctx).Model(&models.ProfileGamer{}).Where("continent_id = ?", continentID).Count(&count).Error; err != nil {
+		return
+	}
+	_ = s.redis.SetString(ctx, fmt.Sprintf("nexus:continent:%d:players", continentID), fmt.Sprintf("%d", count), 0)
 }
 
 func (s *WorldService) RepairMissingProfileWorldAssignments(ctx context.Context) (int, error) {

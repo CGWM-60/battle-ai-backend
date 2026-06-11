@@ -247,7 +247,7 @@ La limite est stockee dans `ProfileGamer.populationCapacity` et recalculee par `
 
 Regles appliquees:
 
-- `building_modular_habitat` ajoute `50 + 25 * (niveau - 1)` via son effet `populationCapacity`.
+- `building_modular_habitat` ajoute `500 + 250 * (niveau - 1)` via la configuration active `GameBalanceConfig`.
 - Les recherches de type `buildingBonus/statBonus` peuvent modifier cette capacite.
 - Si la capacite calculee est inferieure a la population actuelle, le backend garde au minimum la population actuelle pour eviter un clamp destructeur brutal.
 - La nourriture consommee est `population * 0.08 par heure`, stockee cote ressource en `consumptionPerTick` apres division par `3600`.
@@ -257,10 +257,10 @@ Lecture par niveau:
 
 | Niveau habitat | Capacite approx. d'un habitat | Lecture gameplay |
 | --- | ---: | --- |
-| 1 | 50 | premiers colons stables |
-| 10 | 275 | quartier residentiel solide |
-| 20 | 525 | bloc urbain majeur |
-| 30 | 775 | habitat Nexus complet |
+| 1 | 500 | premiers colons stables |
+| 10 | 2 750 | quartier residentiel solide |
+| 20 | 5 250 | bloc urbain majeur |
+| 30 | 7 750 | habitat Nexus complet |
 
 La capacite totale est la somme des habitats termines, apres bonus de recherche.
 

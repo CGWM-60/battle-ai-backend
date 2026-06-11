@@ -745,6 +745,10 @@ func (h *ContentHandler) DestroyPlayerBuildingV1(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Bâtiment introuvable ou non possédé par ce profil"})
 			return
 		}
+		if strings.Contains(err.Error(), "NEXUS_CORE_CANNOT_BE_DESTROYED") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

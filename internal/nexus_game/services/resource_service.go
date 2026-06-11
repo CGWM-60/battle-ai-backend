@@ -199,14 +199,14 @@ func applyScaledDelta(base float64, delta float64, isPercentage bool) float64 {
 	return applyPercentBonus(base, delta)
 }
 
-func applyStarterFallbackProduction(acc *productionAccumulator, building models.PlayerBuilding) {
+func applyStarterFallbackProduction(acc *productionAccumulator, building models.PlayerBuilding, cfg models.GameBalanceConfig) {
 	if building.Level <= 0 {
 		return
 	}
 	levelFactor := float64(building.Level)
 	switch building.ContentID {
 	case "building_modular_habitat":
-		acc.PopulationCapacity += 50 * building.Level
+		acc.PopulationCapacity += PopulationCapacityForHabitatLevel(cfg, building.Level)
 	case "building_solar_plant":
 		perHour := 80 * levelFactor
 		acc.EnergyProduction += int(math.Round(perHour))
@@ -339,7 +339,7 @@ func applyResearchBuildingBonuses(acc *productionAccumulator, bonuses []building
 	}
 }
 
-func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, level int, skipResourceProduction bool) {
+func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, level int, skipResourceProduction bool, skipPopulationCapacity bool) {
 	for _, effect := range effects {
 		value := resolveEffectValue(effect, level)
 		if value == 0 {
@@ -376,6 +376,9 @@ func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, 
 			}
 			switch metric {
 			case "populationcapacity":
+				if skipPopulationCapacity {
+					continue
+				}
 				base := float64(acc.PopulationCapacity)
 				acc.PopulationCapacity = int(math.Round(applyScaledDelta(base, value, effect.IsPercentage)))
 			case "energyproduction":
@@ -448,6 +451,10 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 	if err != nil {
 		return acc, err
 	}
+	cfg, err := LoadGameBalanceConfig(ctx, tx)
+	if err != nil {
+		return acc, err
+	}
 
 	var buildings []models.PlayerBuilding
 	if err := tx.WithContext(ctx).
@@ -492,17 +499,20 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 		def, ok := definitionsByContentID[building.ContentID]
 		if ok {
 			applyBuildingStorageAndProduction(&local, def, building.Level)
+			if building.ContentID == "building_modular_habitat" {
+				local.PopulationCapacity += PopulationCapacityForHabitatLevel(cfg, building.Level)
+			}
 		}
 		if !ok || strings.TrimSpace(def.EffectsJSON) == "" {
-			applyStarterFallbackProduction(&local, building)
+			applyStarterFallbackProduction(&local, building, cfg)
 			mergeProductionAccumulator(&acc, local)
 		} else {
 			var effects []buildingEffect
 			if err := json.Unmarshal([]byte(def.EffectsJSON), &effects); err != nil {
-				applyStarterFallbackProduction(&local, building)
+				applyStarterFallbackProduction(&local, building, cfg)
 				mergeProductionAccumulator(&acc, local)
 			} else {
-				applyBuildingEffects(&local, effects, building.Level, def.ProductionBasePerHour > 0)
+				applyBuildingEffects(&local, effects, building.Level, def.ProductionBasePerHour > 0, building.ContentID == "building_modular_habitat")
 				if bonusEffects := mods.BuildingBonuses[strings.ToLower(building.ContentID)]; len(bonusEffects) > 0 {
 					applyResearchBuildingBonuses(&local, bonusEffects, building.Level)
 				}
@@ -513,11 +523,7 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 			}
 		}
 
-		surcharge := int(math.Floor(math.Pow(float64(building.Level), 1.25)))
-		if building.Level > 20 {
-			surcharge = int(math.Floor(float64(surcharge) * 1.2))
-		}
-		buildingEnergySurcharge += surcharge
+		buildingEnergySurcharge += BuildingEnergySurcharge(cfg, building.Level)
 
 		switch building.ContentID {
 		case "building_modular_habitat":
@@ -537,31 +543,19 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 		syncEnergyProductionFromPerSecond(&acc)
 	}
 
-	foodConsumptionPerHour := math.Max(0, float64(profile.Population)*0.08)
-	energyConsumptionPerHour := 5 + max(0, profile.Population/20)
+	foodConsumptionPerHour := math.Max(0, float64(profile.Population)*cfg.FoodPerPopulationPerHour)
+	energyConsumptionPerHour := cfg.EnergyBaseConsumptionPerHour + max(0, profile.Population/cfg.PopulationPerEnergy)
 	energyConsumptionPerHour += buildingEnergySurcharge
-	energyConsumptionPerHour += max(0, industryLevelTotal*2+dataLevelTotal-solarLevelTotal)
-	if habitatLevelTotal > 0 && farmLevelTotal*2 < habitatLevelTotal {
-		energyConsumptionPerHour += max(1, habitatLevelTotal/3)
+	energyConsumptionPerHour += max(0, industryLevelTotal*cfg.IndustryEnergyPerLevel+dataLevelTotal*cfg.DataEnergyPerLevel-solarLevelTotal*cfg.SolarEnergyReliefPerLevel)
+	if habitatLevelTotal > 0 && farmLevelTotal*cfg.HabitatFarmCoverageDivisor < habitatLevelTotal {
+		energyConsumptionPerHour += max(1, habitatLevelTotal/cfg.HabitatFarmEnergyPenaltyDivisor)
 	}
 	acc.EnergyConsumption = energyConsumptionPerHour
 	acc.ResourceConsumption["food"] = foodConsumptionPerHour / 3600.0
 	acc.ResourceConsumption["energy"] = float64(energyConsumptionPerHour) / 3600.0
 
 	energyRatio := float64(acc.EnergyProduction) / math.Max(1, float64(acc.EnergyConsumption))
-	resourceMultiplier := 1.0
-	switch {
-	case energyRatio < 0.75:
-		resourceMultiplier = 0.75
-	case energyRatio < 1.0:
-		resourceMultiplier = 0.95
-	case energyRatio < 1.2:
-		resourceMultiplier = 1.0
-	case energyRatio < 1.5:
-		resourceMultiplier = 1.10
-	default:
-		resourceMultiplier = 1.20
-	}
+	resourceMultiplier := ResourceMultiplierForEnergyRatio(cfg, energyRatio)
 	for code, value := range acc.ResourceProduction {
 		if code == "energy" {
 			continue

@@ -36,6 +36,13 @@ func TestRegisterRoutesMountsHealthAndDebug(t *testing.T) {
 	if recorder.Code == http.StatusNotFound {
 		t.Fatal("/api/nexus-game/worlds/repair-player-assignments was not mounted")
 	}
+
+	recorder = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodDelete, "/api/nexus-game/worlds/1/players/1", nil)
+	router.ServeHTTP(recorder, req)
+	if recorder.Code == http.StatusNotFound {
+		t.Fatal("/api/nexus-game/worlds/1/players/1 was not mounted")
+	}
 }
 
 func TestRegisterRoutesMountsContentCRUDRoutes(t *testing.T) {
@@ -57,6 +64,8 @@ func TestRegisterRoutesMountsContentCRUDRoutes(t *testing.T) {
 		"GET /api/nexus-game/admin/content/buildings/page",
 		"GET /api/nexus-game/admin/content/buildings/:contentId",
 		"GET /api/nexus-game/admin/content/translations/status",
+		"GET /api/nexus-game/admin/game-config",
+		"PUT /api/nexus-game/admin/game-config",
 		"POST /api/nexus-game/admin/content/buildings",
 		"PUT /api/nexus-game/admin/content/buildings/:contentId",
 		"DELETE /api/nexus-game/admin/content/buildings/:contentId",

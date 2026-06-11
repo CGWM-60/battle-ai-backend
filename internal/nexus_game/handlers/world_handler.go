@@ -105,6 +105,29 @@ func (h *WorldHandler) ListPlayersByWorld(c *gin.Context) {
 	c.JSON(http.StatusOK, payload)
 }
 
+func (h *WorldHandler) DeleteWorldPlayer(c *gin.Context) {
+	worldID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || worldID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid world id"})
+		return
+	}
+	profileID, err := strconv.Atoi(c.Param("profileId"))
+	if err != nil || profileID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid profile id"})
+		return
+	}
+	result, err := h.svc.DeleteWorldPlayer(c.Request.Context(), uint(worldID), uint(profileID))
+	if err != nil {
+		status := http.StatusInternalServerError
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusNotFound
+		}
+		c.JSON(status, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true, "result": result})
+}
+
 func (h *WorldHandler) ListWorldPlayers(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))

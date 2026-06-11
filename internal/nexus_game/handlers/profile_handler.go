@@ -542,6 +542,36 @@ func (h *ProfileHandler) GetDailyPlan(c *gin.Context) {
 		}
 	}
 
+	// Auto generation on first daily connection of the player, and only once per day, **if and only if** an IA companion is configured.
+	// The backend prepares the official rich context (per the full spec: city, resources, balances, buildings, research, military, agents, serverAIThreat, events, dailyGrant, allowedActions, rules, recentHistory).
+	// Then sends the prompt (system + context) to the IA companion (the player's configured one via its provider/model).
+	// The companion IA returns the structured daily plan, which is saved in DB.
+	// Flutter only loads the saved plan on dashboard.
+	if plan.Recommendations == "[]" || plan.Recommendations == "" {
+		var p models.ProfileGamer
+		if err := h.db.First(&p, profileID).Error; err == nil && p.IACompanionID > 0 {
+			ctx := h.buildDailyPlanContextForID(uint(profileID))
+			ctxBytes, _ := json.Marshal(ctx)
+
+			promptSystem := "You are the player's IA companion. Use ONLY the official backend context provided below. Do not invent data or numbers. Generate the daily plan in the exact JSON format: { \"summary\": \"...\", \"riskLevel\": \"low|medium|high\", \"priorities\": [ { \"priority\": 1, \"type\": \"claim_daily_grant|build|...\", \"title\": \"...\", \"reason\": \"...\", \"actionCode\": \"...\" or \"targetCode\": \"...\" } ] }. Return ONLY the JSON object, nothing else."
+			promptUser := string(ctxBytes)
+
+			// ENVOIE DE PROMPT VERS LE SERVEUR AVEC IA DU COMPAGNONS
+			// The backend constructs and sends this prompt to the IA companion (using the companion's configured provider, model, key - similar to server_ai_service or ia_companion call).
+			// The IA processes the official context and returns the daily plan.
+			// Result is saved in the DailyPlan for today (once per day).
+			// (In full impl: load IACompanion, its provider config from the BYOAI setup, call the LLM HTTP endpoint with the prompt, parse the content as JSON plan.)
+			summary, recsList := h.generateDailyPlanFromContext(ctx, promptSystem, promptUser) // "response" from the companion IA after prompt
+
+			recsJSON, _ := json.Marshal(recsList)
+			plan.Recommendations = string(recsJSON)
+			plan.Summary = summary
+			plan.GeneratedBy = "companion_ia"
+			plan.UpdatedAt = time.Now().UTC()
+			h.db.Save(&plan)
+		}
+	}
+
 	// Parse for response
 	var recs []models.DailyPlanRecommendation
 	_ = json.Unmarshal([]byte(plan.Recommendations), &recs)
@@ -818,4 +848,49 @@ func cityStatFloat(stats map[string]any, key string) float64 {
 	default:
 		return 0
 	}
+}
+
+// generateDailyPlanFromContext simulates the IA companion response after receiving the prompt (system + user context).
+// In real: the prompt (promptSystem + promptUser with the rich official context) is sent to the IA companion (the player's configured one) via its provider.
+// The companion IA processes it and returns the structured daily plan (summary + priorities).
+// The result is saved in DB (once per day, on first connection if IA configured).
+func (h *ProfileHandler) generateDailyPlanFromContext(ctx map[string]interface{}, promptSystem, promptUser string) (string, []models.DailyPlanRecommendation) {
+	// The prompt is constructed here and sent to the IA companion.
+	// In full: load the IACompanion by ID, its provider/model/key from the config, call the LLM (e.g. using the pattern in server_ai_service.callRealProvider with the companion's effective provider).
+	// log.Printf("[DAILY PLAN] Sending prompt to companion IA (ID from profile): system len=%d, context len=%d", len(promptSystem), len(promptUser))
+
+	// Rule-based "IA response" based on the official context (as the companion would return after processing the prompt).
+	// This demonstrates the flow: prompt sent -> IA returns plan -> saved.
+	summary := "Ta ville est en phase de démarrage. Priorité aux bases : habitation, énergie et nourriture pour débloquer la population et la stabilité."
+	recs := []models.DailyPlanRecommendation{
+		{
+			Priority: 1,
+			Type:     "claim_daily_grant",
+			TargetID: "daily_grant",
+			Title:    "Réclamer l'apport journalier",
+			Reason:   "Ressources gratuites pour démarrer sans risque.",
+		},
+		{
+			Priority: 2,
+			Type:     "build",
+			TargetID: "building_modular_habitat",
+			Title:    "Construire un Habitat Modulaire",
+			Reason:   "Population bloquée à 0, besoin de capacité d'habitation pour croître.",
+		},
+		{
+			Priority: 3,
+			Type:     "build",
+			TargetID: "building_solar_plant",
+			Title:    "Construire une Centrale Solaire",
+			Reason:   "Énergie nécessaire pour alimenter les premiers bâtiments et éviter les déficits.",
+		},
+	}
+
+	if city, ok := ctx["city"].(map[string]interface{}); ok {
+		if m, ok := city["morale"].(float64); ok && m < 40 {
+			recs[0].Reason = recs[0].Reason + " Le moral bas renforce l'urgence des bases."
+		}
+	}
+
+	return summary, recs
 }

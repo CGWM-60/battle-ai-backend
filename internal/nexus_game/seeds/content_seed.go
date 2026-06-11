@@ -36,7 +36,7 @@ func SeedInitialBuildings(db *gorm.DB, svc *services.ContentService) error {
 			WorkersMin:          2,
 			WorkersMax:          8,
 			AIAgentSlots:        1,
-			EffectsJSON:         `[{"effectType":"statBonus","target":"city","stat":"populationCapacity","valueBase":50,"valuePerLevel":25,"isPercentage":false},{"effectType":"statBonus","target":"city","stat":"morale","valueBase":2,"valuePerLevel":0,"isPercentage":false}]`,
+			EffectsJSON:         `[{"effectType":"statBonus","target":"city","stat":"populationCapacity","valueBase":500,"valuePerLevel":250,"isPercentage":false},{"effectType":"statBonus","target":"city","stat":"morale","valueBase":2,"valuePerLevel":0,"isPercentage":false}]`,
 			BalanceVersion:      "v2.0.0",
 			IsPublished:         true,
 		},

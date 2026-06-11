@@ -105,6 +105,8 @@ export default function NexusWorldControlPage() {
   const [state, setState] = useState<CockpitState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [manualError, setManualError] = useState("");
+  const [actionMessage, setActionMessage] = useState("");
+  const [deletingProfileId, setDeletingProfileId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setManualError("");
@@ -174,7 +176,9 @@ export default function NexusWorldControlPage() {
     const players = continents.flatMap((continent: any) =>
       (continent.players_list || []).map((player: any) => ({
         ...player,
+        worldId: continent.worldId,
         worldName: continent.worldName,
+        continentId: continent.id,
         continentName: continent.name,
       })),
     );
@@ -194,6 +198,39 @@ export default function NexusWorldControlPage() {
   const eventsToReview = valueFrom(state.aiDashboard, ["eventsToReview"], state.seasonalEvents.filter((event) => event.status === "draft").length);
   const liveStreaming = state.dashboard?.Stats?.LiveStreaming || 0;
   const endpointErrors = state.probes.filter((probe) => !probe.ok);
+
+  const deleteWorldPlayer = async (player: any) => {
+    const profileId = Number(player.profile_id || player.profileId || player.id);
+    const worldId = Number(player.worldId || player.world_id);
+    const label = player.pseudo || player.city_name || `profil ${profileId}`;
+    if (!profileId || !worldId) {
+      setManualError("Impossible de supprimer: profileId ou worldId manquant.");
+      return;
+    }
+    const confirmed = window.confirm(
+      `Supprimer integralement ${label} du monde ${player.worldName || worldId} ?\n\nCette action efface le profil Nexus, ressources, batiments, unites, recherches, plans, agents IA et donnees IA liees. Elle ne supprime pas le compte utilisateur global.`,
+    );
+    if (!confirmed) return;
+    setDeletingProfileId(profileId);
+    setManualError("");
+    setActionMessage("");
+    try {
+      const res = await fetch(`${API_BASE}/api/nexus-game/worlds/${worldId}/players/${profileId}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      const deleted = data?.result?.deleted || {};
+      const total = Object.values(deleted).reduce((sum: number, value: any) => sum + Number(value || 0), 0);
+      setActionMessage(`${label} supprime du monde. ${total} ligne(s) Nexus effacee(s).`);
+      await load();
+    } catch (error: any) {
+      setManualError(error?.message || "Suppression impossible.");
+    } finally {
+      setDeletingProfileId(null);
+    }
+  };
 
   const commandLinks = [
     { href: "/nexus/mmo/", title: "Console MMO", detail: "Avatars, factions, compagnons, mondes et generation manuelle." },
@@ -220,6 +257,7 @@ export default function NexusWorldControlPage() {
       description="Vue temps reel du monde Nexus: connexions, recherches, constructions, unites, IA serveur, evenements, quetes et flux admin."
     >
       {manualError ? <div className="alert error">{manualError}</div> : null}
+      {actionMessage ? <div className="alert success">{actionMessage}</div> : null}
 
       <section className="control-hero">
         <div>
@@ -318,6 +356,60 @@ export default function NexusWorldControlPage() {
             <div><span>Prompts serveur</span><strong>{state.serverPrompts.length}</strong></div>
             <div><span>Prompts publics</span><strong>{state.publicPrompts.length}</strong></div>
           </div>
+        </div>
+      </section>
+
+      <section className="panel">
+        <h2>Joueurs Nexus</h2>
+        <p className="hint">
+          Suppression complete du joueur dans Nexus Games uniquement: profil, ressources, batiments, unites, recherches, plans, agents et donnees IA liees.
+        </p>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Monde</th>
+                <th>Continent</th>
+                <th>Profil</th>
+                <th>User ID</th>
+                <th>Niveau</th>
+                <th>Puissance</th>
+                <th>Faction</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {worldStats.players.slice(0, 25).map((player: any) => {
+                const profileId = Number(player.profile_id || player.profileId || player.id);
+                return (
+                  <tr key={`${player.worldId}-${profileId}`}>
+                    <td>{player.worldName || player.worldId || "-"}</td>
+                    <td>{player.continentName || player.continentId || "-"}</td>
+                    <td>
+                      <strong>{player.pseudo || "-"}</strong>
+                      <br />
+                      <span className="hint">{player.city_name || player.cityName || `profil #${profileId}`}</span>
+                    </td>
+                    <td>{player.user_id || player.userId || "-"}</td>
+                    <td>{player.level || 1}</td>
+                    <td>{formatNumber(Number(player.power || 0))}</td>
+                    <td>{player.faction_name || player.factionName || "-"}</td>
+                    <td>
+                      <button
+                        type="button"
+                        disabled={deletingProfileId === profileId}
+                        onClick={() => deleteWorldPlayer(player)}
+                        style={{ background: "#991b1b", color: "white", border: 0, borderRadius: 6, padding: "7px 10px", fontWeight: 800 }}
+                      >
+                        {deletingProfileId === profileId ? "Suppression..." : "Supprimer"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {worldStats.players.length === 0 ? <tr><td colSpan={8}>Aucun joueur affecte a un monde.</td></tr> : null}
+            </tbody>
+          </table>
         </div>
       </section>
 
