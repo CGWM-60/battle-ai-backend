@@ -30324,6 +30324,13 @@
       "locale": "fr",
       "value": "Aucune production active pour le moment. Construisez ou améliorez des bâtiments producteurs.",
       "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.building_required",
+      "locale": "fr",
+      "value": "Merci de construire le bâtiment : {name}",
+      "language": "fr"
     }
   ]
 }
