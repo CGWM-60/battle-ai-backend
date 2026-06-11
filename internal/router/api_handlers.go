@@ -711,13 +711,15 @@ func cancelBattle(database *gorm.DB) gin.HandlerFunc {
 
 func listBattleQuests(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		quests, err := newQuestService(database).ListBattle(c.Request.Context(), c.Query("status"), c.Query("theme"), c.Query("level"), limitFromQuery(c))
+		limit := limitFromQuery(c)
+		offset := offsetFromQuery(c)
+		quests, total, err := newQuestService(database).ListBattlePage(c.Request.Context(), c.Query("status"), c.Query("theme"), c.Query("level"), limit, offset)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list battle quests"})
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"quests": quests})
+		c.JSON(http.StatusOK, paginatedQuestResponse("quests", quests, total, limit, offset))
 	}
 }
 
@@ -953,13 +955,15 @@ func deleteIAProfile(database *gorm.DB) gin.HandlerFunc {
 
 func listRolePlayQuests(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		quests, err := newQuestService(database).ListRolePlay(c.Request.Context(), c.Query("status"), c.Query("theme"), c.Query("level"), limitFromQuery(c))
+		limit := limitFromQuery(c)
+		offset := offsetFromQuery(c)
+		quests, total, err := newQuestService(database).ListRolePlayPage(c.Request.Context(), c.Query("status"), c.Query("theme"), c.Query("level"), limit, offset)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list roleplay quests"})
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"quests": quests})
+		c.JSON(http.StatusOK, paginatedQuestResponse("quests", quests, total, limit, offset))
 	}
 }
 
@@ -2856,6 +2860,33 @@ func limitFromQuery(c *gin.Context) int {
 	}
 
 	return limit
+}
+
+func offsetFromQuery(c *gin.Context) int {
+	offset, err := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if err != nil || offset < 0 {
+		return 0
+	}
+
+	return offset
+}
+
+func paginatedQuestResponse(key string, items any, total int64, limit int, offset int) gin.H {
+	nextOffset := offset + limit
+	hasMore := int64(nextOffset) < total
+	if !hasMore {
+		nextOffset = offset
+	}
+
+	return gin.H{
+		key:          items,
+		"data":       items,
+		"total":      total,
+		"limit":      limit,
+		"offset":     offset,
+		"hasMore":    hasMore,
+		"nextOffset": nextOffset,
+	}
 }
 
 func defaultString(value string, fallback string) string {

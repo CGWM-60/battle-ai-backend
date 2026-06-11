@@ -30,11 +30,20 @@ func (r *QuestRepository) GetPublishedBattleQuestByID(ctx context.Context, id ui
 }
 
 func (r *QuestRepository) ListBattleQuests(ctx context.Context, status string, theme string, level string, limit int) ([]models.QuestIaBattle, error) {
+	quests, _, err := r.ListBattleQuestsPage(ctx, status, theme, level, limit, 0)
+	return quests, err
+}
+
+func (r *QuestRepository) ListBattleQuestsPage(ctx context.Context, status string, theme string, level string, limit int, offset int) ([]models.QuestIaBattle, int64, error) {
 	var quests []models.QuestIaBattle
 	query := r.db.WithContext(ctx).Model(&models.QuestIaBattle{})
 	query = applyQuestQuery(query, status, theme, level)
-	err := query.Order("created_at DESC").Limit(limit).Find(&quests).Error
-	return quests, err
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&quests).Error
+	return quests, total, err
 }
 
 func (r *QuestRepository) GetBattleQuestByID(ctx context.Context, id uint) (*models.QuestIaBattle, error) {
@@ -75,11 +84,20 @@ func (r *QuestRepository) RandomBattleQuest(ctx context.Context, theme string, l
 }
 
 func (r *QuestRepository) ListRolePlayQuests(ctx context.Context, status string, theme string, level string, limit int) ([]models.RolePlayQuestTemplate, error) {
+	quests, _, err := r.ListRolePlayQuestsPage(ctx, status, theme, level, limit, 0)
+	return quests, err
+}
+
+func (r *QuestRepository) ListRolePlayQuestsPage(ctx context.Context, status string, theme string, level string, limit int, offset int) ([]models.RolePlayQuestTemplate, int64, error) {
 	var quests []models.RolePlayQuestTemplate
 	query := r.rolePlayQuestScope(ctx)
 	query = applyQuestQuery(query, status, theme, level)
-	err := query.Order("created_at DESC").Limit(limit).Find(&quests).Error
-	return quests, err
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&quests).Error
+	return quests, total, err
 }
 
 func (r *QuestRepository) GetRolePlayQuestByID(ctx context.Context, id uint) (*models.RolePlayQuestTemplate, error) {

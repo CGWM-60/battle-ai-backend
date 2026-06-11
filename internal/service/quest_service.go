@@ -82,6 +82,10 @@ func (s *QuestService) ListBattle(ctx context.Context, status, theme, level stri
 	return s.quests.ListBattleQuests(ctx, status, theme, level, limit)
 }
 
+func (s *QuestService) ListBattlePage(ctx context.Context, status, theme, level string, limit int, offset int) ([]models.QuestIaBattle, int64, error) {
+	return s.quests.ListBattleQuestsPage(ctx, status, theme, level, limit, offset)
+}
+
 func (s *QuestService) GetBattle(ctx context.Context, id uint) (*models.QuestIaBattle, error) {
 	return s.quests.GetBattleQuestByID(ctx, id)
 }
@@ -149,6 +153,10 @@ func (s *QuestService) RandomBattle(ctx context.Context, theme, level string) (*
 
 func (s *QuestService) ListRolePlay(ctx context.Context, status, theme, level string, limit int) ([]models.RolePlayQuestTemplate, error) {
 	return s.quests.ListRolePlayQuests(ctx, status, theme, level, limit)
+}
+
+func (s *QuestService) ListRolePlayPage(ctx context.Context, status, theme, level string, limit int, offset int) ([]models.RolePlayQuestTemplate, int64, error) {
+	return s.quests.ListRolePlayQuestsPage(ctx, status, theme, level, limit, offset)
 }
 
 func (s *QuestService) GetRolePlay(ctx context.Context, id uint) (*models.RolePlayQuestTemplate, error) {
