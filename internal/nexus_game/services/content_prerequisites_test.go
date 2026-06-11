@@ -1,6 +1,10 @@
 package services
 
-import "testing"
+import (
+	"testing"
+
+	"cgwm/battle/internal/nexus_game/models"
+)
 
 func TestParseBuildingRequirementsAcceptsFlutterFriendlyFormats(t *testing.T) {
 	cases := []struct {
@@ -66,5 +70,41 @@ func TestNormalizeDomainForPrerequisiteValidation(t *testing.T) {
 		if got := normalizeDomain(raw); got != want {
 			t.Fatalf("normalizeDomain(%q) = %q, want %q", raw, got, want)
 		}
+	}
+}
+
+func TestBuildingDurationUsesMMOMultiplierAndMilestoneReduction(t *testing.T) {
+	svc := NewContentService(nil, "")
+	def := &models.BuildingDefinition{
+		DurationBaseSeconds: 600,
+		DurationMultiplier:  1.28,
+		MilestoneReduction:  0.15,
+	}
+
+	if got := svc.CalculateBuildingDurationAtLevel(def, 1, "common"); got != 600 {
+		t.Fatalf("level 1 duration = %d, want 600", got)
+	}
+	if got := svc.CalculateBuildingDurationAtLevel(def, 5, "common"); got != 1369 {
+		t.Fatalf("level 5 milestone duration = %d, want 1369", got)
+	}
+	if got := svc.CalculateBuildingDurationAtLevel(def, 6, "common"); got != 2062 {
+		t.Fatalf("level 6 duration = %d, want 2062", got)
+	}
+}
+
+func TestApplyBuildingOrUnlockRemovesMissingBuildingRequirementsWhenOnePathIsSatisfied(t *testing.T) {
+	requirements := []RequirementStatus{
+		{Type: "building", ContentID: "building_diplomatic_center", Required: true, Satisfied: false},
+		{Type: "building", ContentID: "building_nexus_market", Required: true, Satisfied: true},
+		{Type: "research", ContentID: "research_guild_charter", Required: true, Satisfied: false},
+	}
+	missing := []RequirementStatus{requirements[0], requirements[2]}
+
+	filtered := applyBuildingOrUnlock(requirements, missing)
+	if len(filtered) != 1 {
+		t.Fatalf("expected only non-building missing requirement, got %#v", filtered)
+	}
+	if filtered[0].Type != "research" {
+		t.Fatalf("expected research requirement to remain, got %#v", filtered[0])
 	}
 }

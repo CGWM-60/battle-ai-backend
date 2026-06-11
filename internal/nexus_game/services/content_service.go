@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -484,8 +485,38 @@ func (s *ContentService) CalculateBuildingCostAtLevel(def *models.BuildingDefini
 }
 
 func (s *ContentService) CalculateBuildingDurationAtLevel(def *models.BuildingDefinition, level int, rarity string) int {
+	if level < 1 {
+		level = 1
+	}
 	base := float64(def.DurationBaseSeconds)
-	return balance.ApplyRarityMultiplier(balance.DurationSeconds(level, base), rarity, true)
+	if base <= 0 {
+		base = 600
+	}
+	multiplier := def.DurationMultiplier
+	if multiplier <= 0 {
+		multiplier = 1.28
+	}
+	reduction := def.MilestoneReduction
+	if reduction <= 0 {
+		reduction = 0.15
+	}
+	if reduction > 0.75 {
+		reduction = 0.75
+	}
+	seconds := base * math.Pow(multiplier, float64(level-1))
+	if isBuildingMilestoneLevel(level) {
+		seconds *= 1 - reduction
+	}
+	return int(seconds + 0.5)
+}
+
+func isBuildingMilestoneLevel(level int) bool {
+	switch level {
+	case 5, 10, 15, 20, 25, 30:
+		return true
+	default:
+		return false
+	}
 }
 
 // === Player construction (depends on buildings) ===
@@ -495,6 +526,9 @@ func (s *ContentService) StartConstruction(profileID uint, contentID string, tar
 	def, err := s.GetBuilding(contentID)
 	if err != nil {
 		return nil, err
+	}
+	if def.NonConstructible {
+		return nil, errors.New("BUILDING_NON_CONSTRUCTIBLE: Ce batiment est fourni par le spawn ou un evenement Nexus.")
 	}
 	if targetLevel <= 0 {
 		targetLevel = 1
@@ -507,49 +541,54 @@ func (s *ContentService) StartConstruction(profileID uint, contentID string, tar
 		return nil, err
 	}
 
-	var existing models.PlayerBuilding
-	err = s.db.Where("profile_gamer_id = ? AND content_id = ?", profileID, contentID).First(&existing).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+	var owned []models.PlayerBuilding
+	if err := s.db.Where("profile_gamer_id = ? AND content_id = ?", profileID, contentID).Order("level desc, id asc").Find(&owned).Error; err != nil {
 		return nil, err
 	}
-	currentLevel := 0
-	hasExisting := err == nil
-	if hasExisting {
-		if existing.IsConstructing {
-			return nil, errors.New("BUILDING_ALREADY_CONSTRUCTING: Une construction est deja en cours pour ce batiment.")
+	slotsMax := def.SlotsMax
+	if slotsMax <= 0 {
+		slotsMax = 1
+	}
+
+	if targetLevel == 1 {
+		if len(owned) >= slotsMax {
+			return nil, fmt.Errorf("BUILDING_SLOT_LIMIT_REACHED: %s limite a %d par cite.", contentID, slotsMax)
 		}
-		currentLevel = existing.Level
-	}
-	if targetLevel != currentLevel+1 {
-		return nil, fmt.Errorf("BUILDING_LEVEL_SEQUENCE_REQUIRED: Le prochain niveau attendu est %d.", currentLevel+1)
-	}
 
-	now := time.Now()
-	ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, "common")) * time.Second)
+		now := time.Now()
+		ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
 
-	if hasExisting {
-		existing.Level = targetLevel - 1
-		existing.IsConstructing = true
-		existing.ConstructionStartedAt = &now
-		existing.ConstructionEndsAt = &ends
-		if err := s.db.Save(&existing).Error; err != nil {
+		pb := &models.PlayerBuilding{
+			ProfileGamerID:        profileID,
+			ContentID:             contentID,
+			Level:                 0,
+			IsConstructing:        true,
+			ConstructionStartedAt: &now,
+			ConstructionEndsAt:    &ends,
+		}
+		if err := s.db.Create(pb).Error; err != nil {
 			return nil, err
 		}
-		return &existing, nil
+		return pb, nil
 	}
 
-	pb := &models.PlayerBuilding{
-		ProfileGamerID:        profileID,
-		ContentID:             contentID,
-		Level:                 0,
-		IsConstructing:        true,
-		ConstructionStartedAt: &now,
-		ConstructionEndsAt:    &ends,
+	for i := range owned {
+		if owned[i].Level == targetLevel-1 {
+			if owned[i].IsConstructing {
+				return nil, errors.New("BUILDING_ALREADY_CONSTRUCTING: Une construction est deja en cours pour ce batiment.")
+			}
+			now := time.Now()
+			ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
+			owned[i].IsConstructing = true
+			owned[i].ConstructionStartedAt = &now
+			owned[i].ConstructionEndsAt = &ends
+			if err := s.db.Save(&owned[i]).Error; err != nil {
+				return nil, err
+			}
+			return &owned[i], nil
+		}
 	}
-	if err := s.db.Create(pb).Error; err != nil {
-		return nil, err
-	}
-	return pb, nil
+	return nil, fmt.Errorf("BUILDING_LEVEL_SEQUENCE_REQUIRED: Le niveau %d doit exister avant le niveau %d.", targetLevel-1, targetLevel)
 }
 
 func (s *ContentService) CompleteConstructionIfReady(pb *models.PlayerBuilding) (bool, error) {
@@ -649,11 +688,15 @@ func (s *ContentService) ValidatePrerequisites(profileID uint, domain string, co
 		return validation, &PrerequisiteError{Validation: validation}
 	}
 
+	unlockType := "AND"
 	switch domain {
 	case "building":
 		def, err := s.GetBuilding(contentID)
 		if err != nil {
 			return validation, err
+		}
+		if def.UnlockType != "" {
+			unlockType = strings.ToUpper(strings.TrimSpace(def.UnlockType))
 		}
 		validation.Requirements = append(validation.Requirements, nexusLevelRequirement(def.NexusLevelRequired))
 		validation.Requirements = append(validation.Requirements, parseBuildingRequirements(def.RequiredBuildingsJSON)...)
@@ -715,11 +758,39 @@ func (s *ContentService) ValidatePrerequisites(profileID uint, domain string, co
 			validation.Missing = append(validation.Missing, *req)
 		}
 	}
+	if unlockType == "OR" {
+		validation.Missing = applyBuildingOrUnlock(validation.Requirements, validation.Missing)
+	}
 	validation.Allowed = len(validation.Missing) == 0
 	if !validation.Allowed {
 		return validation, &PrerequisiteError{Validation: validation}
 	}
 	return validation, nil
+}
+
+func applyBuildingOrUnlock(requirements []RequirementStatus, missing []RequirementStatus) []RequirementStatus {
+	hasBuildingRequirement := false
+	hasSatisfiedBuilding := false
+	for _, req := range requirements {
+		if req.Type != "building" || !req.Required {
+			continue
+		}
+		hasBuildingRequirement = true
+		if req.Satisfied {
+			hasSatisfiedBuilding = true
+			break
+		}
+	}
+	if !hasBuildingRequirement || !hasSatisfiedBuilding {
+		return missing
+	}
+	filtered := make([]RequirementStatus, 0, len(missing))
+	for _, req := range missing {
+		if req.Type != "building" {
+			filtered = append(filtered, req)
+		}
+	}
+	return filtered
 }
 
 func (s *ContentService) playerRequirementState(profileID uint) (int, map[string]int, map[string]bool, error) {
@@ -968,7 +1039,7 @@ func (s *ContentService) StartUpgrade(profileID uint, playerBuildingID uint, tar
 		return nil, err
 	}
 	now := time.Now()
-	ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, "common")) * time.Second)
+	ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
 	pb.IsConstructing = true
 	pb.ConstructionStartedAt = &now
 	pb.ConstructionEndsAt = &ends

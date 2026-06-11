@@ -95,6 +95,9 @@ type buildingEffect struct {
 type productionAccumulator struct {
 	ResourceProduction  map[string]float64
 	ResourceConsumption map[string]float64
+	ResourceStorageCap  map[string]float64
+	OverflowBehavior    map[string]string
+	OverflowDecay       map[string]float64
 	PopulationCapacity  int
 	EnergyProduction    int
 	EnergyConsumption   int
@@ -113,6 +116,9 @@ func newProductionAccumulator() productionAccumulator {
 	return productionAccumulator{
 		ResourceProduction:  make(map[string]float64),
 		ResourceConsumption: make(map[string]float64),
+		ResourceStorageCap:  make(map[string]float64),
+		OverflowBehavior:    make(map[string]string),
+		OverflowDecay:       make(map[string]float64),
 	}
 }
 
@@ -218,6 +224,19 @@ func mergeProductionAccumulator(dst *productionAccumulator, src productionAccumu
 	for code, value := range src.ResourceConsumption {
 		dst.ResourceConsumption[code] += value
 	}
+	for code, value := range src.ResourceStorageCap {
+		dst.ResourceStorageCap[code] += value
+	}
+	for code, value := range src.OverflowBehavior {
+		if value != "" && value != "none" {
+			dst.OverflowBehavior[code] = value
+		}
+	}
+	for code, value := range src.OverflowDecay {
+		if value > 0 {
+			dst.OverflowDecay[code] = value
+		}
+	}
 	dst.PopulationCapacity += src.PopulationCapacity
 	dst.EnergyProduction += src.EnergyProduction
 	dst.EnergyConsumption += src.EnergyConsumption
@@ -316,7 +335,7 @@ func applyResearchBuildingBonuses(acc *productionAccumulator, bonuses []building
 	}
 }
 
-func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, level int) {
+func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, level int, skipResourceProduction bool) {
 	for _, effect := range effects {
 		value := resolveEffectValue(effect, level)
 		if value == 0 {
@@ -329,6 +348,9 @@ func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, 
 
 		switch effectType {
 		case "resourceproduction":
+			if skipResourceProduction {
+				continue
+			}
 			code := normalizeResourceCode(target)
 			if code == "" {
 				code = normalizeResourceCode(stat)
@@ -344,6 +366,9 @@ func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, 
 			metric := strings.ToLower(strings.TrimSpace(stat))
 			if metric == "" {
 				metric = strings.ToLower(strings.TrimSpace(target))
+			}
+			if skipResourceProduction && normalizeResourceCode(metric) != "" {
+				continue
 			}
 			switch metric {
 			case "populationcapacity":
@@ -364,6 +389,40 @@ func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, 
 					}
 				}
 			}
+		}
+	}
+}
+
+func applyBuildingStorageAndProduction(acc *productionAccumulator, def models.BuildingDefinition, level int) {
+	if level < 1 {
+		level = 1
+	}
+	code := normalizeResourceCode(def.StorageResource)
+	if code == "" {
+		return
+	}
+	if def.StorageCapBase > 0 {
+		growth := def.StorageGrowth
+		if growth <= 0 {
+			growth = 1.0
+		}
+		acc.ResourceStorageCap[code] += float64(def.StorageCapBase) * math.Pow(growth, float64(level-1))
+	}
+	if def.OverflowBehavior != "" {
+		acc.OverflowBehavior[code] = strings.ToLower(strings.TrimSpace(def.OverflowBehavior))
+	}
+	if def.OverflowDecayPercentPerHour > 0 {
+		acc.OverflowDecay[code] = def.OverflowDecayPercentPerHour
+	}
+	if def.ProductionBasePerHour > 0 {
+		growth := def.ProductionGrowth
+		if growth <= 0 {
+			growth = 1.0
+		}
+		perHour := float64(def.ProductionBasePerHour) * math.Pow(growth, float64(level-1))
+		acc.ResourceProduction[code] += perHour / 3600.0
+		if code == "energy" {
+			acc.EnergyProduction = int(math.Round(acc.ResourceProduction["energy"] * 3600.0))
 		}
 	}
 }
@@ -416,6 +475,9 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 		}
 		local := newProductionAccumulator()
 		def, ok := definitionsByContentID[building.ContentID]
+		if ok {
+			applyBuildingStorageAndProduction(&local, def, building.Level)
+		}
 		if !ok || strings.TrimSpace(def.EffectsJSON) == "" {
 			applyStarterFallbackProduction(&local, building)
 			mergeProductionAccumulator(&acc, local)
@@ -425,7 +487,7 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 				applyStarterFallbackProduction(&local, building)
 				mergeProductionAccumulator(&acc, local)
 			} else {
-				applyBuildingEffects(&local, effects, building.Level)
+				applyBuildingEffects(&local, effects, building.Level, def.ProductionBasePerHour > 0)
 				if bonusEffects := mods.BuildingBonuses[strings.ToLower(building.ContentID)]; len(bonusEffects) > 0 {
 					applyResearchBuildingBonuses(&local, bonusEffects, building.Level)
 				}
@@ -559,6 +621,23 @@ func (s *ResourceService) SyncBuildingProduction(ctx context.Context, profileID 
 		for _, resource := range resources {
 			prod := acc.ResourceProduction[resource.ResourceCode]
 			cons := acc.ResourceConsumption[resource.ResourceCode]
+			if storageCap := acc.ResourceStorageCap[resource.ResourceCode]; storageCap > 0 {
+				calculatedCapacity := int64(math.Round(storageCap * mods.StorageCapacityMultiplier))
+				if calculatedCapacity > resource.Capacity {
+					resource.Capacity = calculatedCapacity
+				}
+			}
+			if resource.Capacity > 0 && resource.Amount >= resource.Capacity {
+				switch acc.OverflowBehavior[resource.ResourceCode] {
+				case "suspend":
+					prod = 0
+				case "decay":
+					decayPerSecond := acc.OverflowDecay[resource.ResourceCode] / 100.0 / 3600.0
+					if decayPerSecond > 0 {
+						cons += float64(resource.Amount) * decayPerSecond
+					}
+				}
+			}
 			balance := prod - cons
 
 			resource.ProductionPerTick = prod

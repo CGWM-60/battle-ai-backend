@@ -25,6 +25,14 @@ type BuildingDefinition struct {
 	MaxLevel int    `json:"maxLevel"`
 	Rarity   string `json:"rarity"` // common, uncommon...
 
+	// MMO city-builder constraints and unlock tree.
+	SlotsMax         int    `json:"slotsMax"` // max buildings of this type per city
+	AvailableAtSpawn bool   `json:"availableAtSpawn"`
+	UnlockEra        string `gorm:"size:32" json:"unlockEra"`  // 0,1,2,3,4,nexus
+	UnlockType       string `gorm:"size:16" json:"unlockType"` // AND, OR
+	UnlockMessage    string `gorm:"type:text" json:"unlockMessage"`
+	NonConstructible bool   `json:"nonConstructible"`
+
 	// Unlock
 	NexusLevelRequired int `json:"nexusLevelRequired"`
 	// JSON arrays for requirements (simplified for MVP)
@@ -37,10 +45,25 @@ type BuildingDefinition struct {
 	CostBaseData    int `json:"costBaseData"`
 	// add other resources as needed
 
-	DurationBaseSeconds int `json:"durationBaseSeconds"`
+	DurationBaseSeconds int     `json:"durationBaseSeconds"`
+	DurationMultiplier  float64 `json:"durationMultiplier"`
+	MilestoneReduction  float64 `json:"milestoneReduction"`
+
+	// Production storage and MMO behavior.
+	StorageResource                   string  `gorm:"size:64" json:"storageResource"`
+	StorageCapBase                    int     `json:"storageCapBase"`
+	StorageGrowth                     float64 `json:"storageGrowth"`
+	OverflowBehavior                  string  `gorm:"size:32" json:"overflowBehavior"` // suspend, loop, decay, realtime
+	OverflowDecayPercentPerHour       float64 `json:"overflowDecayPercentPerHour"`
+	ProductionBasePerHour             int     `json:"productionBasePerHour"`
+	ProductionGrowth                  float64 `json:"productionGrowth"`
+	HarvestRecommendedIntervalSeconds int     `json:"harvestRecommendedIntervalSeconds"`
 
 	// Effects (simplified; full in effects JSON or separate table later)
-	EffectsJSON string `gorm:"type:text" json:"effects"` // array of effect objects
+	EffectsJSON   string `gorm:"type:text" json:"effects"` // array of effect objects
+	SynergiesJSON string `gorm:"type:text" json:"synergies"`
+	RisksJSON     string `gorm:"type:text" json:"risks"`
+	AIActionsJSON string `gorm:"type:text" json:"aiActions"`
 
 	WorkersMin int `json:"workersMin"`
 	WorkersMax int `json:"workersMax"`

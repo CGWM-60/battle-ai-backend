@@ -35,14 +35,33 @@ Endpoint: `GET /api/v1/buildings/:key?profileGamerId=12`
     },
     "maxLevel": 30,
     "rarity": "rare",
+    "slotsMax": 2,
+    "availableAtSpawn": false,
+    "unlockEra": "3",
+    "unlockType": "AND",
+    "unlockMessage": "Recherche avancee, donnees et energie rendent l'infrastructure IA possible.",
+    "nonConstructible": false,
     "nexusLevelRequired": 4,
-    "requiredBuildings": "[{\"contentId\":\"building_research_lab\",\"level\":2}]",
+    "requiredBuildings": "[{\"contentId\":\"building_data_bank\",\"level\":8},{\"contentId\":\"building_research_lab\",\"level\":5},{\"contentId\":\"building_solar_plant\",\"level\":8}]",
     "requiredResearch": "[\"research_agent_basics\"]",
     "costBaseCredits": 1200,
     "costBaseMetal": 600,
     "costBaseData": 200,
     "durationBaseSeconds": 3600,
+    "durationMultiplier": 1.28,
+    "milestoneReduction": 0.15,
+    "storageResource": "",
+    "storageCapBase": 0,
+    "storageGrowth": 1,
+    "overflowBehavior": "none",
+    "overflowDecayPercentPerHour": 0,
+    "productionBasePerHour": 0,
+    "productionGrowth": 1,
+    "harvestRecommendedIntervalSeconds": 0,
     "effects": "[{\"stat\":\"aiEfficiency\",\"operation\":\"add_percent\",\"value\":0.05}]",
+    "synergies": "[{\"with\":\"building_data_bank\",\"requiresLevel\":8,\"bonus\":\"agent_quality\",\"valuePercent\":12}]",
+    "risks": "[{\"trigger\":\"data_shortage_or_morale_below_25\",\"debuff\":\"agent_jam\",\"effect\":\"AI action cooldown +50%\",\"durationSeconds\":14400}]",
+    "aiActions": "[{\"id\":\"ai_diagnostic\",\"cost\":{\"credits\":250,\"data\":180},\"cooldownSeconds\":14400,\"effect\":\"Nettoie un debuff agent_jam.\"}]",
     "workersMin": 1,
     "workersMax": 5,
     "aiAgentSlots": 2,
@@ -71,9 +90,42 @@ Endpoint: `GET /api/v1/buildings/:key?profileGamerId=12`
 
 Champs critiques pour Flutter:
 
-- `durationBaseSeconds` est envoye dans le catalogue; les endpoints preview/action renvoient ou materialisent la duree calculee (`durationSeconds`, `constructionEndsAt`, `remainingSec`).
-- `nexusLevelRequired`, `requiredBuildings`, `requiredResearch` sont envoyes pour que Flutter puisse afficher les verrous.
+- `durationBaseSeconds`, `durationMultiplier`, `milestoneReduction` sont envoyes dans le catalogue; les endpoints preview/action renvoient ou materialisent la duree calculee (`durationSeconds`, `constructionEndsAt`, `remainingSec`).
+- Formule serveur: `duration(n) = durationBaseSeconds * durationMultiplier^(n-1)`, puis reduction `milestoneReduction` aux niveaux 5, 10, 15, 20, 25, 30.
+- `slotsMax`, `nonConstructible`, `availableAtSpawn`, `unlockEra`, `unlockType`, `unlockMessage`, `nexusLevelRequired`, `requiredBuildings`, `requiredResearch` sont envoyes pour que Flutter puisse afficher les verrous.
+- `storageResource`, `storageCapBase`, `storageGrowth`, `overflowBehavior`, `productionBasePerHour`, `productionGrowth`, `harvestRecommendedIntervalSeconds` alimentent les barres de stockage et les alertes de production.
+- `synergies`, `risks`, `aiActions` sont des JSON strings parsables par Flutter pour les panneaux de details.
 - `requirementsStatus.allowed` est la verite serveur pour savoir si le bouton construire/entrainer/rechercher est actif.
+
+## Stockage et production
+
+Les bâtiments producteurs exposent:
+
+```json
+{
+  "storageResource": "metal",
+  "storageCapBase": 2000,
+  "storageGrowth": 1.1,
+  "overflowBehavior": "suspend",
+  "overflowDecayPercentPerHour": 0,
+  "productionBasePerHour": 100,
+  "productionGrowth": 1.13,
+  "harvestRecommendedIntervalSeconds": 21600
+}
+```
+
+Regles serveur:
+
+- `suspend`: si la ressource est au cap, la production serveur tombe a `0` pour cette ressource.
+- `loop`: la production continue mais l'inventaire reste borne par `capacity`; le surplus est perdu.
+- `decay`: si la ressource est au cap, une consommation de degradation est appliquee.
+- `realtime`: flux temps reel, pas de cap local au bâtiment, utile pour l'energie.
+
+Regles UI Flutter:
+
+- Afficher une barre de stockage si `storageCapBase > 0`.
+- Vert `< 60%`, orange `60-90%`, rouge `> 90%`.
+- A `90%`, afficher une alerte et declencher la notification push si autorisee.
 
 ## Prerequis batiments, unites, recherches
 
@@ -117,7 +169,7 @@ Formats de prerequis acceptes en base:
 | --- | --- | --- | --- |
 | GET | `/api/v1/prerequisites/validate?profileGamerId=12&domain=building&contentId=building_ai_center` | Query `profileGamerId`, `domain`, `contentId` | `PrerequisiteValidation` |
 | GET | `/api/v1/buildings/catalog?profileGamerId=12` | Query optionnelle `profileGamerId` | `{ "buildings": [BuildingDefinition], "count": 20, "requirementsStatus": { "contentId": PrerequisiteValidation } }` |
-| GET | `/api/v1/buildings/catalog/version` | Aucun | `{ "version": "...", "generatedAt": "..." }` |
+| GET | `/api/v1/buildings/catalog/version` | Aucun | `{ "version": "...", "balanceVersion": "...", "updatedAt": "..." }` |
 | GET | `/api/v1/buildings/:key?profileGamerId=12` | Path `key` | `{ "building": BuildingDefinition, "requirementsStatus": PrerequisiteValidation }` |
 | GET | `/api/v1/buildings/:key/research-tree` | Path `key` | `{ "building": "...", "research": [...] }` |
 | GET | `/api/v1/units/catalog?profileGamerId=12` | Query optionnelle `profileGamerId` | `{ "units": [UnitDefinition], "count": 15, "requirementsStatus": { "contentId": PrerequisiteValidation } }` |
@@ -144,6 +196,16 @@ Blocage action:
   "code": "REQUIREMENTS_NOT_MET",
   "requirementsStatus": { "allowed": false, "missing": [] }
 }
+```
+
+Autres blocages construction:
+
+```json
+{ "error": "BUILDING_SLOT_LIMIT_REACHED: building_composite_mine limite a 3 par cite." }
+```
+
+```json
+{ "error": "BUILDING_NON_CONSTRUCTIBLE: Ce batiment est fourni par le spawn ou un evenement Nexus." }
 ```
 
 ## Base Nexus `/api/nexus-game`

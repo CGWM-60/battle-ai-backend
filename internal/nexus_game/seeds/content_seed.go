@@ -2,6 +2,7 @@ package seeds
 
 import (
 	"errors"
+	"sort"
 
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/services"
@@ -456,6 +457,7 @@ func SeedInitialBuildings(db *gorm.DB, svc *services.ContentService) error {
 	}
 
 	applyDefaultBuildingRequirements(buildings)
+	applyDefaultBuildingMMODesign(buildings)
 	for i := range buildings {
 		b := buildings[i]
 		var existing models.BuildingDefinition
@@ -468,6 +470,151 @@ func SeedInitialBuildings(db *gorm.DB, svc *services.ContentService) error {
 		}
 	}
 	return nil
+}
+
+type buildingStorageSeed struct {
+	resource          string
+	capBase           int
+	growth            float64
+	overflow          string
+	decay             float64
+	productionPerHour int
+	productionGrowth  float64
+	harvestSeconds    int
+}
+
+type buildingUnlockSeed struct {
+	era              string
+	availableAtSpawn bool
+	unlockType       string
+	requirements     string
+	message          string
+	nonConstructible bool
+}
+
+func applyDefaultBuildingMMODesign(buildings []models.BuildingDefinition) {
+	slots := map[string]int{
+		"building_composite_mine":       3,
+		"building_solar_plant":          4,
+		"building_vertical_farm":        3,
+		"building_quantum_refinery":     1,
+		"building_modular_habitat":      6,
+		"building_logistic_station":     2,
+		"building_barracks":             2,
+		"building_drone_factory":        2,
+		"building_holo_wall":            3,
+		"building_surveillance_tower":   2,
+		"building_nexus_market":         2,
+		"building_data_bank":            2,
+		"building_diplomatic_center":    1,
+		"building_world_relay":          1,
+		"building_guild_hq":             1,
+		"building_ai_center":            2,
+		"building_research_lab":         2,
+		"building_living_lore_archives": 1,
+		"building_tribunal_nexus":       1,
+		"building_nexus_core":           1,
+	}
+	durations := map[string]int{
+		"building_modular_habitat":      600,
+		"building_vertical_farm":        600,
+		"building_solar_plant":          600,
+		"building_composite_mine":       600,
+		"building_barracks":             600,
+		"building_logistic_station":     600,
+		"building_holo_wall":            1800,
+		"building_data_bank":            1800,
+		"building_surveillance_tower":   1800,
+		"building_nexus_market":         1800,
+		"building_research_lab":         1800,
+		"building_ai_center":            1800,
+		"building_diplomatic_center":    1800,
+		"building_guild_hq":             3600,
+		"building_drone_factory":        7200,
+		"building_living_lore_archives": 7200,
+		"building_world_relay":          7200,
+		"building_quantum_refinery":     14400,
+		"building_tribunal_nexus":       21600,
+		"building_nexus_core":           86400,
+	}
+	storage := map[string]buildingStorageSeed{
+		"building_composite_mine":    {resource: "metal", capBase: 2000, growth: 1.10, overflow: "suspend", productionPerHour: 100, productionGrowth: 1.13, harvestSeconds: 21600},
+		"building_solar_plant":       {resource: "energy", capBase: 0, growth: 1.00, overflow: "realtime", productionPerHour: 80, productionGrowth: 1.13, harvestSeconds: 0},
+		"building_vertical_farm":     {resource: "food", capBase: 5000, growth: 1.10, overflow: "suspend", productionPerHour: 70, productionGrowth: 1.13, harvestSeconds: 28800},
+		"building_data_bank":         {resource: "data", capBase: 500000, growth: 1.12, overflow: "loop", productionPerHour: 50, productionGrowth: 1.13, harvestSeconds: 43200},
+		"building_quantum_refinery":  {resource: "quantum_core", capBase: 50, growth: 1.08, overflow: "suspend", productionPerHour: 5, productionGrowth: 1.10, harvestSeconds: 86400},
+		"building_diplomatic_center": {resource: "influence", capBase: 200, growth: 1.10, overflow: "loop", productionPerHour: 8, productionGrowth: 1.10, harvestSeconds: 43200},
+	}
+	unlocks := map[string]buildingUnlockSeed{
+		"building_nexus_core":           {era: "0", availableAtSpawn: true, unlockType: "AND", requirements: "[]", message: "Noyau de spawn unique, coeur politique et technique de la cite.", nonConstructible: true},
+		"building_modular_habitat":      {era: "0", availableAtSpawn: true, unlockType: "AND", requirements: "[]", message: "Survie de base: logement disponible des l'arrivee."},
+		"building_solar_plant":          {era: "0", availableAtSpawn: true, unlockType: "AND", requirements: "[]", message: "Survie de base: energie stable disponible des l'arrivee."},
+		"building_composite_mine":       {era: "0", availableAtSpawn: true, unlockType: "AND", requirements: "[]", message: "Survie de base: metal disponible des l'arrivee."},
+		"building_logistic_station":     {era: "0", availableAtSpawn: true, unlockType: "AND", requirements: "[]", message: "Survie de base: logistique disponible des l'arrivee."},
+		"building_vertical_farm":        {era: "1", unlockType: "AND", requirements: buildingReq("building_modular_habitat", 2), message: "Habitat niveau 2: il faut nourrir la population grandissante."},
+		"building_barracks":             {era: "1", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_modular_habitat": 3, "building_composite_mine": 2}), message: "Population et metal suffisants pour former les premieres troupes."},
+		"building_holo_wall":            {era: "1", unlockType: "AND", requirements: buildingReq("building_barracks", 1), message: "Caserne construite: protege ce que tu as bati."},
+		"building_data_bank":            {era: "1", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_solar_plant": 3, "building_logistic_station": 2}), message: "Infrastructure solide: il est temps de structurer tes donnees."},
+		"building_research_lab":         {era: "2", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_data_bank": 3, "building_solar_plant": 5}), message: "Assez de donnees et d'energie pour lancer la recherche."},
+		"building_surveillance_tower":   {era: "2", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_holo_wall": 3, "building_data_bank": 2}), message: "Defenses actives et donnees ouvrent la surveillance intelligente."},
+		"building_drone_factory":        {era: "2", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_barracks": 5, "building_research_lab": 1}), message: "Caserne veterane et recherche initiale debloquent les drones."},
+		"building_nexus_market":         {era: "2", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_logistic_station": 5, "building_data_bank": 3}), message: "Logistique maitrisee et donnees fiables ouvrent le commerce Nexus."},
+		"building_ai_center":            {era: "3", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_research_lab": 5, "building_data_bank": 8, "building_solar_plant": 8}), message: "Recherche avancee, donnees et energie rendent l'infrastructure IA possible."},
+		"building_diplomatic_center":    {era: "3", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_nexus_market": 5, "building_surveillance_tower": 3}), message: "Commerce etabli et renseignements ouvrent le pouvoir diplomatique."},
+		"building_guild_hq":             {era: "3", unlockType: "OR", requirements: multiBuildingReq(map[string]int{"building_diplomatic_center": 1, "building_nexus_market": 8}), message: "Diplomatie ou commerce avance permettent de rejoindre une guilde."},
+		"building_quantum_refinery":     {era: "4", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_research_lab": 15, "building_ai_center": 5, "building_composite_mine": 12}), message: "Recherche poussee, IA et mine veterane ouvrent le raffinage quantique."},
+		"building_living_lore_archives": {era: "4", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_data_bank": 12, "building_ai_center": 8, "building_diplomatic_center": 5}), message: "Memoire, IA et reseau diplomatique donnent naissance aux archives vivantes."},
+		"building_tribunal_nexus":       {era: "4", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_diplomatic_center": 8, "building_guild_hq": 5, "building_surveillance_tower": 10}), message: "Diplomatie, guilde et surveillance donnent une legitimite judiciaire."},
+		"building_world_relay":          {era: "4", unlockType: "AND", requirements: multiBuildingReq(map[string]int{"building_ai_center": 10, "building_surveillance_tower": 8, "building_nexus_market": 12}), message: "IA, renseignement et commerce mondial ouvrent le Relais Monde."},
+	}
+
+	for i := range buildings {
+		b := &buildings[i]
+		if maxSlots, ok := slots[b.ContentID]; ok {
+			b.SlotsMax = maxSlots
+		}
+		if duration, ok := durations[b.ContentID]; ok {
+			b.DurationBaseSeconds = duration
+		}
+		b.DurationMultiplier = 1.28
+		b.MilestoneReduction = 0.15
+		if unlock, ok := unlocks[b.ContentID]; ok {
+			b.UnlockEra = unlock.era
+			b.AvailableAtSpawn = unlock.availableAtSpawn
+			b.UnlockType = unlock.unlockType
+			b.UnlockMessage = unlock.message
+			b.NonConstructible = unlock.nonConstructible
+			b.RequiredBuildingsJSON = unlock.requirements
+		}
+		if store, ok := storage[b.ContentID]; ok {
+			b.StorageResource = store.resource
+			b.StorageCapBase = store.capBase
+			b.StorageGrowth = store.growth
+			b.OverflowBehavior = store.overflow
+			b.OverflowDecayPercentPerHour = store.decay
+			b.ProductionBasePerHour = store.productionPerHour
+			b.ProductionGrowth = store.productionGrowth
+			b.HarvestRecommendedIntervalSeconds = store.harvestSeconds
+		} else {
+			b.OverflowBehavior = "none"
+			b.ProductionGrowth = 1.00
+			b.StorageGrowth = 1.00
+		}
+		b.SynergiesJSON = defaultBuildingSynergies(b.ContentID)
+		b.RisksJSON = defaultBuildingRisks(b.ContentID)
+		b.AIActionsJSON = defaultBuildingAIActions(b.ContentID)
+		if b.FlavorTextKey == "" {
+			b.FlavorTextKey = b.NameKey + ".flavor"
+		}
+		if len(b.LevelDescriptionKeys) == 0 {
+			b.LevelDescriptionKeys = map[string]string{
+				"1":  b.NameKey + ".level_1",
+				"10": b.NameKey + ".level_10",
+				"20": b.NameKey + ".level_20",
+				"30": b.NameKey + ".level_30",
+			}
+		}
+	}
 }
 
 func SeedInitialUnits(db *gorm.DB, svc *services.ContentService) error {
@@ -1053,16 +1200,104 @@ func applyDefaultResearchRequirements(research []models.ResearchDefinition) {
 
 func fillEmptyBuildingRequirements(db *gorm.DB, existing *models.BuildingDefinition, seeded models.BuildingDefinition) {
 	changed := false
+	if seeded.SlotsMax > 0 && existing.SlotsMax != seeded.SlotsMax {
+		existing.SlotsMax = seeded.SlotsMax
+		changed = true
+	}
+	if existing.AvailableAtSpawn != seeded.AvailableAtSpawn {
+		existing.AvailableAtSpawn = seeded.AvailableAtSpawn
+		changed = true
+	}
+	if existing.NonConstructible != seeded.NonConstructible {
+		existing.NonConstructible = seeded.NonConstructible
+		changed = true
+	}
+	if seeded.UnlockEra != "" && existing.UnlockEra != seeded.UnlockEra {
+		existing.UnlockEra = seeded.UnlockEra
+		changed = true
+	}
+	if seeded.UnlockType != "" && existing.UnlockType != seeded.UnlockType {
+		existing.UnlockType = seeded.UnlockType
+		changed = true
+	}
+	if seeded.UnlockMessage != "" && existing.UnlockMessage != seeded.UnlockMessage {
+		existing.UnlockMessage = seeded.UnlockMessage
+		changed = true
+	}
 	if existing.NexusLevelRequired <= 0 && seeded.NexusLevelRequired > 0 {
 		existing.NexusLevelRequired = seeded.NexusLevelRequired
 		changed = true
 	}
-	if existing.RequiredBuildingsJSON == "" && seeded.RequiredBuildingsJSON != "" {
+	if seeded.RequiredBuildingsJSON != "" && existing.RequiredBuildingsJSON != seeded.RequiredBuildingsJSON {
 		existing.RequiredBuildingsJSON = seeded.RequiredBuildingsJSON
 		changed = true
 	}
 	if existing.RequiredResearchJSON == "" && seeded.RequiredResearchJSON != "" {
 		existing.RequiredResearchJSON = seeded.RequiredResearchJSON
+		changed = true
+	}
+	if seeded.DurationBaseSeconds > 0 && existing.DurationBaseSeconds != seeded.DurationBaseSeconds {
+		existing.DurationBaseSeconds = seeded.DurationBaseSeconds
+		changed = true
+	}
+	if seeded.DurationMultiplier > 0 && existing.DurationMultiplier != seeded.DurationMultiplier {
+		existing.DurationMultiplier = seeded.DurationMultiplier
+		changed = true
+	}
+	if seeded.MilestoneReduction > 0 && existing.MilestoneReduction != seeded.MilestoneReduction {
+		existing.MilestoneReduction = seeded.MilestoneReduction
+		changed = true
+	}
+	if seeded.StorageResource != "" && existing.StorageResource != seeded.StorageResource {
+		existing.StorageResource = seeded.StorageResource
+		changed = true
+	}
+	if existing.StorageCapBase != seeded.StorageCapBase {
+		existing.StorageCapBase = seeded.StorageCapBase
+		changed = true
+	}
+	if seeded.StorageGrowth > 0 && existing.StorageGrowth != seeded.StorageGrowth {
+		existing.StorageGrowth = seeded.StorageGrowth
+		changed = true
+	}
+	if seeded.OverflowBehavior != "" && existing.OverflowBehavior != seeded.OverflowBehavior {
+		existing.OverflowBehavior = seeded.OverflowBehavior
+		changed = true
+	}
+	if existing.OverflowDecayPercentPerHour != seeded.OverflowDecayPercentPerHour {
+		existing.OverflowDecayPercentPerHour = seeded.OverflowDecayPercentPerHour
+		changed = true
+	}
+	if existing.ProductionBasePerHour != seeded.ProductionBasePerHour {
+		existing.ProductionBasePerHour = seeded.ProductionBasePerHour
+		changed = true
+	}
+	if seeded.ProductionGrowth > 0 && existing.ProductionGrowth != seeded.ProductionGrowth {
+		existing.ProductionGrowth = seeded.ProductionGrowth
+		changed = true
+	}
+	if existing.HarvestRecommendedIntervalSeconds != seeded.HarvestRecommendedIntervalSeconds {
+		existing.HarvestRecommendedIntervalSeconds = seeded.HarvestRecommendedIntervalSeconds
+		changed = true
+	}
+	if seeded.SynergiesJSON != "" && existing.SynergiesJSON != seeded.SynergiesJSON {
+		existing.SynergiesJSON = seeded.SynergiesJSON
+		changed = true
+	}
+	if seeded.RisksJSON != "" && existing.RisksJSON != seeded.RisksJSON {
+		existing.RisksJSON = seeded.RisksJSON
+		changed = true
+	}
+	if seeded.AIActionsJSON != "" && existing.AIActionsJSON != seeded.AIActionsJSON {
+		existing.AIActionsJSON = seeded.AIActionsJSON
+		changed = true
+	}
+	if existing.FlavorTextKey == "" && seeded.FlavorTextKey != "" {
+		existing.FlavorTextKey = seeded.FlavorTextKey
+		changed = true
+	}
+	if len(existing.LevelDescriptionKeys) == 0 && len(seeded.LevelDescriptionKeys) > 0 {
+		existing.LevelDescriptionKeys = seeded.LevelDescriptionKeys
 		changed = true
 	}
 	if changed {
@@ -1110,19 +1345,101 @@ func buildingReq(contentID string, level int) string {
 
 func multiBuildingReq(items map[string]int) string {
 	out := "["
-	first := true
-	for contentID, level := range items {
-		if !first {
+	keys := make([]string, 0, len(items))
+	for contentID := range items {
+		keys = append(keys, contentID)
+	}
+	sort.Strings(keys)
+	for index, contentID := range keys {
+		if index > 0 {
 			out += ","
 		}
-		first = false
-		out += `{"contentId":"` + contentID + `","level":` + stringInt(level) + `}`
+		out += `{"contentId":"` + contentID + `","level":` + stringInt(items[contentID]) + `}`
 	}
 	return out + "]"
 }
 
 func researchReq(contentID string) string {
 	return `["` + contentID + `"]`
+}
+
+func defaultBuildingSynergies(contentID string) string {
+	switch contentID {
+	case "building_modular_habitat":
+		return `[{"with":"building_vertical_farm","requiresLevel":5,"bonus":"population_morale","valuePercent":5},{"with":"building_logistic_station","requiresLevel":10,"bonus":"worker_assignment_speed","valuePercent":8}]`
+	case "building_solar_plant":
+		return `[{"with":"building_data_bank","requiresLevel":5,"bonus":"data_uptime","valuePercent":10},{"with":"building_ai_center","requiresLevel":8,"bonus":"ai_action_cooldown","valuePercent":-8}]`
+	case "building_composite_mine":
+		return `[{"with":"building_barracks","requiresLevel":2,"bonus":"military_build_cost","valuePercent":-5},{"with":"building_quantum_refinery","requiresLevel":12,"bonus":"quantum_yield","valuePercent":10}]`
+	case "building_vertical_farm":
+		return `[{"with":"building_modular_habitat","requiresLevel":2,"bonus":"population_growth","valuePercent":8},{"with":"building_diplomatic_center","requiresLevel":6,"bonus":"influence_events","valuePercent":5}]`
+	case "building_barracks":
+		return `[{"with":"building_holo_wall","requiresLevel":1,"bonus":"city_defense","valuePercent":8},{"with":"building_drone_factory","requiresLevel":5,"bonus":"mixed_training_speed","valuePercent":12}]`
+	case "building_holo_wall":
+		return `[{"with":"building_surveillance_tower","requiresLevel":3,"bonus":"raid_detection","valuePercent":15}]`
+	case "building_data_bank":
+		return `[{"with":"building_research_lab","requiresLevel":3,"bonus":"research_speed","valuePercent":10},{"with":"building_ai_center","requiresLevel":8,"bonus":"ai_context_memory","valuePercent":12}]`
+	case "building_research_lab":
+		return `[{"with":"building_ai_center","requiresLevel":5,"bonus":"ai_experiment_success","valuePercent":10},{"with":"building_quantum_refinery","requiresLevel":15,"bonus":"quantum_safety","valuePercent":8}]`
+	case "building_drone_factory":
+		return `[{"with":"building_surveillance_tower","requiresLevel":2,"bonus":"drone_patrol_efficiency","valuePercent":10}]`
+	case "building_nexus_market":
+		return `[{"with":"building_logistic_station","requiresLevel":5,"bonus":"trade_route_capacity","valuePercent":12},{"with":"building_diplomatic_center","requiresLevel":5,"bonus":"influence_trade","valuePercent":8}]`
+	case "building_ai_center":
+		return `[{"with":"building_data_bank","requiresLevel":8,"bonus":"agent_quality","valuePercent":12},{"with":"building_world_relay","requiresLevel":10,"bonus":"world_prediction","valuePercent":10}]`
+	case "building_diplomatic_center":
+		return `[{"with":"building_guild_hq","requiresLevel":1,"bonus":"alliance_negotiation","valuePercent":10},{"with":"building_tribunal_nexus","requiresLevel":8,"bonus":"verdict_legitimacy","valuePercent":12}]`
+	case "building_guild_hq":
+		return `[{"with":"building_world_relay","requiresLevel":5,"bonus":"guild_world_actions","valuePercent":10}]`
+	case "building_quantum_refinery":
+		return `[{"with":"building_nexus_core","requiresLevel":1,"bonus":"singularity_contribution","valuePercent":15}]`
+	case "building_living_lore_archives":
+		return `[{"with":"building_world_relay","requiresLevel":4,"bonus":"living_lore_event_quality","valuePercent":12}]`
+	case "building_tribunal_nexus":
+		return `[{"with":"building_surveillance_tower","requiresLevel":10,"bonus":"evidence_integrity","valuePercent":15}]`
+	case "building_world_relay":
+		return `[{"with":"building_nexus_core","requiresLevel":1,"bonus":"global_world_awareness","valuePercent":15}]`
+	case "building_nexus_core":
+		return `[{"with":"all_era4_buildings","requiresLevel":1,"bonus":"nexus_singularity_progress","valuePercent":20}]`
+	default:
+		return `[{"with":"building_logistic_station","requiresLevel":2,"bonus":"maintenance_efficiency","valuePercent":5}]`
+	}
+}
+
+func defaultBuildingRisks(contentID string) string {
+	switch contentID {
+	case "building_quantum_refinery":
+		return `[{"trigger":"storage_full_6h","debuff":"quantum_instability","effect":"production -50%, anomaly risk +3%/h","durationSeconds":21600,"recovery":"harvest_and_stabilize_ai_action"}]`
+	case "building_ai_center":
+		return `[{"trigger":"data_shortage_or_morale_below_25","debuff":"agent_jam","effect":"AI action cooldown +50%","durationSeconds":14400,"recovery":"run_diagnostic"}]`
+	case "building_holo_wall", "building_surveillance_tower":
+		return `[{"trigger":"energy_balance_negative_2h","debuff":"defense_blind_spot","effect":"raid detection -30%","durationSeconds":7200,"recovery":"restore_energy_positive"}]`
+	case "building_nexus_market":
+		return `[{"trigger":"morale_below_25","debuff":"market_panic","effect":"trade bonus -50%","durationSeconds":10800,"recovery":"stabilize_prices_ai_action"}]`
+	case "building_vertical_farm":
+		return `[{"trigger":"storage_full_4h","debuff":"crop_decay","effect":"surplus decay 5%/h","durationSeconds":14400,"recovery":"harvest"}]`
+	default:
+		return `[{"trigger":"morale_below_25","debuff":"low_efficiency","effect":"production -50%, incident risk 3%/h","durationSeconds":10800,"recovery":"restore_morale_above_35"}]`
+	}
+}
+
+func defaultBuildingAIActions(contentID string) string {
+	switch contentID {
+	case "building_ai_center":
+		return `[{"id":"ai_diagnostic","cost":{"credits":250,"data":180},"cooldownSeconds":14400,"effect":"Nettoie un debuff agent_jam et reduit de 10% le prochain cooldown IA."},{"id":"predict_incident","cost":{"credits":400,"data":320},"cooldownSeconds":21600,"effect":"Revele le prochain risque majeur de la cite."}]`
+	case "building_data_bank":
+		return `[{"id":"compress_data","cost":{"credits":120,"data":80},"cooldownSeconds":7200,"effect":"Convertit le surplus data en stockage utile temporaire +10% pendant 6h."}]`
+	case "building_nexus_market":
+		return `[{"id":"stabilize_prices","cost":{"credits":300,"data":120},"cooldownSeconds":21600,"effect":"Supprime market_panic et donne +5% trade pendant 4h."}]`
+	case "building_surveillance_tower":
+		return `[{"id":"scan_sector","cost":{"credits":180,"data":160},"cooldownSeconds":10800,"effect":"Augmente detection raid +20% pendant 3h."}]`
+	case "building_quantum_refinery":
+		return `[{"id":"stabilize_reactor","cost":{"credits":500,"data":350,"quantum_core":2},"cooldownSeconds":43200,"effect":"Reduit anomaly risk de 50% pendant 8h."}]`
+	case "building_diplomatic_center":
+		return `[{"id":"envoy_briefing","cost":{"credits":350,"influence":20},"cooldownSeconds":21600,"effect":"Boost reputation gain +10% pendant 6h."}]`
+	default:
+		return `[{"id":"optimize_shift","cost":{"credits":100,"data":40},"cooldownSeconds":10800,"effect":"Production ou efficacite +5% pendant 2h."}]`
+	}
 }
 
 func stringInt(value int) string {
