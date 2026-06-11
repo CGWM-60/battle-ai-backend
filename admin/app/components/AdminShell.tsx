@@ -53,6 +53,7 @@ const navSections: { title: string; items: NavItem[] }[] = [
       { href: "/roleplay-quests/", path: "/admin/roleplay-quests/", label: "Quetes RP", icon: ListChecks },
       { href: "/tribunal-ai/", path: "/admin/tribunal-ai/", label: "Tribunal IA", icon: Shield },
       { href: "/nexus/ai-server/", path: "/admin/nexus/ai-server/", label: "IA serveur", icon: RadioTower, exact: true },
+      { href: "/nexus/ai-server/jobs", path: "/admin/nexus/ai-server/jobs", label: "Jobs IA", icon: Activity },
       { href: "/nexus/ai-server/cities", path: "/admin/nexus/ai-server/cities", label: "Villes IA", icon: Building2 },
       { href: "/nexus/ai-server/attacks", path: "/admin/nexus/ai-server/attacks", label: "Attaques", icon: Zap },
       { href: "/nexus/ai-server/broadcasts", path: "/admin/nexus/ai-server/broadcasts", label: "Broadcasts", icon: Radio },

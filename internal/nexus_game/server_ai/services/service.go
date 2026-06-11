@@ -56,6 +56,7 @@ func (s *Service) AutoMigrate() error {
 		&saimodels.ServerAISeasonalEvent{},
 		&saimodels.ServerAICallLog{},
 		&saimodels.ServerAIAdminAction{},
+		&saimodels.ServerAIJobRun{},
 	)
 }
 
@@ -284,6 +285,7 @@ func (s *Service) Dashboard(ctx context.Context) (map[string]any, error) {
 		"citiesCount": cities, "attacksCount": attacks, "eventsToReview": events,
 		"broadcastsCount": broadcasts, "callsLast24h": logs, "pressures": pressures,
 		"costGuard": s.Costs(ctx),
+		"jobs":      s.JobDashboard(ctx),
 	}, nil
 }
 

@@ -283,6 +283,7 @@ export default function NexusWorldControlPage() {
     { href: "/nexus/mmo/units", title: "Unites", detail: "Stats, prerequisites, recrutement, assets et traductions." },
     { href: "/nexus/mmo/research", title: "Recherches", detail: "Arbre techno, durees, dependances, unlocks et descriptions." },
     { href: "/nexus/ai-server/", title: "IA serveur", detail: "Pression, bastions, generation et compteurs du noyau IA." },
+    { href: "/nexus/ai-server/jobs", title: "Jobs IA", detail: "Scheduler complet: minutes, heures, daily, weekly, saison et executions forcees." },
     { href: "/nexus/ai-server/prompts", title: "Prompts IA", detail: "Prompts, tests, seed et versions de generation." },
     { href: "/nexus/ai-server/logs", title: "Logs & couts", detail: "Tokens, latence, erreurs et cout estime par appel." },
     { href: "/nexus/ai-server/attacks", title: "Attaques", detail: "Planification, annulation et resolution d'attaques IA." },

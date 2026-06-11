@@ -15,7 +15,11 @@ func AutoMigrate(database *gorm.DB) error {
 }
 
 func SeedDefaults(database *gorm.DB) error {
-	return services.NewService(database).SeedDefaults(context.Background())
+	if err := services.NewService(database).SeedDefaults(context.Background()); err != nil {
+		return err
+	}
+	services.StartServerAIJobScheduler(database)
+	return nil
 }
 
 func Register(group *gin.RouterGroup, database *gorm.DB) {
@@ -34,6 +38,10 @@ func Register(group *gin.RouterGroup, database *gorm.DB) {
 
 	admin := group.Group("/admin")
 	admin.GET("/ai-server/dashboard", h.Dashboard)
+	admin.GET("/ai-server/jobs", h.Jobs)
+	admin.POST("/ai-server/jobs/run-due", h.RunDueJobs)
+	admin.POST("/ai-server/jobs/run-all", h.RunAllJobs)
+	admin.POST("/ai-server/jobs/:jobKey/run", h.RunJob)
 	admin.POST("/ai-server/worlds/:worldId/ensure-cities", h.EnsureWorldCities)
 	admin.GET("/ai-server/cities", h.AdminCities)
 	admin.GET("/ai-server/cities/:id", h.City)

@@ -368,9 +368,15 @@ Tous ces endpoints sont sous `/api/nexus-game`.
 
 Tous ces endpoints sont sous `/api/nexus-game/admin`.
 
+Le scheduler IA serveur démarre avec le backend par défaut. Configuration: `NEXUS_SERVER_AI_CRON_ENABLED=false` pour le désactiver, `NEXUS_SERVER_AI_CRON_INTERVAL_SECONDS=60` pour régler le tick, `NEXUS_SERVER_AI_CRON_TIMEOUT_SECONDS=600` pour le timeout d'un cycle.
+
 | Method | Path | Attendu | Retour JSON |
 | --- | --- | --- | --- |
 | GET | `/ai-server/dashboard` | Aucun | Dashboard serveur IA |
+| GET | `/ai-server/jobs` | Aucun | `{ "jobs": [ServerAIJobView] }` avec frequence, due, lastRun, nextRunAt |
+| POST | `/ai-server/jobs/run-due?world_id=1` | Query world optionnelle | `{ "results": [ServerAIJobRunResult] }` pour les jobs dus uniquement |
+| POST | `/ai-server/jobs/run-all?world_id=1` | Query world optionnelle | `{ "results": [ServerAIJobRunResult] }` pour toute la matrice IA |
+| POST | `/ai-server/jobs/:jobKey/run?world_id=1` | Query `world_id` optionnelle ou `{ "worldId": 1 }` | `{ "result": ServerAIJobRunResult }` |
 | POST | `/ai-server/worlds/:worldId/ensure-cities` | Path world id | `{ "ok": true }` |
 | GET | `/ai-server/cities` | Aucun | `{ "cities": [ServerAICity] }` |
 | GET | `/ai-server/cities/:id` | Path city id | `{ "city": ServerAICity }` |

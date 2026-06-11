@@ -25,6 +25,36 @@ func (h *Handler) Dashboard(c *gin.Context) {
 	write(c, data, err)
 }
 
+func (h *Handler) Jobs(c *gin.Context) {
+	jobs, err := h.svc.ListJobs(c.Request.Context())
+	write(c, gin.H{"jobs": jobs}, err)
+}
+
+func (h *Handler) RunDueJobs(c *gin.Context) {
+	worldID := uintFromQuery(c, "world_id")
+	results, err := h.svc.RunDueJobs(c.Request.Context(), "admin_due", worldID)
+	write(c, gin.H{"results": results}, err)
+}
+
+func (h *Handler) RunAllJobs(c *gin.Context) {
+	worldID := uintFromQuery(c, "world_id")
+	results, err := h.svc.RunAllJobs(c.Request.Context(), "admin_all", worldID)
+	write(c, gin.H{"results": results}, err)
+}
+
+func (h *Handler) RunJob(c *gin.Context) {
+	var body struct {
+		WorldID uint `json:"worldId"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	worldID := body.WorldID
+	if worldID == 0 {
+		worldID = uintFromQuery(c, "world_id")
+	}
+	result, err := h.svc.RunJob(c.Request.Context(), c.Param("jobKey"), "admin_manual", worldID)
+	write(c, gin.H{"result": result}, err)
+}
+
 func (h *Handler) EnsureWorldCities(c *gin.Context) {
 	worldID := uintFromParam(c, "worldId")
 	if worldID == 0 {

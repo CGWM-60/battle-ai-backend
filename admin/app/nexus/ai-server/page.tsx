@@ -29,12 +29,14 @@ export default function AIServerDashboardPage() {
     ["Events à revoir", data?.eventsToReview],
     ["Broadcasts", data?.broadcastsCount],
     ["Appels 24h", data?.callsLast24h],
+    ["Jobs dus", data?.jobs?.due],
   ];
 
   return (
     <AdminShell title="IA serveur Nexus" description="Pilotage du Noyau IA, bastions, pression, coûts et actions contrôlées.">
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
         <Link href="/nexus/ai-server/cities"><button>Villes IA</button></Link>
+        <Link href="/nexus/ai-server/jobs"><button>Jobs IA / Cron</button></Link>
         <Link href="/nexus/ai-server/attacks"><button>Attaques</button></Link>
         <Link href="/nexus/ai-server/memory"><button>Mémoire</button></Link>
         <Link href="/nexus/ai-server/prompts"><button>Prompts</button></Link>

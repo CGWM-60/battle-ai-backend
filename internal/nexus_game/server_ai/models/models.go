@@ -213,3 +213,26 @@ type ServerAIAdminAction struct {
 	PayloadJSON string    `gorm:"type:text" json:"payloadJson"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
+
+type ServerAIJobRun struct {
+	ID             uint       `gorm:"primaryKey" json:"id"`
+	JobKey         string     `gorm:"size:100;index;not null" json:"jobKey"`
+	JobName        string     `gorm:"size:180" json:"jobName"`
+	Category       string     `gorm:"size:80;index" json:"category"`
+	Frequency      string     `gorm:"size:80" json:"frequency"`
+	GenerativeMode string     `gorm:"size:40" json:"generativeMode"`
+	TriggerType    string     `gorm:"size:40;index" json:"triggerType"`
+	Status         string     `gorm:"size:32;index" json:"status"`
+	StartedAt      time.Time  `gorm:"index" json:"startedAt"`
+	FinishedAt     *time.Time `json:"finishedAt"`
+	DurationMs     int64      `json:"durationMs"`
+	WorldID        uint       `gorm:"index" json:"worldId"`
+	Processed      int        `json:"processed"`
+	CreatedCount   int        `json:"createdCount"`
+	UpdatedCount   int        `json:"updatedCount"`
+	SkippedCount   int        `json:"skippedCount"`
+	ErrorMessage   string     `gorm:"type:text" json:"errorMessage"`
+	SummaryJSON    string     `gorm:"type:text" json:"summaryJson"`
+	CreatedAt      time.Time  `json:"createdAt"`
+	UpdatedAt      time.Time  `json:"updatedAt"`
+}
