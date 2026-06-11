@@ -30030,6 +30030,69 @@
       "locale": "fr",
       "value": "Nexus Tribunal Authority niveau 30 : Progression de recherche niveau 30. Apports suivis : Autorité mondiale, verdicts incontestables.",
       "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.remaining",
+      "locale": "fr",
+      "value": "Restant",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.cost",
+      "locale": "fr",
+      "value": "Coût",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.duration",
+      "locale": "fr",
+      "value": "Durée",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.brings",
+      "locale": "fr",
+      "value": "Apporte",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.why",
+      "locale": "fr",
+      "value": "Pourquoi",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.build",
+      "locale": "fr",
+      "value": "CONSTRUIRE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.build_another",
+      "locale": "fr",
+      "value": "CONSTRUIRE UN AUTRE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.limit_reached",
+      "locale": "fr",
+      "value": "LIMITE ATTEINTE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.exemplaires",
+      "locale": "fr",
+      "value": "exemplaires",
+      "language": "fr"
     }
   ]
 }
