@@ -52,11 +52,11 @@ func (h *ResourceHandler) Resources(c *gin.Context) {
 		// (fresh after purge/creation, during construction complete, missing some rows temporarily, etc.).
 		// The real fix is in the snapshot/ensure/sync path (guards on cfg divisors, ensure always creates rows, etc.).
 		c.JSON(http.StatusOK, gin.H{
-			"resources":     []interface{}{},
-			"catalog":       []interface{}{},
-			"cityStats":     gin.H{},
-			"transactions":  []interface{}{},
-			"warning":       "partial resources data (backend snapshot error)",
+			"resources":    []interface{}{},
+			"catalog":      []interface{}{},
+			"cityStats":    gin.H{},
+			"transactions": []interface{}{},
+			"warning":      "partial resources data (backend snapshot error)",
 		})
 		return
 	}
@@ -93,6 +93,10 @@ func (h *ResourceHandler) CityStats(c *gin.Context) {
 	}
 	if err := h.resourceService.EnsureInitialAllocation(c.Request.Context(), profileID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to initialize city stats"})
+		return
+	}
+	if err := h.resourceService.SyncBuildingProduction(c.Request.Context(), profileID, true); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to sync city stats"})
 		return
 	}
 	stats, err := repositories.NewPlayerCityStatsRepository(h.db).GetOrCreate(c.Request.Context(), profileID)

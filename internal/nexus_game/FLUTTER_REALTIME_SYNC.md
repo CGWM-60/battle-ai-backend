@@ -50,6 +50,11 @@ Utiliser ces champs pour l'UI live:
 - `foodProduction`
 - `foodConsumption`
 - `foodBalance`
+- `populationCapacity`
+- `populationFree`
+- `populationGrowthPerHour`
+- `populationRemainder`
+- `lastPopulationSyncAt` (**pivot temporel serveur population**)
 - `lastProductionSyncAt` (**pivot temporel serveur**)
 
 ## `ProfileGamer`
@@ -61,6 +66,8 @@ Utiliser ces champs pour l'UI live:
 - `energyBalance`: `energyProduction - energyConsumption`, par heure.
 
 Important: `ProfileGamer.energy*` est horaire, alors que `PlayerResource.*PerTick` est par seconde. Flutter anime les stocks avec `balancePerTick`, mais affiche les limites population/energie depuis `ProfileGamer`.
+
+Important population: Flutter ne renvoie jamais une population predite au backend. Le backend est source de verite: `GET /resources` synchronise production + croissance population, puis renvoie `profile` et `city` pour recaler `mmoEntryProvider`.
 
 Formules serveur utiles a afficher:
 

@@ -636,6 +636,8 @@ func (s *WorldService) GetWorldPlayerDetail(ctx context.Context, worldID uint, p
 	if profile.WorldID != worldID {
 		return nil, fmt.Errorf("profile %d is not assigned to world %d", profileID, worldID)
 	}
+	_ = NewResourceService(s.db).SyncBuildingProduction(ctx, profile.ID, true)
+	_ = db.First(&profile, profileID).Error
 
 	var world models.World
 	_ = db.First(&world, profile.WorldID).Error
@@ -836,6 +838,13 @@ func (s *WorldService) GetWorldPlayerDetail(ctx context.Context, worldID uint, p
 	}
 	if cityStatsFound {
 		city["cityStats"] = cityStats
+		city["populationFree"] = max(0, profile.PopulationCapacity-profile.Population)
+		city["populationGrowthPerHour"] = cityStats.PopulationGrowthHour
+		city["populationRemainder"] = cityStats.PopulationRemainder
+		city["lastPopulationSyncAt"] = cityStats.LastPopulationSyncAt
+		city["foodProduction"] = cityStats.FoodProduction
+		city["foodConsumption"] = cityStats.FoodConsumption
+		city["foodBalance"] = cityStats.FoodBalance
 	}
 
 	identity := map[string]interface{}{

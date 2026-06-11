@@ -42,6 +42,11 @@ type PlayerCityStats struct {
 	FoodProduction       float64   `json:"foodProduction"`
 	FoodConsumption      float64   `json:"foodConsumption"`
 	FoodBalance          float64   `json:"foodBalance"`
+	PopulationCapacity   int       `json:"populationCapacity"`
+	PopulationFree       int       `json:"populationFree"`
+	PopulationGrowthHour float64   `json:"populationGrowthPerHour"`
+	PopulationRemainder  float64   `json:"populationRemainder"`
+	LastPopulationSyncAt time.Time `json:"lastPopulationSyncAt"`
 	LastProductionSyncAt time.Time `json:"lastProductionSyncAt"`
 	CreatedAt            time.Time `json:"createdAt"`
 	UpdatedAt            time.Time `json:"updatedAt"`

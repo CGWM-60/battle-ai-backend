@@ -208,18 +208,6 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 			CreatedAt:          now,
 			UpdatedAt:          now,
 		}
-		// Allow client-driven resync of advanced pop (from local persist when server snapshot was older).
-		// Clamp to sane values (cap >=0, pop 0..cap if cap>0).
-		if req.PopulationCapacity > 0 {
-			p.PopulationCapacity = req.PopulationCapacity
-		}
-		if req.Population > 0 {
-			if p.PopulationCapacity > 0 && req.Population > p.PopulationCapacity {
-				p.Population = p.PopulationCapacity
-			} else {
-				p.Population = req.Population
-			}
-		}
 		if err := h.db.Create(&p).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create profile_gamer"})
 			return
@@ -269,22 +257,6 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 		p.Pseudo = req.Pseudo
 		p.CityName = req.CityName
 		p.UpdatedAt = now
-		// Support client resync push for population when local advanced state (offline growth per client prediction + persist) is ahead of server snapshot.
-		// Server remains authoritative for future ticks, but accepts the higher recent value to avoid reset on relaunch.
-		if req.PopulationCapacity > 0 {
-			p.PopulationCapacity = req.PopulationCapacity
-		}
-		if req.Population > 0 {
-			cap := p.PopulationCapacity
-			if cap <= 0 {
-				cap = req.PopulationCapacity
-			}
-			if cap > 0 && req.Population > cap {
-				p.Population = cap
-			} else {
-				p.Population = req.Population
-			}
-		}
 		if err := h.db.Save(&p).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update profile_gamer"})
 			return

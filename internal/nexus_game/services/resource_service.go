@@ -103,6 +103,15 @@ type productionAccumulator struct {
 	EnergyConsumption   int
 }
 
+type populationSyncResult struct {
+	Population       int
+	Capacity         int
+	Free             int
+	GrowthPerHour    float64
+	Remainder        float64
+	LastPopulationAt time.Time
+}
+
 type researchModifiers struct {
 	BuildingBonuses           map[string][]buildingEffect
 	StorageCapacityMultiplier float64
@@ -587,6 +596,126 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 	return acc, nil
 }
 
+func syncPopulationState(profile models.ProfileGamer, stats *models.PlayerCityStats, acc productionAccumulator, now time.Time, applyAccrual bool) populationSyncResult {
+	capacity := acc.PopulationCapacity
+	if capacity < profile.Population {
+		capacity = profile.Population
+	}
+	population := profile.Population
+	free := capacity - population
+	if free < 0 {
+		free = 0
+	}
+
+	foodBalancePerHour := (acc.ResourceProduction["food"] - acc.ResourceConsumption["food"]) * 3600
+	energyRatio := float64(acc.EnergyProduction) / math.Max(1, float64(acc.EnergyConsumption))
+
+	growthPerHour := 0.0
+	if capacity > 0 && population < capacity {
+		base := math.Max(12, float64(capacity)*0.05)
+		freeRatio := float64(capacity-population) / float64(capacity)
+		housingFactor := 1.0
+		if freeRatio > 0.50 {
+			housingFactor = 1.20
+		} else if freeRatio < 0.10 {
+			housingFactor = 0.25
+		}
+
+		foodFactor := 1.0
+		if foodBalancePerHour < 0 {
+			foodFactor = 0.45
+		}
+		energyFactor := 1.0
+		if energyRatio < 0.75 {
+			energyFactor = 0.45
+		} else if energyRatio < 1.0 {
+			energyFactor = 0.75
+		} else if energyRatio >= 1.50 {
+			energyFactor = 1.15
+		} else if energyRatio >= 1.20 {
+			energyFactor = 1.08
+		}
+		moraleFactor := 1.0
+		if profile.Morale >= 80 {
+			moraleFactor = 1.15
+		} else if profile.Morale < 25 {
+			moraleFactor = 0.25
+		} else if profile.Morale < 50 {
+			moraleFactor = 0.65
+		}
+		securityFactor := 1.0
+		if profile.Security >= 80 {
+			securityFactor = 1.08
+		} else if profile.Security < 25 {
+			securityFactor = 0.35
+		} else if profile.Security < 50 {
+			securityFactor = 0.75
+		}
+		growthPerHour = base * housingFactor * foodFactor * energyFactor * moraleFactor * securityFactor
+	}
+	if capacity > 0 && population > capacity {
+		growthPerHour = -math.Max(5, float64(population-capacity)*0.10)
+	}
+	if capacity > 0 && population > 0 && (profile.Morale < 15 || profile.Security < 15 || energyRatio < 0.50) {
+		growthPerHour -= math.Max(2, float64(population)*0.01)
+	}
+
+	lastPopulationAt := stats.LastPopulationSyncAt
+	if lastPopulationAt.IsZero() {
+		lastPopulationAt = stats.LastProductionSyncAt
+	}
+	if lastPopulationAt.IsZero() {
+		lastPopulationAt = profile.UpdatedAt
+	}
+	if lastPopulationAt.IsZero() {
+		lastPopulationAt = now
+	}
+	elapsedSeconds := 0.0
+	if applyAccrual {
+		elapsedSeconds = now.Sub(lastPopulationAt).Seconds()
+		if elapsedSeconds < 0 {
+			elapsedSeconds = 0
+		}
+		if elapsedSeconds > 21600 {
+			elapsedSeconds = 21600
+		}
+	}
+
+	remainder := stats.PopulationRemainder
+	if applyAccrual && elapsedSeconds > 0 && growthPerHour != 0 {
+		remainder += growthPerHour * elapsedSeconds / 3600
+		if remainder >= 1 {
+			delta := int(math.Floor(remainder))
+			population += delta
+			remainder -= float64(delta)
+		} else if remainder <= -1 {
+			delta := int(math.Ceil(remainder))
+			population += delta
+			remainder -= float64(delta)
+		}
+	}
+	if population < 0 {
+		population = 0
+		remainder = 0
+	}
+	if capacity > 0 && population > capacity {
+		population = capacity
+		remainder = 0
+	}
+	free = capacity - population
+	if free < 0 {
+		free = 0
+	}
+	return populationSyncResult{
+		Population:       population,
+		Capacity:         capacity,
+		Free:             free,
+		GrowthPerHour:    growthPerHour,
+		Remainder:        remainder,
+		LastPopulationAt: now,
+	}
+}
+
 // SyncBuildingProduction recomputes production/consumption from completed buildings and
 // updates per-tick balances. When applyAccrual is true, elapsed production since the last
 // sync is applied directly to resource amounts.
@@ -635,6 +764,7 @@ func (s *ResourceService) SyncBuildingProduction(ctx context.Context, profileID 
 				}
 			}
 		}
+		popSync := syncPopulationState(profile, stats, acc, now, applyAccrual)
 
 		resourceRepo := repositories.NewPlayerResourceRepository(tx)
 		resources, err := resourceRepo.List(ctx, profileID)
@@ -700,12 +830,18 @@ func (s *ResourceService) SyncBuildingProduction(ctx context.Context, profileID 
 		stats.FoodProduction = acc.ResourceProduction["food"]
 		stats.FoodConsumption = acc.ResourceConsumption["food"]
 		stats.FoodBalance = stats.FoodProduction - stats.FoodConsumption
+		stats.PopulationCapacity = popSync.Capacity
+		stats.PopulationFree = popSync.Free
+		stats.PopulationGrowthHour = popSync.GrowthPerHour
+		stats.PopulationRemainder = popSync.Remainder
+		stats.LastPopulationSyncAt = popSync.LastPopulationAt
 		stats.LastProductionSyncAt = now
 		if err := statsRepo.Save(ctx, stats); err != nil {
 			return err
 		}
 
 		updates := map[string]any{
+			"population":          popSync.Population,
 			"population_capacity": acc.PopulationCapacity,
 			"energy_production":   acc.EnergyProduction,
 			"energy_consumption":  acc.EnergyConsumption,
@@ -953,6 +1089,12 @@ func (s *ResourceService) ensureInitialCityStats(ctx context.Context, tx *gorm.D
 	stats.FoodProduction = 0
 	stats.FoodConsumption = 0
 	stats.FoodBalance = 0
+	stats.PopulationCapacity = 0
+	stats.PopulationFree = 0
+	stats.PopulationGrowthHour = 0
+	stats.PopulationRemainder = 0
+	stats.LastPopulationSyncAt = now
+	stats.LastProductionSyncAt = now
 	return statsRepo.Save(ctx, stats)
 }
 
@@ -1028,6 +1170,10 @@ func (s *ResourceService) PlayerSnapshot(ctx context.Context, profileID uint) (m
 	if err := s.SyncBuildingProduction(ctx, profileID, true); err != nil {
 		return nil, err
 	}
+	var profile models.ProfileGamer
+	if err := s.db.WithContext(ctx).First(&profile, profileID).Error; err != nil {
+		return nil, err
+	}
 	catalogRepo := repositories.NewResourceCatalogRepository(s.db)
 	resourceRepo := repositories.NewPlayerResourceRepository(s.db)
 	transactionRepo := repositories.NewResourceTransactionRepository(s.db)
@@ -1051,10 +1197,35 @@ func (s *ResourceService) PlayerSnapshot(ctx context.Context, profileID uint) (m
 	}
 	return map[string]any{
 		"catalog":      catalog,
+		"profile":      profile,
+		"city":         citySnapshot(profile, stats),
 		"resources":    resources,
 		"cityStats":    stats,
 		"transactions": transactions,
 	}, nil
+}
+
+func citySnapshot(profile models.ProfileGamer, stats *models.PlayerCityStats) map[string]any {
+	return map[string]any{
+		"name":                    profile.CityName,
+		"level":                   profile.Level,
+		"power":                   profile.Power,
+		"population":              profile.Population,
+		"populationCapacity":      profile.PopulationCapacity,
+		"populationFree":          max(0, profile.PopulationCapacity-profile.Population),
+		"populationGrowthPerHour": stats.PopulationGrowthHour,
+		"populationRemainder":     stats.PopulationRemainder,
+		"lastPopulationSyncAt":    stats.LastPopulationSyncAt,
+		"morale":                  profile.Morale,
+		"energyProduction":        profile.EnergyProduction,
+		"energyConsumption":       profile.EnergyConsumption,
+		"energyBalance":           profile.EnergyBalance,
+		"energyStored":            profile.EnergyStored,
+		"security":                profile.Security,
+		"foodProduction":          stats.FoodProduction,
+		"foodConsumption":         stats.FoodConsumption,
+		"foodBalance":             stats.FoodBalance,
+	}
 }
 
 func (s *ResourceService) ApplyResourceDelta(ctx context.Context, profileID uint, code string, delta int64, transactionType string, source string) (*models.PlayerResource, error) {

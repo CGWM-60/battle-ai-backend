@@ -132,7 +132,9 @@ Unites de temps envoyees:
 - `BuildingDefinition.productionBasePerHour` et `productionGrowth`: valeurs de catalogue par heure.
 - `ProfileGamer.energyProduction`, `energyConsumption`, `energyBalance`: valeurs par heure, pour l'affichage des limites energie.
 - `PlayerResource.productionPerTick`, `consumptionPerTick`, `balancePerTick`: valeurs par seconde, pour l'animation Flutter et l'accrual serveur.
+- `ProfileGamer.population`: population actuelle, calculee cote serveur pendant `GET /resources`, `GET /profile`, `GET /city/stats` et la fiche admin joueur.
 - `ProfileGamer.populationCapacity`: limite serveur calculee depuis les habitats termines. Par defaut, un habitat donne `500 + 250 * (niveau - 1)`, avant bonus de recherche. Ces valeurs sont modifiables dans `/api/nexus-game/admin/game-config`.
+- `PlayerCityStats.populationGrowthPerHour`, `populationRemainder`, `lastPopulationSyncAt`: diagnostic de croissance population. Flutter les lit mais ne les calcule pas.
 - nourriture consommee: `population * 0.08 / heure`, exposee dans `PlayerCityStats.foodConsumption` et convertie en `consumptionPerTick` pour la ressource `food`.
 
 ## Prerequis batiments, unites, recherches
@@ -258,7 +260,7 @@ Autres blocages construction:
 
 | Method | Path | Attendu | Retour JSON |
 | --- | --- | --- | --- |
-| GET | `/resources?profileGamerId=12` | Query profil | Snapshot ressources joueur |
+| GET | `/resources?profileGamerId=12` | Query profil | Snapshot ressources joueur + `profile` + `city` synchronises |
 | GET | `/resources/catalog` | Aucun | `{ "resources": [ResourceCatalog] }` |
 | GET | `/resources/transactions?profileGamerId=12&limit=50` | Query profil, `limit` optionnel | `{ "transactions": [ResourceTransaction] }` |
 | GET | `/city/stats?profileGamerId=12` | Query profil | `{ "cityStats": PlayerCityStats }` |
@@ -268,10 +270,11 @@ Autres blocages construction:
 
 Notes sync économie temps réel:
 
-- Chaque appel `GET /resources` déclenche un recalcul serveur de la production/consommation à partir des bâtiments terminés (`EffectsJSON`).
+- Chaque appel `GET /resources` déclenche un recalcul serveur de la production/consommation à partir des bâtiments terminés (`EffectsJSON`) et applique la croissance population serveur.
 - Les montants sont ensuite accrétés côté serveur depuis `cityStats.lastProductionSyncAt`.
+- La population est accrue depuis `cityStats.lastPopulationSyncAt`; les fractions sont conservees dans `cityStats.populationRemainder` pour ne pas perdre les refreshs courts.
 - Les lignes `PlayerResource` renvoient `productionPerTick`, `consumptionPerTick`, `balancePerTick` pour l'affichage live côté client.
-- `GET /city/stats` renvoie aussi `lastProductionSyncAt`, `foodProduction`, `foodConsumption`, `foodBalance`.
+- `GET /city/stats` renvoie aussi `lastProductionSyncAt`, `lastPopulationSyncAt`, `populationGrowthPerHour`, `foodProduction`, `foodConsumption`, `foodBalance`.
 
 ## Admin contenu et ressources
 

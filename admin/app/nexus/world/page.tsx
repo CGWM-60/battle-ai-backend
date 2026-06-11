@@ -664,7 +664,7 @@ export default function NexusWorldControlPage() {
             {playerDetail ? (
               <>
                 <section className="control-metric-grid" style={{ marginBottom: 16 }}>
-                  <div className="metric-tile"><span>Population</span><strong>{formatNumber(Number(playerDetail.city?.population || 0))}<small> / {formatNumber(Number(playerDetail.city?.populationCapacity || 0))}</small></strong></div>
+                  <div className="metric-tile"><span>Population</span><strong>{formatNumber(Number(playerDetail.city?.population || 0))}<small> / {formatNumber(Number(playerDetail.city?.populationCapacity || 0))}</small></strong><small>+{Number(playerDetail.city?.populationGrowthPerHour || playerDetail.city?.cityStats?.populationGrowthPerHour || 0).toFixed(2)} / h</small></div>
                   <div className="metric-tile"><span>Energie</span><strong>{formatNumber(Number(playerDetail.city?.energyBalance || 0))}</strong><small>{formatNumber(Number(playerDetail.city?.energyProduction || 0))} prod / {formatNumber(Number(playerDetail.city?.energyConsumption || 0))} conso</small></div>
                   <div className="metric-tile"><span>Morale</span><strong>{formatNumber(Number(playerDetail.city?.morale || 0))}</strong></div>
                   <div className="metric-tile"><span>Securite</span><strong>{formatNumber(Number(playerDetail.city?.security || 0))}</strong></div>
@@ -686,6 +686,12 @@ export default function NexusWorldControlPage() {
                       <div><span>Stockage</span><strong>{formatNumber(Number(playerDetail.city?.cityStats?.storageCapacity || 0))}</strong></div>
                       <div><span>Nourriture</span><strong>{formatNumber(Number(playerDetail.city?.cityStats?.foodBalance || 0))}</strong></div>
                       <div><span>Derniere prod</span><strong>{playerDetail.city?.cityStats?.lastProductionSyncAt ? formatDate(playerDetail.city.cityStats.lastProductionSyncAt) : "-"}</strong></div>
+                      <div><span>Places libres</span><strong>{formatNumber(Number(playerDetail.city?.populationFree || playerDetail.city?.cityStats?.populationFree || 0))}</strong></div>
+                      <div><span>Croissance population</span><strong>{Number(playerDetail.city?.populationGrowthPerHour || playerDetail.city?.cityStats?.populationGrowthPerHour || 0).toFixed(2)} / h</strong></div>
+                      <div><span>Reliquat croissance</span><strong>{Number(playerDetail.city?.populationRemainder || playerDetail.city?.cityStats?.populationRemainder || 0).toFixed(3)}</strong></div>
+                      <div><span>Derniere pop</span><strong>{(playerDetail.city?.lastPopulationSyncAt || playerDetail.city?.cityStats?.lastPopulationSyncAt) ? formatDate(playerDetail.city?.lastPopulationSyncAt || playerDetail.city?.cityStats?.lastPopulationSyncAt) : "-"}</strong></div>
+                      <div><span>Food prod/conso</span><strong>{Number(playerDetail.city?.foodProduction || playerDetail.city?.cityStats?.foodProduction || 0).toFixed(3)} / {Number(playerDetail.city?.foodConsumption || playerDetail.city?.cityStats?.foodConsumption || 0).toFixed(3)}</strong></div>
+                      <div><span>Food balance</span><strong>{Number(playerDetail.city?.foodBalance || playerDetail.city?.cityStats?.foodBalance || 0).toFixed(3)}</strong></div>
                     </div>
                   </div>
 

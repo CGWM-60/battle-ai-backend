@@ -3,6 +3,7 @@ package services
 import (
 	"math"
 	"testing"
+	"time"
 
 	"cgwm/battle/internal/nexus_game/models"
 )
@@ -74,5 +75,40 @@ func TestStarterAllocationUpgradeOnlyAddsMissingDelta(t *testing.T) {
 
 	if second := starterAllocationUpgrade(target, target); len(second) != 0 {
 		t.Fatalf("second upgrade = %#v, want none", second)
+	}
+}
+
+func TestPopulationSyncUsesRemainderForShortRefreshes(t *testing.T) {
+	now := time.Date(2026, 6, 11, 12, 0, 0, 0, time.UTC)
+	stats := &models.PlayerCityStats{
+		LastPopulationSyncAt: now.Add(-5 * time.Minute),
+		PopulationRemainder:  0.95,
+	}
+	result := syncPopulationState(models.ProfileGamer{
+		Population:        10,
+		Morale:            70,
+		Security:          70,
+		EnergyProduction:  80,
+		EnergyConsumption: 40,
+		UpdatedAt:         now.Add(-5 * time.Minute),
+	}, stats, productionAccumulator{
+		ResourceProduction:  map[string]float64{"food": 1},
+		ResourceConsumption: map[string]float64{"food": 0},
+		PopulationCapacity:  500,
+		EnergyProduction:    80,
+		EnergyConsumption:   40,
+	}, now, true)
+
+	if result.Population <= 10 {
+		t.Fatalf("population = %d, want growth from accumulated remainder", result.Population)
+	}
+	if result.Capacity != 500 {
+		t.Fatalf("capacity = %d, want 500", result.Capacity)
+	}
+	if result.GrowthPerHour <= 0 {
+		t.Fatalf("growth per hour = %f, want positive", result.GrowthPerHour)
+	}
+	if result.Remainder < 0 || result.Remainder >= 1 {
+		t.Fatalf("remainder = %f, want normalized positive fraction", result.Remainder)
 	}
 }
