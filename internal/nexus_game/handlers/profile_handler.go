@@ -744,6 +744,7 @@ func (h *ProfileHandler) buildDailyPlanContextForID(profileID uint) map[string]i
 	var p models.ProfileGamer
 	h.db.First(&p, profileID)
 	resourceBalances, cityStatsPayload := h.profileResourcePayload(nil, p.ID)
+	_ = h.db.First(&p, profileID).Error
 	return buildDailyPlanContextWithResources(p, resourceBalances, cityStatsPayload)
 }
 
