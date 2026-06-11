@@ -13,6 +13,7 @@ import (
 	"cgwm/battle/internal/nexus_game/services"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // ContentHandler provides REST CRUD + asset upload for major content items (buildings first).
@@ -711,23 +712,39 @@ func (h *ContentHandler) ListPlayerBuildingsV1(c *gin.Context) {
 }
 
 func (h *ContentHandler) DestroyPlayerBuildingV1(c *gin.Context) {
-	pidStr := c.Query("profileGamerId")
-	if pidStr == "" {
-		pidStr = c.Param("id")
+	// Support profileGamerId from body (Flutter sends it there) or query (consistent with other v1 endpoints)
+	var req struct {
+		ProfileGamerId int    `json:"profileGamerId"`
+		ContentID      string `json:"contentId"`
 	}
-	pid, _ := strconv.ParseUint(pidStr, 10, 64)
-	var body struct {
-		ContentID string `json:"contentId"`
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// fallback to query params
+		req.ContentID = c.Query("contentId")
+		if p := c.Query("profileGamerId"); p != "" {
+			req.ProfileGamerId, _ = strconv.Atoi(p)
+		}
 	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		// allow query too
-		body.ContentID = c.Query("contentId")
+	// also allow pure query for profile
+	if req.ProfileGamerId <= 0 {
+		if p := c.Query("profileGamerId"); p != "" {
+			req.ProfileGamerId, _ = strconv.Atoi(p)
+		}
 	}
-	if body.ContentID == "" {
+	if req.ProfileGamerId <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "profileGamerId is required"})
+		return
+	}
+	if req.ContentID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "contentId required"})
 		return
 	}
-	if err := h.contentSvc.DestroyPlayerBuilding(uint(pid), body.ContentID); err != nil {
+
+	err := h.contentSvc.DestroyPlayerBuilding(uint(req.ProfileGamerId), req.ContentID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Bâtiment introuvable ou non possédé par ce profil"})
+			return
+		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
