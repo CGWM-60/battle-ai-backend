@@ -30275,6 +30275,55 @@
       "locale": "fr",
       "value": "Disponible à construire",
       "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.title",
+      "locale": "fr",
+      "value": "PRODUCTION",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.in_progress",
+      "locale": "fr",
+      "value": "Productions en cours",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.recolter",
+      "locale": "fr",
+      "value": "RÉCOLTER",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.full_at_100",
+      "locale": "fr",
+      "value": "100% pour récolter",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.rate_prefix",
+      "locale": "fr",
+      "value": "Rythme",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.server_base",
+      "locale": "fr",
+      "value": "Base serveur",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.no_producing",
+      "locale": "fr",
+      "value": "Aucune production active pour le moment. Construisez ou améliorez des bâtiments producteurs.",
+      "language": "fr"
     }
   ]
 }
