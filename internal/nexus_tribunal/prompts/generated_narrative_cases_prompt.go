@@ -1,6 +1,9 @@
 package prompts
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 // BuildSingleNarrativeCasePrompt generates a prompt for **exactly one** fully scenarized
 // narrative Tribunal case for a specific level (1-10).
@@ -10,6 +13,46 @@ func BuildSingleNarrativeCasePrompt(level int) (system string, user string) {
 	if level < 1 || level > 10 {
 		level = 5
 	}
+	seed := time.Now().UTC().UnixNano()
+	archetypes := []string{
+		"memoire effacee dans un contrat de guilde",
+		"sabotage d'un relais de preuves pendant une audience publique",
+		"chantage algorithmique autour d'une succession de faction",
+		"faux alibi fabrique par un assistant IA domestique",
+		"accident industriel camoufle en trahison militaire",
+		"vol de donnees medicales dans une clinique de frontiere",
+		"arbitrage commercial sur une route Nexus manipulee",
+		"temoignage synthetique accuse d'avoir menti sous serment",
+		"protocole de quarantaine declenche pour couvrir un detournement",
+		"conflit de citoyennete entre corps biologique et copie numerique",
+	}
+	locations := []string{
+		"district des archives humides",
+		"gare orbitale basse",
+		"marche noir des licences de calcul",
+		"tribunal mobile d'une zone de crise",
+		"serre verticale sous rationnement",
+		"tour de mediation des guildes",
+		"centre de tri des souvenirs legaux",
+		"bunker de conformité energetique",
+		"quartier diplomatique sous pluie acide",
+		"couloir de maintenance d'un bastion IA",
+	}
+	twist := []string{
+		"la preuve principale est authentique mais datee du mauvais cycle",
+		"le temoin cle protege quelqu'un sans connaitre le vrai coupable",
+		"l'accuse a menti pour cacher un acte moralement defensable",
+		"le plaignant a raison sur les faits mais tort sur l'intention",
+		"une signature numerique prouve surtout une usurpation d'identite",
+		"la scene visible est une reconstruction volontairement incomplete",
+		"le contrat legal contient une clause activee par un evenement monde",
+		"la contradiction finale vient d'un detail logistique banal",
+		"le procureur ignore que sa propre preuve deplace le mobile",
+		"la verite publique provoque un verdict juste mais une consequence injuste",
+	}
+	axis := archetypes[(level-1)%len(archetypes)]
+	location := locations[int(seed)%len(locations)]
+	finalTwist := twist[int(seed/97)%len(twist)]
 
 	system = "Tu es un générateur expert d'affaires Tribunal IA cyberpunk originales (style enquête interactive type Phoenix Wright mais 100% original, sans aucune référence à des licences existantes). Tu génères des cas COMPLETS et JOUABLES avec actes, scènes, contradictions, fausses pistes, crises, objections, révélations et verdicts. Réponds UNIQUEMENT par du JSON valide strict (l'objet de l'affaire directement), sans markdown, sans explication, sans texte hors JSON."
 
@@ -17,7 +60,13 @@ func BuildSingleNarrativeCasePrompt(level int) (system string, user string) {
 
 Règles:
 - Niveau exact: %d
-- Thème, cast et contradictions différents des affaires typiques de ce niveau.
+- Seed créatif unique: %d
+- Axe obligatoire de cette affaire: %s.
+- Lieu obligatoire: %s.
+- Twist obligatoire: %s.
+- Thème, titre, cast, preuves et contradictions doivent être différents des affaires typiques de ce niveau.
+- Interdiction de réutiliser des titres génériques comme "L'affaire du protocole", "Le procès de l'IA", "Affaire Nexus", "Tribunal Nexus", "Le jugement".
+- Le titre doit contenir un détail concret de l'affaire, pas seulement un concept abstrait.
 - Français cyberpunk.
 - Structure complète et jouable (Phoenix-like mais original).
 
@@ -141,7 +190,7 @@ VERROU INTERLOCUTEUR / DIALOGUE:
 - Les progressionRules doivent couvrir au minimum: press sur une declaration importante, present_evidence avec preuve cible, objection avec preuve cible, expose_lie pour la contradiction majeure, continue_story seulement apres contradiction critique.
 - Les scenes finales doivent fournir un "narrativeText" conclusif et l'affaire doit fournir "epilogue" et "verdictSummary" utilisables sans renvoyer directement aux archives.
 
-Génère l'objet JSON complet pour le niveau %d. JSON strict uniquement, rien d'autre.`, level, level, level, level)
+Génère l'objet JSON complet pour le niveau %d. JSON strict uniquement, rien d'autre.`, level, level, seed, axis, location, finalTwist, level, level)
 
 	return system, user
 }

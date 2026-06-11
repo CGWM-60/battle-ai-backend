@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
+	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/repositories"
 	"cgwm/battle/internal/nexus_game/services"
 
@@ -28,6 +30,18 @@ func NewResourceHandler(db *gorm.DB) *ResourceHandler {
 func (h *ResourceHandler) Resources(c *gin.Context) {
 	profileID, ok := h.profileID(c)
 	if !ok {
+		return
+	}
+	// Defensive: verify the ProfileGamer row exists for this profile_gamer_id.
+	// (Bootstrap and /profile resolve user_id -> real pg.ID before snapshot; /resources is called by client with the pg PK from prior responses.)
+	// If client ever passes a non-pg numeric (e.g. user_id leaked as pg id), return clean 404 instead of 500 from inner First in Sync/Ensure.
+	var p models.ProfileGamer
+	if err := h.db.WithContext(c.Request.Context()).First(&p, profileID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify profile"})
 		return
 	}
 	snapshot, err := h.resourceService.PlayerSnapshot(c.Request.Context(), profileID)
