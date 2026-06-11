@@ -620,6 +620,291 @@ func (s *WorldService) DeleteWorldPlayer(ctx context.Context, worldID uint, prof
 	return result, nil
 }
 
+func (s *WorldService) GetWorldPlayerDetail(ctx context.Context, worldID uint, profileID uint) (map[string]interface{}, error) {
+	if s.db == nil {
+		return nil, errors.New("database unavailable")
+	}
+	if worldID == 0 || profileID == 0 {
+		return nil, errors.New("world id and profile id are required")
+	}
+
+	db := s.db.WithContext(ctx)
+	var profile models.ProfileGamer
+	if err := db.First(&profile, profileID).Error; err != nil {
+		return nil, err
+	}
+	if profile.WorldID != worldID {
+		return nil, fmt.Errorf("profile %d is not assigned to world %d", profileID, worldID)
+	}
+
+	var world models.World
+	_ = db.First(&world, profile.WorldID).Error
+	var continent models.Continent
+	_ = db.First(&continent, profile.ContinentID).Error
+	var faction models.Faction
+	if profile.FactionID != 0 {
+		_ = db.First(&faction, profile.FactionID).Error
+	}
+	var selectedAvatar models.Avatar
+	if profile.AvatarID != 0 {
+		_ = db.First(&selectedAvatar, profile.AvatarID).Error
+	}
+	var selectedCompanion models.IACompanion
+	if profile.IACompanionID != 0 {
+		_ = db.First(&selectedCompanion, profile.IACompanionID).Error
+	}
+
+	var resources []models.PlayerResource
+	if err := db.Where("profile_gamer_id = ?", profile.ID).Order("resource_code ASC").Find(&resources).Error; err != nil {
+		return nil, err
+	}
+	var resourceCatalog []models.ResourceCatalog
+	if err := db.Where("is_active = ?", true).Order("sort_order ASC, code ASC").Find(&resourceCatalog).Error; err != nil {
+		return nil, err
+	}
+
+	var cityStats models.PlayerCityStats
+	cityStatsFound := db.Where("profile_gamer_id = ?", profile.ID).First(&cityStats).Error == nil
+
+	var buildings []models.PlayerBuilding
+	if err := db.Where("profile_gamer_id = ?", profile.ID).Order("content_id ASC, level DESC").Find(&buildings).Error; err != nil {
+		return nil, err
+	}
+	buildingIDs := make([]string, 0, len(buildings))
+	for _, building := range buildings {
+		buildingIDs = append(buildingIDs, building.ContentID)
+	}
+	buildingDefs := make(map[string]models.BuildingDefinition)
+	if len(buildingIDs) > 0 {
+		var defs []models.BuildingDefinition
+		if err := db.Where("content_id IN ?", uniqueStrings(buildingIDs)).Find(&defs).Error; err != nil {
+			return nil, err
+		}
+		for _, def := range defs {
+			buildingDefs[def.ContentID] = def
+		}
+	}
+	buildingPayload := make([]map[string]interface{}, 0, len(buildings))
+	constructionQueue := make([]map[string]interface{}, 0)
+	for _, building := range buildings {
+		item := map[string]interface{}{"playerBuilding": building}
+		if def, ok := buildingDefs[building.ContentID]; ok {
+			item["definition"] = def
+		}
+		buildingPayload = append(buildingPayload, item)
+		if building.IsConstructing {
+			constructionQueue = append(constructionQueue, item)
+		}
+	}
+
+	var units []models.PlayerUnit
+	if err := db.Where("profile_gamer_id = ?", profile.ID).Order("content_id ASC").Find(&units).Error; err != nil {
+		return nil, err
+	}
+	unitIDs := make([]string, 0, len(units))
+	for _, unit := range units {
+		unitIDs = append(unitIDs, unit.ContentID)
+	}
+	unitDefs := make(map[string]models.UnitDefinition)
+	if len(unitIDs) > 0 {
+		var defs []models.UnitDefinition
+		if err := db.Where("content_id IN ?", uniqueStrings(unitIDs)).Find(&defs).Error; err != nil {
+			return nil, err
+		}
+		for _, def := range defs {
+			unitDefs[def.ContentID] = def
+		}
+	}
+	unitPayload := make([]map[string]interface{}, 0, len(units))
+	for _, unit := range units {
+		item := map[string]interface{}{"playerUnit": unit}
+		if def, ok := unitDefs[unit.ContentID]; ok {
+			item["definition"] = def
+		}
+		unitPayload = append(unitPayload, item)
+	}
+
+	var research []models.PlayerResearch
+	if err := db.Where("profile_gamer_id = ?", profile.ID).Order("completed_at DESC").Find(&research).Error; err != nil {
+		return nil, err
+	}
+	researchIDs := make([]string, 0, len(research))
+	for _, item := range research {
+		researchIDs = append(researchIDs, item.ContentID)
+	}
+	researchDefs := make(map[string]models.ResearchDefinition)
+	if len(researchIDs) > 0 {
+		var defs []models.ResearchDefinition
+		if err := db.Where("content_id IN ?", uniqueStrings(researchIDs)).Find(&defs).Error; err != nil {
+			return nil, err
+		}
+		for _, def := range defs {
+			researchDefs[def.ContentID] = def
+		}
+	}
+	researchPayload := make([]map[string]interface{}, 0, len(research))
+	for _, playerResearch := range research {
+		item := map[string]interface{}{"playerResearch": playerResearch}
+		if def, ok := researchDefs[playerResearch.ContentID]; ok {
+			item["definition"] = def
+		}
+		researchPayload = append(researchPayload, item)
+	}
+
+	var avatars []models.Avatar
+	if err := db.Where("player_id = ?", profile.UserID).Order("created_at DESC").Find(&avatars).Error; err != nil {
+		return nil, err
+	}
+	var companions []models.IACompanion
+	if err := db.Where("player_id = ?", profile.UserID).Order("created_at DESC").Find(&companions).Error; err != nil {
+		return nil, err
+	}
+	var agents []models.MmoIAAgent
+	if err := db.Where("profile_gamer_id = ?", profile.ID).Order("role ASC, created_at DESC").Find(&agents).Error; err != nil {
+		return nil, err
+	}
+
+	var transactions []models.ResourceTransaction
+	if err := db.Where("profile_gamer_id = ?", profile.ID).Order("created_at DESC").Limit(50).Find(&transactions).Error; err != nil {
+		return nil, err
+	}
+	var claims []models.DailyGrantClaim
+	if err := db.Where("profile_gamer_id = ?", profile.ID).Order("created_at DESC").Limit(30).Find(&claims).Error; err != nil {
+		return nil, err
+	}
+	var dailyPlans []models.DailyPlan
+	if err := db.Where("profile_gamer_id = ?", profile.ID).Order("generated_at DESC, created_at DESC").Limit(10).Find(&dailyPlans).Error; err != nil {
+		return nil, err
+	}
+	var allocation models.InitialAllocationLog
+	allocationFound := db.Where("profile_gamer_id = ?", profile.ID).First(&allocation).Error == nil
+
+	var memory saimodels.ServerAIPlayerMemory
+	memoryFound := db.Where("world_id = ? AND user_id = ?", profile.WorldID, profile.UserID).First(&memory).Error == nil
+	var attacks []saimodels.ServerAIAttack
+	if err := db.Where("world_id = ? AND target_user_id = ?", profile.WorldID, profile.UserID).Order("created_at DESC").Limit(25).Find(&attacks).Error; err != nil {
+		return nil, err
+	}
+	var sabotages []saimodels.ServerAISabotage
+	if err := db.Where("world_id = ? AND target_user_id = ?", profile.WorldID, profile.UserID).Order("created_at DESC").Limit(25).Find(&sabotages).Error; err != nil {
+		return nil, err
+	}
+	var espionage []saimodels.ServerAIEspionage
+	if err := db.Where("world_id = ? AND target_user_id = ?", profile.WorldID, profile.UserID).Order("created_at DESC").Limit(25).Find(&espionage).Error; err != nil {
+		return nil, err
+	}
+	var aiOutputs []models.AIOutput
+	linkedTypes := []string{"profile", "player", "profile_gamer", "user"}
+	linkedIDs := []uint{profile.ID, profile.UserID}
+	if err := db.Where("(world_id = ? AND linked_id IN ?) OR (linked_id IN ? AND linked_type IN ?)", profile.WorldID, linkedIDs, linkedIDs, linkedTypes).
+		Order("created_at DESC").
+		Limit(25).
+		Find(&aiOutputs).Error; err != nil {
+		return nil, err
+	}
+	var aiCallLogs []saimodels.ServerAICallLog
+	if err := db.Where("linked_id IN ? AND linked_type IN ?", linkedIDs, linkedTypes).
+		Order("created_at DESC").
+		Limit(25).
+		Find(&aiCallLogs).Error; err != nil {
+		return nil, err
+	}
+	var adminActions []saimodels.ServerAIAdminAction
+	if err := db.Where("user_id = ? OR (target_id IN ? AND target_type IN ?)", profile.UserID, linkedIDs, linkedTypes).
+		Order("created_at DESC").
+		Limit(25).
+		Find(&adminActions).Error; err != nil {
+		return nil, err
+	}
+
+	city := map[string]interface{}{
+		"name":                profile.CityName,
+		"level":               profile.Level,
+		"power":               profile.Power,
+		"population":          profile.Population,
+		"populationCapacity":  profile.PopulationCapacity,
+		"morale":              profile.Morale,
+		"energyProduction":    profile.EnergyProduction,
+		"energyConsumption":   profile.EnergyConsumption,
+		"energyBalance":       profile.EnergyBalance,
+		"energyStored":        profile.EnergyStored,
+		"security":            profile.Security,
+		"buildingsCount":      len(buildings),
+		"unitsKindsCount":     len(units),
+		"researchCount":       len(research),
+		"constructionInQueue": len(constructionQueue),
+	}
+	if cityStatsFound {
+		city["cityStats"] = cityStats
+	}
+
+	identity := map[string]interface{}{
+		"world":             world,
+		"continent":         continent,
+		"faction":           faction,
+		"selectedAvatar":    selectedAvatar,
+		"selectedCompanion": selectedCompanion,
+	}
+
+	serverAI := map[string]interface{}{
+		"attacks":    attacks,
+		"sabotages":  sabotages,
+		"espionage":  espionage,
+		"aiOutputs":  aiOutputs,
+		"aiCallLogs": aiCallLogs,
+		"hasMemory":  memoryFound,
+		"memory":     nil,
+		"limits":     map[string]int{"transactions": 50, "dailyGrantClaims": 30, "dailyPlans": 10, "serverAIEvents": 25},
+		"queriedFor": map[string]uint{"worldId": profile.WorldID, "profileId": profile.ID, "userId": profile.UserID},
+	}
+	if memoryFound {
+		serverAI["memory"] = memory
+	}
+
+	payload := map[string]interface{}{
+		"profile":              profile,
+		"identity":             identity,
+		"city":                 city,
+		"resources":            resources,
+		"resourceCatalog":      resourceCatalog,
+		"buildings":            buildingPayload,
+		"units":                unitPayload,
+		"research":             researchPayload,
+		"queues":               map[string]interface{}{"construction": constructionQueue},
+		"avatars":              avatars,
+		"companions":           companions,
+		"agents":               agents,
+		"resourceTransactions": transactions,
+		"dailyGrantClaims":     claims,
+		"dailyPlans":           dailyPlans,
+		"adminActions":         adminActions,
+		"serverAI":             serverAI,
+		"generatedAt":          time.Now().UTC(),
+	}
+	if allocationFound {
+		payload["initialAllocation"] = allocation
+	}
+
+	return payload, nil
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
 func (s *WorldService) refreshContinentPlayerCounter(ctx context.Context, continentID uint) {
 	if s.redis == nil || s.db == nil || continentID == 0 {
 		return

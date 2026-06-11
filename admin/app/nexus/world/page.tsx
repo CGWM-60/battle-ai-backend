@@ -101,12 +101,32 @@ function statusClass(status: any) {
   return `status ${String(status || "unknown").toLowerCase().replace(/[^a-z0-9_-]/g, "_")}`;
 }
 
+function detailArray(value: any) {
+  return Array.isArray(value) ? value : [];
+}
+
+function contentLabel(item: any, ownerKey: string) {
+  return (
+    item?.definition?.contentId ||
+    item?.definition?.content_id ||
+    item?.[ownerKey]?.contentId ||
+    item?.[ownerKey]?.content_id ||
+    item?.contentId ||
+    item?.content_id ||
+    "-"
+  );
+}
+
 export default function NexusWorldControlPage() {
   const [state, setState] = useState<CockpitState>(emptyState);
   const [loading, setLoading] = useState(true);
   const [manualError, setManualError] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [deletingProfileId, setDeletingProfileId] = useState<number | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<any | null>(null);
+  const [playerDetail, setPlayerDetail] = useState<any | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
 
   const load = useCallback(async () => {
     setManualError("");
@@ -229,6 +249,31 @@ export default function NexusWorldControlPage() {
       setManualError(error?.message || "Suppression impossible.");
     } finally {
       setDeletingProfileId(null);
+    }
+  };
+
+  const openPlayerDetail = async (player: any) => {
+    const profileId = Number(player.profile_id || player.profileId || player.id);
+    const worldId = Number(player.worldId || player.world_id);
+    if (!profileId || !worldId) {
+      setManualError("Impossible d'ouvrir le joueur: profileId ou worldId manquant.");
+      return;
+    }
+    setSelectedPlayer(player);
+    setPlayerDetail(null);
+    setDetailError("");
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/nexus-game/worlds/${worldId}/players/${profileId}/detail`, {
+        credentials: "same-origin",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setPlayerDetail(data?.player || data);
+    } catch (error: any) {
+      setDetailError(error?.message || "Detail joueur indisponible.");
+    } finally {
+      setDetailLoading(false);
     }
   };
 
@@ -382,7 +427,12 @@ export default function NexusWorldControlPage() {
               {worldStats.players.slice(0, 25).map((player: any) => {
                 const profileId = Number(player.profile_id || player.profileId || player.id);
                 return (
-                  <tr key={`${player.worldId}-${profileId}`}>
+                  <tr
+                    key={`${player.worldId}-${profileId}`}
+                    onClick={() => openPlayerDetail(player)}
+                    style={{ cursor: "pointer" }}
+                    title="Ouvrir le detail complet du joueur"
+                  >
                     <td>{player.worldName || player.worldId || "-"}</td>
                     <td>{player.continentName || player.continentId || "-"}</td>
                     <td>
@@ -394,7 +444,7 @@ export default function NexusWorldControlPage() {
                     <td>{player.level || 1}</td>
                     <td>{formatNumber(Number(player.power || 0))}</td>
                     <td>{player.faction_name || player.factionName || "-"}</td>
-                    <td>
+                    <td onClick={(event) => event.stopPropagation()}>
                       <button
                         type="button"
                         disabled={deletingProfileId === profileId}
@@ -564,6 +614,226 @@ export default function NexusWorldControlPage() {
           ))}
         </div>
       </section>
+
+      {selectedPlayer ? (
+        <div
+          onClick={() => setSelectedPlayer(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 80,
+            background: "rgba(2, 6, 23, 0.78)",
+            backdropFilter: "blur(10px)",
+            padding: 20,
+            overflow: "auto",
+          }}
+        >
+          <div
+            className="panel"
+            onClick={(event) => event.stopPropagation()}
+            style={{
+              maxWidth: 1280,
+              margin: "0 auto",
+              border: "1px solid rgba(34, 211, 238, 0.45)",
+              boxShadow: "0 24px 80px rgba(8, 47, 73, 0.45)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "flex-start", marginBottom: 16 }}>
+              <div>
+                <p className="eyebrow">Nexus player telemetry</p>
+                <h2 style={{ marginBottom: 4 }}>{selectedPlayer.pseudo || playerDetail?.profile?.pseudo || "Joueur"}</h2>
+                <p className="hint">
+                  {selectedPlayer.worldName || playerDetail?.identity?.world?.name || "-"} /{" "}
+                  {selectedPlayer.continentName || playerDetail?.identity?.continent?.name || "-"} /{" "}
+                  {playerDetail?.city?.name || selectedPlayer.city_name || selectedPlayer.cityName || "ville inconnue"}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPlayer(null)}
+                style={{ border: 0, borderRadius: 6, padding: "8px 12px", background: "#0f172a", color: "white", fontWeight: 800 }}
+              >
+                Fermer
+              </button>
+            </div>
+
+            {detailLoading ? <div className="alert">Chargement du dossier joueur complet...</div> : null}
+            {detailError ? <div className="alert error">{detailError}</div> : null}
+
+            {playerDetail ? (
+              <>
+                <section className="control-metric-grid" style={{ marginBottom: 16 }}>
+                  <div className="metric-tile"><span>Population</span><strong>{formatNumber(Number(playerDetail.city?.population || 0))}<small> / {formatNumber(Number(playerDetail.city?.populationCapacity || 0))}</small></strong></div>
+                  <div className="metric-tile"><span>Energie</span><strong>{formatNumber(Number(playerDetail.city?.energyBalance || 0))}</strong><small>{formatNumber(Number(playerDetail.city?.energyProduction || 0))} prod / {formatNumber(Number(playerDetail.city?.energyConsumption || 0))} conso</small></div>
+                  <div className="metric-tile"><span>Morale</span><strong>{formatNumber(Number(playerDetail.city?.morale || 0))}</strong></div>
+                  <div className="metric-tile"><span>Securite</span><strong>{formatNumber(Number(playerDetail.city?.security || 0))}</strong></div>
+                  <div className="metric-tile"><span>Batiments</span><strong>{formatNumber(detailArray(playerDetail.buildings).length)}</strong><small>{formatNumber(detailArray(playerDetail.queues?.construction).length)} en chantier</small></div>
+                  <div className="metric-tile"><span>Unites</span><strong>{formatNumber(detailArray(playerDetail.units).reduce((sum: number, item: any) => sum + Number(item?.playerUnit?.count || item?.count || 0), 0))}</strong></div>
+                  <div className="metric-tile"><span>Recherches</span><strong>{formatNumber(detailArray(playerDetail.research).length)}</strong></div>
+                  <div className="metric-tile"><span>Agents IA</span><strong>{formatNumber(detailArray(playerDetail.agents).length)}</strong></div>
+                </section>
+
+                <section className="split">
+                  <div className="panel">
+                    <h2>Identite et ville</h2>
+                    <div className="signal-list">
+                      <div><span>Profile ID</span><strong>{playerDetail.profile?.id}</strong></div>
+                      <div><span>User ID</span><strong>{playerDetail.profile?.user_id || playerDetail.profile?.userId}</strong></div>
+                      <div><span>Faction</span><strong>{playerDetail.identity?.faction?.name || "-"}</strong></div>
+                      <div><span>Niveau</span><strong>{playerDetail.profile?.level || 1}</strong></div>
+                      <div><span>Puissance</span><strong>{formatNumber(Number(playerDetail.profile?.power || 0))}</strong></div>
+                      <div><span>Stockage</span><strong>{formatNumber(Number(playerDetail.city?.cityStats?.storageCapacity || 0))}</strong></div>
+                      <div><span>Nourriture</span><strong>{formatNumber(Number(playerDetail.city?.cityStats?.foodBalance || 0))}</strong></div>
+                      <div><span>Derniere prod</span><strong>{playerDetail.city?.cityStats?.lastProductionSyncAt ? formatDate(playerDetail.city.cityStats.lastProductionSyncAt) : "-"}</strong></div>
+                    </div>
+                  </div>
+
+                  <div className="panel">
+                    <h2>Ressources</h2>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Code</th><th>Stock</th><th>Capacite</th><th>Prod/tick</th><th>Conso/tick</th><th>Solde</th></tr></thead>
+                        <tbody>
+                          {detailArray(playerDetail.resources).map((resource: any) => (
+                            <tr key={resource.resourceCode || resource.resource_code}>
+                              <td>{resource.resourceCode || resource.resource_code}</td>
+                              <td>{formatNumber(Number(resource.amount || 0))}</td>
+                              <td>{formatNumber(Number(resource.capacity || 0))}</td>
+                              <td>{formatNumber(Number(resource.productionPerTick || resource.production_per_tick || 0))}</td>
+                              <td>{formatNumber(Number(resource.consumptionPerTick || resource.consumption_per_tick || 0))}</td>
+                              <td>{formatNumber(Number(resource.balancePerTick || resource.balance_per_tick || 0))}</td>
+                            </tr>
+                          ))}
+                          {detailArray(playerDetail.resources).length === 0 ? <tr><td colSpan={6}>Aucune ressource joueur.</td></tr> : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="split">
+                  <div className="panel">
+                    <h2>Batiments construits</h2>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Batiment</th><th>Niveau</th><th>Statut</th><th>Fin</th><th>Ouvriers</th></tr></thead>
+                        <tbody>
+                          {detailArray(playerDetail.buildings).map((item: any) => {
+                            const building = item.playerBuilding || item;
+                            return (
+                              <tr key={`building-${building.id || contentLabel(item, "playerBuilding")}`}>
+                                <td>{contentLabel(item, "playerBuilding")}</td>
+                                <td>{building.level || 1}</td>
+                                <td><span className={statusClass(building.isConstructing ? "building" : "running")}>{building.isConstructing ? "construction" : "actif"}</span></td>
+                                <td>{building.constructionEndsAt ? formatDate(building.constructionEndsAt) : "-"}</td>
+                                <td>{formatNumber(Number(building.assignedWorkers || 0))}</td>
+                              </tr>
+                            );
+                          })}
+                          {detailArray(playerDetail.buildings).length === 0 ? <tr><td colSpan={5}>Aucun batiment.</td></tr> : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="panel">
+                    <h2>Unites</h2>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Unite</th><th>Nombre</th><th>Type</th><th>Attaque</th><th>Defense</th></tr></thead>
+                        <tbody>
+                          {detailArray(playerDetail.units).map((item: any) => {
+                            const unit = item.playerUnit || item;
+                            return (
+                              <tr key={`unit-${unit.id || contentLabel(item, "playerUnit")}`}>
+                                <td>{contentLabel(item, "playerUnit")}</td>
+                                <td>{formatNumber(Number(unit.count || 0))}</td>
+                                <td>{item.definition?.type || "-"}</td>
+                                <td>{formatNumber(Number(item.definition?.attackBase || 0))}</td>
+                                <td>{formatNumber(Number(item.definition?.defenseBase || 0))}</td>
+                              </tr>
+                            );
+                          })}
+                          {detailArray(playerDetail.units).length === 0 ? <tr><td colSpan={5}>Aucune unite.</td></tr> : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="split">
+                  <div className="panel">
+                    <h2>Recherches</h2>
+                    <div className="table-wrap">
+                      <table>
+                        <thead><tr><th>Recherche</th><th>Branche</th><th>Tier</th><th>Terminee</th></tr></thead>
+                        <tbody>
+                          {detailArray(playerDetail.research).map((item: any) => {
+                            const research = item.playerResearch || item;
+                            return (
+                              <tr key={`research-${research.id || contentLabel(item, "playerResearch")}`}>
+                                <td>{contentLabel(item, "playerResearch")}</td>
+                                <td>{item.definition?.branch || "-"}</td>
+                                <td>{item.definition?.tier || "-"}</td>
+                                <td>{research.completedAt ? formatDate(research.completedAt) : "-"}</td>
+                              </tr>
+                            );
+                          })}
+                          {detailArray(playerDetail.research).length === 0 ? <tr><td colSpan={4}>Aucune recherche terminee.</td></tr> : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  <div className="panel">
+                    <h2>Agents, plans et IA serveur</h2>
+                    <div className="signal-list">
+                      <div><span>Avatars</span><strong>{detailArray(playerDetail.avatars).length}</strong></div>
+                      <div><span>Compagnons</span><strong>{detailArray(playerDetail.companions).length}</strong></div>
+                      <div><span>Plans journaliers</span><strong>{detailArray(playerDetail.dailyPlans).length}</strong></div>
+                      <div><span>Grants journaliers</span><strong>{detailArray(playerDetail.dailyGrantClaims).length}</strong></div>
+                      <div><span>Transactions</span><strong>{detailArray(playerDetail.resourceTransactions).length}</strong></div>
+                      <div><span>Memoire IA</span><strong>{playerDetail.serverAI?.hasMemory ? "oui" : "non"}</strong></div>
+                      <div><span>Attaques IA</span><strong>{detailArray(playerDetail.serverAI?.attacks).length}</strong></div>
+                      <div><span>Sabotages / Espionnage</span><strong>{detailArray(playerDetail.serverAI?.sabotages).length} / {detailArray(playerDetail.serverAI?.espionage).length}</strong></div>
+                      <div><span>Logs IA / actions admin</span><strong>{detailArray(playerDetail.serverAI?.aiCallLogs).length} / {detailArray(playerDetail.adminActions).length}</strong></div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <h2>Historique ressources</h2>
+                  <div className="table-wrap">
+                    <table>
+                      <thead><tr><th>Date</th><th>Ressource</th><th>Delta</th><th>Solde apres</th><th>Type</th><th>Source</th></tr></thead>
+                      <tbody>
+                        {detailArray(playerDetail.resourceTransactions).slice(0, 12).map((tx: any) => (
+                          <tr key={`tx-${tx.id}`}>
+                            <td>{tx.createdAt ? formatDate(tx.createdAt) : "-"}</td>
+                            <td>{tx.resourceCode || tx.resource_code}</td>
+                            <td>{formatNumber(Number(tx.amountDelta || tx.amount_delta || 0))}</td>
+                            <td>{formatNumber(Number(tx.balanceAfter || tx.balance_after || 0))}</td>
+                            <td>{tx.transactionType || tx.transaction_type || "-"}</td>
+                            <td>{tx.source || "-"}</td>
+                          </tr>
+                        ))}
+                        {detailArray(playerDetail.resourceTransactions).length === 0 ? <tr><td colSpan={6}>Aucune transaction recente.</td></tr> : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+
+                <details className="panel" open={false} style={{ marginTop: 16 }}>
+                  <summary style={{ cursor: "pointer", fontWeight: 900 }}>Snapshot JSON complet envoye par le backend</summary>
+                  <pre style={{ whiteSpace: "pre-wrap", overflow: "auto", maxHeight: 520, fontSize: 12, marginTop: 12 }}>
+                    {JSON.stringify(playerDetail, null, 2)}
+                  </pre>
+                </details>
+              </>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </AdminShell>
   );
 }

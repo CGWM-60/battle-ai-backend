@@ -21,6 +21,7 @@ func TestRegisterRoutesMountsHealthAndDebug(t *testing.T) {
 		"/api/nexus-game/world-players",
 		"/api/nexus-game/worlds/1",
 		"/api/nexus-game/worlds/1/players",
+		"/api/nexus-game/worlds/1/players/1/detail",
 	} {
 		recorder := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, path, nil)

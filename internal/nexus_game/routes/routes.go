@@ -301,6 +301,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/worlds/repair-player-assignments", worldH.RepairPlayerAssignments)
 	group.GET("/worlds/:id", worldH.GetWorld)
 	group.GET("/worlds/:id/players", worldH.ListPlayersByWorld)
+	group.GET("/worlds/:id/players/:profileId/detail", worldH.GetWorldPlayerDetail)
 	group.DELETE("/worlds/:id/players/:profileId", worldH.DeleteWorldPlayer)
 	group.GET("/continents", worldH.ListContinents)
 	group.POST("/worlds/:id/generate-event", worldH.GenerateWorldEvent)   // IA serveur trigger for gestion des world
