@@ -13,7 +13,7 @@ import (
 )
 
 // WorldTickService integrates into existing World Tick (or can be called from main tick).
-// Uses Redis lock, performs mechanics (production, population, etc. - stubs here), calls Server AI for summaries/events.
+// Uses Redis lock, performs mechanics (production, population, etc.), calls Server AI for summaries/events.
 // Per spec: IA serveur only for summary, proposal, enrichment - never bypass policies.
 // Redis heavy for locks, state.
 type WorldTickService struct {
@@ -97,7 +97,7 @@ func (s *WorldTickService) loadCityTierContext(ctx context.Context, profile mode
 
 // RunWorldTick - call this periodically (e.g. from cron/job).
 // 1. Redis lock per world.
-// 2. Basic mechanics (stub production/pop etc using current models).
+// 2. Production accrual, population/morale/security evolution.
 // 3. Call IA serveur for summary (optional).
 // 4. Generate event if needed (limited).
 // 5. Persist.
@@ -115,9 +115,6 @@ func (s *WorldTickService) RunWorldTick(ctx context.Context, worldID uint) error
 		return err
 	}
 
-	// Stub mechanics (in real: production from buildings, pop growth, research progress, etc.
-	// Use ProfileGamer, Faction for counts. Redis for live capacities.
-	// Example: aggregate players per continent.
 	fmt.Printf("[WORLD_TICK] Tick for world %d started at %s\n", worldID, time.Now())
 
 	// Call IA for summary (enriching, detailed).

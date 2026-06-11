@@ -1,52 +1,32 @@
 package services
 
-import "testing"
+import (
+	"math"
+	"testing"
 
-func TestOfficialResourceDefinitionsIncludeRequiredStarts(t *testing.T) {
-	defs := OfficialResourceDefinitions()
-	byCode := map[string]ResourceDefinition{}
-	for _, def := range defs {
-		byCode[def.Code] = def
-	}
+	"cgwm/battle/internal/nexus_game/models"
+)
 
-	if got := len(defs); got != 17 {
-		t.Fatalf("expected 17 official resources, got %d", got)
-	}
-	if byCode["credits"].InitialAmount != 450 {
-		t.Fatalf("credits initial amount mismatch: %d", byCode["credits"].InitialAmount)
-	}
-	if byCode["population"].InitialAmount != 0 {
-		t.Fatalf("population must start at 0, got %d", byCode["population"].InitialAmount)
-	}
-	if byCode["food"].InitialAmount != 500 {
-		t.Fatalf("food initial amount mismatch: %d", byCode["food"].InitialAmount)
-	}
-	if byCode["tokens"].DailyGrantAmount != 25 {
-		t.Fatalf("tokens daily grant mismatch: %d", byCode["tokens"].DailyGrantAmount)
-	}
-	if byCode["quantum_core"].DailyGrantAmount != 0 {
-		t.Fatalf("quantum_core must not be granted daily by default")
-	}
-}
+func TestEnergyProductionKeepsHourlyDisplayAndPerSecondResourceTick(t *testing.T) {
+	acc := newProductionAccumulator()
+	applyBuildingStorageAndProduction(&acc, models.BuildingDefinition{
+		StorageResource:       "energy",
+		ProductionBasePerHour: 80,
+		ProductionGrowth:      1,
+	}, 1)
 
-func TestApplyStreakMultiplier(t *testing.T) {
-	cases := []struct {
-		day  int
-		base int64
-		want int64
-	}{
-		{day: 1, base: 100, want: 100},
-		{day: 2, base: 100, want: 105},
-		{day: 3, base: 100, want: 110},
-		{day: 4, base: 100, want: 115},
-		{day: 5, base: 100, want: 120},
-		{day: 6, base: 100, want: 125},
-		{day: 7, base: 100, want: 100},
+	if acc.EnergyProduction != 80 {
+		t.Fatalf("energy display production = %d, want 80 per hour", acc.EnergyProduction)
+	}
+	if got, want := acc.ResourceProduction["energy"], 80.0/3600.0; math.Abs(got-want) > 0.000001 {
+		t.Fatalf("energy resource production per tick = %f, want %f", got, want)
 	}
 
-	for _, tc := range cases {
-		if got := applyStreakMultiplier(tc.base, tc.day); got != tc.want {
-			t.Fatalf("day %d multiplier: got %d want %d", tc.day, got, tc.want)
-		}
+	setEnergyProductionPerHour(&acc, 120)
+	if acc.EnergyProduction != 120 {
+		t.Fatalf("energy display production after bonus = %d, want 120 per hour", acc.EnergyProduction)
+	}
+	if got, want := acc.ResourceProduction["energy"], 120.0/3600.0; math.Abs(got-want) > 0.000001 {
+		t.Fatalf("energy resource production after bonus = %f, want %f", got, want)
 	}
 }

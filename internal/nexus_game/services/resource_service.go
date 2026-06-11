@@ -208,12 +208,13 @@ func applyStarterFallbackProduction(acc *productionAccumulator, building models.
 	case "building_modular_habitat":
 		acc.PopulationCapacity += 50 * building.Level
 	case "building_solar_plant":
-		acc.EnergyProduction += 80 * building.Level
-		acc.ResourceProduction["energy"] += 80 * levelFactor
+		perHour := 80 * levelFactor
+		acc.EnergyProduction += int(math.Round(perHour))
+		acc.ResourceProduction["energy"] += perHour / 3600.0
 	case "building_vertical_farm":
-		acc.ResourceProduction["food"] += 70 * levelFactor
+		acc.ResourceProduction["food"] += (70 * levelFactor) / 3600.0
 	case "building_nexus_market":
-		acc.ResourceProduction["credits"] += 25 * levelFactor
+		acc.ResourceProduction["credits"] += (25 * levelFactor) / 3600.0
 	}
 }
 
@@ -317,8 +318,7 @@ func applyResearchBuildingBonuses(acc *productionAccumulator, bonuses []building
 		case "populationcapacity":
 			acc.PopulationCapacity = int(math.Round(applyPercentBonus(float64(acc.PopulationCapacity), value)))
 		case "energyproduction":
-			acc.EnergyProduction = int(math.Round(applyPercentBonus(float64(acc.EnergyProduction), value)))
-			acc.ResourceProduction["energy"] = float64(acc.EnergyProduction)
+			setEnergyProductionPerHour(acc, applyPercentBonus(float64(acc.EnergyProduction), value))
 		case "dataproduction":
 			acc.ResourceProduction["data"] = applyPercentBonus(acc.ResourceProduction["data"], value)
 		case "tradebonus", "credits":
@@ -327,9 +327,13 @@ func applyResearchBuildingBonuses(acc *productionAccumulator, bonuses []building
 			for resourceCode, current := range acc.ResourceProduction {
 				acc.ResourceProduction[resourceCode] = applyPercentBonus(current, value)
 			}
+			syncEnergyProductionFromPerSecond(acc)
 		default:
 			if code := normalizeResourceCode(stat); code != "" {
 				acc.ResourceProduction[code] = applyPercentBonus(acc.ResourceProduction[code], value)
+				if code == "energy" {
+					syncEnergyProductionFromPerSecond(acc)
+				}
 			}
 		}
 	}
@@ -360,7 +364,7 @@ func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, 
 			}
 			acc.ResourceProduction[code] = applyScaledDelta(acc.ResourceProduction[code], value, effect.IsPercentage)
 			if code == "energy" {
-				acc.EnergyProduction = int(math.Round(acc.ResourceProduction["energy"]))
+				syncEnergyProductionFromPerSecond(acc)
 			}
 		case "statbonus":
 			metric := strings.ToLower(strings.TrimSpace(stat))
@@ -375,9 +379,7 @@ func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, 
 				base := float64(acc.PopulationCapacity)
 				acc.PopulationCapacity = int(math.Round(applyScaledDelta(base, value, effect.IsPercentage)))
 			case "energyproduction":
-				base := float64(acc.EnergyProduction)
-				acc.EnergyProduction = int(math.Round(applyScaledDelta(base, value, effect.IsPercentage)))
-				acc.ResourceProduction["energy"] = float64(acc.EnergyProduction)
+				setEnergyProductionPerHour(acc, applyScaledDelta(float64(acc.EnergyProduction), value, effect.IsPercentage))
 			case "dataproduction":
 				acc.ResourceProduction["data"] = applyScaledDelta(acc.ResourceProduction["data"], value, effect.IsPercentage)
 			case "tradebonus":
@@ -387,10 +389,23 @@ func applyBuildingEffects(acc *productionAccumulator, effects []buildingEffect, 
 					for resourceCode, current := range acc.ResourceProduction {
 						acc.ResourceProduction[resourceCode] = applyScaledDelta(current, value, true)
 					}
+					syncEnergyProductionFromPerSecond(acc)
 				}
 			}
 		}
 	}
+}
+
+func setEnergyProductionPerHour(acc *productionAccumulator, perHour float64) {
+	if perHour < 0 {
+		perHour = 0
+	}
+	acc.EnergyProduction = int(math.Round(perHour))
+	acc.ResourceProduction["energy"] = perHour / 3600.0
+}
+
+func syncEnergyProductionFromPerSecond(acc *productionAccumulator) {
+	acc.EnergyProduction = int(math.Round(acc.ResourceProduction["energy"] * 3600.0))
 }
 
 func applyBuildingStorageAndProduction(acc *productionAccumulator, def models.BuildingDefinition, level int) {
@@ -519,21 +534,19 @@ func (s *ResourceService) computeProductionState(ctx context.Context, tx *gorm.D
 	}
 
 	if acc.EnergyProduction <= 0 {
-		acc.EnergyProduction = int(math.Round(acc.ResourceProduction["energy"]))
-	} else {
-		acc.ResourceProduction["energy"] = float64(acc.EnergyProduction)
+		syncEnergyProductionFromPerSecond(&acc)
 	}
 
-	foodConsumption := math.Max(0, float64(profile.Population)*0.08)
-	energyConsumption := 5 + max(0, profile.Population/20)
-	energyConsumption += buildingEnergySurcharge
-	energyConsumption += max(0, industryLevelTotal*2+dataLevelTotal-solarLevelTotal)
+	foodConsumptionPerHour := math.Max(0, float64(profile.Population)*0.08)
+	energyConsumptionPerHour := 5 + max(0, profile.Population/20)
+	energyConsumptionPerHour += buildingEnergySurcharge
+	energyConsumptionPerHour += max(0, industryLevelTotal*2+dataLevelTotal-solarLevelTotal)
 	if habitatLevelTotal > 0 && farmLevelTotal*2 < habitatLevelTotal {
-		energyConsumption += max(1, habitatLevelTotal/3)
+		energyConsumptionPerHour += max(1, habitatLevelTotal/3)
 	}
-	acc.EnergyConsumption = energyConsumption
-	acc.ResourceConsumption["food"] = foodConsumption
-	acc.ResourceConsumption["energy"] = float64(energyConsumption)
+	acc.EnergyConsumption = energyConsumptionPerHour
+	acc.ResourceConsumption["food"] = foodConsumptionPerHour / 3600.0
+	acc.ResourceConsumption["energy"] = float64(energyConsumptionPerHour) / 3600.0
 
 	energyRatio := float64(acc.EnergyProduction) / math.Max(1, float64(acc.EnergyConsumption))
 	resourceMultiplier := 1.0

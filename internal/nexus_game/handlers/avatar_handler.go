@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"cgwm/battle/internal/nexus_game/models"
@@ -73,6 +74,12 @@ func (h *AvatarHandler) Upload(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
 		return
 	}
+	playerID := uint(1)
+	if rawPlayerID := c.PostForm("player_id"); rawPlayerID != "" {
+		if parsed, err := strconv.ParseUint(rawPlayerID, 10, 64); err == nil && parsed > 0 {
+			playerID = uint(parsed)
+		}
+	}
 
 	file, _, err := c.Request.FormFile("image")
 	if err != nil {
@@ -118,7 +125,7 @@ func (h *AvatarHandler) Upload(c *gin.Context) {
 	fullURL := fmt.Sprintf("%s://%s%s/%s", scheme, c.Request.Host, baseURL, filename)
 
 	avatar := models.Avatar{
-		PlayerID:  1, // TODO: get from auth context later
+		PlayerID:  playerID,
 		Name:      name,
 		Filename:  filename,
 		URL:       fullURL,

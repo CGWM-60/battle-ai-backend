@@ -142,8 +142,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/health", health.Health)
 	group.GET("/debug/status", health.DebugStatus)
 
-	// Etape 1 - Bootstrap endpoint (chargement assets, quêtes, infos joueur, etc.)
-	// Pour l'instant : simulation avec délai de 10s + TODO pour l'implémentation réelle.
+	// Bootstrap endpoint: profile, resources, city stats, assets, world context.
 	group.GET("/bootstrap", bootstrap.Load)
 
 	// Etape 2 - Avatar management

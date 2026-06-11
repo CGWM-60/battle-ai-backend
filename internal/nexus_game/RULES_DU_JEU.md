@@ -241,92 +241,28 @@ Si la sync est déclenchée avec accrual :
 
 ## 8) Population
 
-### Source de la population
+La population courante est stockee dans `ProfileGamer.population`.
 
-La population est gérée dans `ProfileGamer`.
+La limite est stockee dans `ProfileGamer.populationCapacity` et recalculee par `SyncBuildingProduction`.
 
-### Croissance
+Regles appliquees:
 
-La population évolue lors du tick monde selon :
-- la capacité de logement
-- la nourriture
-- la morale
-- la sécurité
-- l’énergie
-- l’état général du monde
+- `building_modular_habitat` ajoute `50 + 25 * (niveau - 1)` via son effet `populationCapacity`.
+- Les recherches de type `buildingBonus/statBonus` peuvent modifier cette capacite.
+- Si la capacite calculee est inferieure a la population actuelle, le backend garde au minimum la population actuelle pour eviter un clamp destructeur brutal.
+- La nourriture consommee est `population * 0.08 par heure`, stockee cote ressource en `consumptionPerTick` apres division par `3600`.
+- Flutter doit afficher la limite avec `profile.populationCapacity`, pas la recalculer localement.
 
-### Forme générale
+Lecture par niveau:
 
-La croissance dépend d’un score de base multiplié par des facteurs de contexte.
+| Niveau habitat | Capacite approx. d'un habitat | Lecture gameplay |
+| --- | ---: | --- |
+| 1 | 50 | premiers colons stables |
+| 10 | 275 | quartier residentiel solide |
+| 20 | 525 | bloc urbain majeur |
+| 30 | 775 | habitat Nexus complet |
 
-### Règles concrètes
-
-- Si la capacité de population est à 0, la population ne peut pas croître correctement.
-- Si la capacité est pleine, la croissance est plafonnée.
-- Si morale, sécurité ou énergie sont faibles, la croissance baisse ou devient négative.
-- Si l’énergie est trop basse, la population peut décliner.
-
-### Source de la capacité
-
-La capacité de population vient principalement du `building_modular_habitat` et de ses bonus de recherche.
-
-### Paliers population (mode MMO difficile)
-
-Le système population doit utiliser des paliers de pression urbaine basés sur :
-
-- `L_hab` = niveau total des `building_modular_habitat`
-- `L_farm` = niveau total des `building_vertical_farm`
-- `L_sec` = niveau total des bâtiments défensifs/sécurité
-- `R_pop` = ratio de charge population = `population / populationCapacity`
-
-#### Palier 1 — Colonie fragile (L_hab 1-5)
-
-- croissance de base faible
-- vulnérable au moindre déficit énergétique
-- si `R_pop > 0.85` : malus direct de croissance
-
-Règle recommandée :
-- bonus croissance : `+0%`
-- malus surpopulation : `-35%`
-
-#### Palier 2 — Ville naissante (L_hab 6-12)
-
-- croissance stabilisée si nourriture et énergie sont positives
-- pénalité réduite en cas de tension légère
-
-Règle recommandée :
-- bonus croissance : `+12%`
-- malus surpopulation (`R_pop > 0.9`) : `-25%`
-
-#### Palier 3 — Métropole sous tension (L_hab 13-20)
-
-- forte capacité, mais exige sécurité + alimentation solides
-- si sécurité basse, risque de stagnation massive
-
-Règle recommandée :
-- bonus croissance : `+25%`
-- si sécurité < 45 : `-30%` croissance
-
-#### Palier 4 — Mégapole Nexus (L_hab 21+)
-
-- très gros potentiel démographique
-- système plus exigeant : la moindre crise énergétique ou alimentaire coûte cher
-
-Règle recommandée :
-- bonus croissance : `+40%`
-- si énergie négative pendant 2 ticks consécutifs : `-2%` population immédiate
-- si nourriture négative pendant 2 ticks consécutifs : `-3%` population immédiate
-
-### Synergies population-bâtiments
-
-- `building_vertical_farm` : réduit les malus de croissance liés à la nourriture
-- `building_solar_plant` : réduit les malus de panique urbaine
-- bâtiments sécurité/défense : absorbent les pénalités sur morale/sécurité aux paliers élevés
-
-Règle hardcore recommandée :
-
-- si `L_farm < (L_hab / 2)` alors `-15%` croissance population
-- si `L_sec < (L_hab / 3)` alors `-10%` croissance + `-5` sécurité par tick
+La capacite totale est la somme des habitats termines, apres bonus de recherche.
 
 ---
 
@@ -344,85 +280,35 @@ Règle hardcore recommandée :
 
 ### Énergie
 
-- produite par les bâtiments dédiés
-- consommée par l’activité de la ville
-- si le bilan est négatif, la réserve peut être drainée
-- si la réserve ne suffit plus, la balance d’énergie devient problématique pour le reste de la ville
+- `ProfileGamer.energyProduction` et `energyConsumption` sont des valeurs par heure, lisibles par l'UI.
+- `PlayerResource.productionPerTick`, `consumptionPerTick` et `balancePerTick` restent des valeurs par seconde pour l'animation et l'accrual serveur.
+- `building_solar_plant` produit `80/h` au niveau 1, puis suit `productionGrowth`.
+- La consommation de base est `5/h + population/20`.
+- Chaque batiment termine ajoute une surcharge `floor(level^1.25)`; au-dessus du niveau 20, cette surcharge est multipliee par `1.2`.
+- Les batiments industrie/data ajoutent une pression supplementaire, reduite par le total des niveaux solaires.
+- Si les habitats depassent trop les fermes (`L_farm * 2 < L_hab`), une surcharge d'energie est ajoutee.
 
-### Paliers énergie (mode MMO difficile)
+Le ratio serveur est:
 
-Le système énergie doit être piloté par :
+```text
+E_ratio = energyProduction / max(1, energyConsumption)
+```
 
-- `L_solar` = niveau total des `building_solar_plant`
-- `L_industry` = niveau total des bâtiments de production lourde
-- `L_data` = niveau total des bâtiments IA / data
-- `E_ratio` = `energyProduction / max(1, energyConsumption)`
+Effets appliques aux productions non-energie:
 
-#### Palier E0 — Survie énergétique (`E_ratio < 0.75`)
+| Ratio energie | Multiplicateur ressources |
+| --- | ---: |
+| `< 0.75` | `0.75` |
+| `0.75 - 0.99` | `0.95` |
+| `1.00 - 1.19` | `1.00` |
+| `1.20 - 1.49` | `1.10` |
+| `>= 1.50` | `1.20` |
 
-- état critique
-- consommation prioritaire des services vitaux
-- fortes pénalités globales
+Flutter doit donc lire:
 
-Pénalités recommandées :
-- `-30%` croissance population
-- `-20` morale
-- `-15` sécurité
-- `-25%` production non-énergie
-
-#### Palier E1 — Tension (`0.75 <= E_ratio < 1.00`)
-
-- déficit gérable à court terme
-- la réserve compense mais s’érode vite
-
-Pénalités recommandées :
-- `-12%` croissance population
-- `-8` morale
-- `-5%` production globale
-
-#### Palier E2 — Équilibre instable (`1.00 <= E_ratio < 1.20`)
-
-- état nominal de progression lente
-- aucun bonus majeur
-
-Effets recommandés :
-- croissance normale
-- pas de bonus/malus énergétique majeur
-
-#### Palier E3 — Excédent contrôlé (`1.20 <= E_ratio < 1.50`)
-
-- ville optimisée
-- bonus modérés sur économie et stabilité
-
-Bonus recommandés :
-- `+10%` production ressources
-- `+5` morale
-- `+5%` vitesse de recherche
-
-#### Palier E4 — Suprématie énergétique (`E_ratio >= 1.50`)
-
-- apex techno
-- très puissant mais coûteux à maintenir
-
-Bonus/Mécaniques recommandés :
-- `+20%` production ressources
-- `+12%` vitesse de recherche
-- surcharge : si ce palier dure > 6 ticks sans upgrade réseau, risque d’événement panne (`5%`/tick)
-
-### Coût exponentiel de montée énergétique
-
-Pour garder un MMO difficile, le coût d’entretien doit croître avec les niveaux :
-
-- consommation de base par ville : croissante avec population
-- surcharge par bâtiment haut niveau :
-  - bâtiment lvl 1-10 : surcharge faible
-  - lvl 11-20 : surcharge moyenne
-  - lvl 21+ : surcharge forte
-
-Règle recommandée :
-
-- coût énergie additionnel par bâtiment = `floor(level^1.25)`
-- au-delà du lvl 20, multiplicateur crise = `x1.2`
+- limite population: `profile.populationCapacity`
+- energie produite/consommee: `profile.energyProduction`, `profile.energyConsumption`, `profile.energyBalance`
+- animation des stocks: `resources[].balancePerTick`
 
 ---
 

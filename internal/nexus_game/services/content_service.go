@@ -520,7 +520,7 @@ func isBuildingMilestoneLevel(level int) bool {
 }
 
 // === Player construction (depends on buildings) ===
-// Simplified MVP: start construction, check completion on tick or on demand.
+// Starts construction, enforces sequence/slots/prerequisites, and completes on tick or demand.
 
 func (s *ContentService) StartConstruction(profileID uint, contentID string, targetLevel int) (*models.PlayerBuilding, error) {
 	def, err := s.GetBuilding(contentID)
@@ -638,16 +638,28 @@ func (s *ContentService) GetBuildingResearchTree(contentID string) (map[string]i
 	if err != nil {
 		return nil, err
 	}
-	// Parse required research and return a simple tree stub (extend with full ResearchDefinition later)
-	var required []map[string]interface{}
-	if def.RequiredResearchJSON != "" {
-		// simple parse, in real use json unmarshal to list
-		required = []map[string]interface{}{{"contentId": def.RequiredResearchJSON, "level": 1}}
+	required := make([]map[string]interface{}, 0)
+	for _, req := range parseResearchRequirements(def.RequiredResearchJSON) {
+		required = append(required, map[string]interface{}{
+			"contentId":     req.ContentID,
+			"requiredLevel": req.RequiredLevel,
+			"type":          req.Type,
+		})
+	}
+
+	unlocks := make([]string, 0)
+	if s.db != nil {
+		var buildings []models.BuildingDefinition
+		if err := s.db.Where("required_buildings_json LIKE ?", "%"+contentID+"%").Find(&buildings).Error; err == nil {
+			for _, building := range buildings {
+				unlocks = append(unlocks, building.ContentID)
+			}
+		}
 	}
 	return map[string]interface{}{
 		"buildingContentId": contentID,
 		"linkedResearch":    required,
-		"unlocks":           []string{}, // future
+		"unlocks":           unlocks,
 	}, nil
 }
 

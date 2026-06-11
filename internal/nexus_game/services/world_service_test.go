@@ -10,7 +10,7 @@ import (
 // Real DB tests should use the project's test setup if any.
 // This is a minimal compile-safe test for the service.
 func TestWorldServiceBasic(t *testing.T) {
-	redis := cache.NewRedisServiceFromEnv() // may be disabled, ok for stub
+	redis := cache.NewRedisServiceFromEnv() // may be disabled in tests
 	ws := NewWorldService(nil, redis)       // nil db for basic test (methods that need db will be skipped in real tests)
 
 	if ws == nil {

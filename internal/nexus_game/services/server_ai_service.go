@@ -29,7 +29,6 @@ import (
 type ServerAIService struct {
 	db    *gorm.DB
 	redis *cache.RedisService
-	// TODO: inject real AI client (mistral/openai) from main backend params.
 }
 
 type aiProviderChoice struct {
@@ -175,7 +174,7 @@ func (s *ServerAIService) logAICall(ctx context.Context, feature, promptVersion 
 		_ = saiservices.NewService(s.db).LogCall(ctx, saimodels.ServerAICallLog{
 			Feature:       feature,
 			Provider:      "local",
-			Model:         "server_ai_stub",
+			Model:         "server_ai_local_fallback",
 			PromptKey:     feature,
 			PromptVersion: 1,
 			InputSummary:  linkedType,

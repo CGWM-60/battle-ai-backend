@@ -39,7 +39,11 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 	if err != nil {
 		return nil, err
 	}
+	var committed *models.TranslationImport
 	if len(rows) == 0 {
+		if err := SeedForcedContentDescriptions(ctx, database); err != nil {
+			return nil, err
+		}
 		return nil, nil
 	}
 
@@ -54,7 +58,14 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 		}
 	}
 
-	return service.CommitImportRows(ctx, preview, payload.FileName)
+	committed, err = service.CommitImportRows(ctx, preview, payload.FileName)
+	if err != nil {
+		return nil, err
+	}
+	if err := SeedForcedContentDescriptions(ctx, database); err != nil {
+		return nil, err
+	}
+	return committed, nil
 }
 
 func initialSeedRows(importRows []models.TranslationImportRow, fallbackLocale string) []models.TranslationImportRow {

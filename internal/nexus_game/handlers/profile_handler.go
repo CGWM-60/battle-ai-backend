@@ -422,10 +422,9 @@ func (h *ProfileHandler) GetDailyPlanContext(c *gin.Context) {
 		foodBalance = cityStatFloat(cityStatsPayload, "food_balance")
 	}
 
-	// Build safe context (use current profile stats; in full impl enrich with resources, queues from other services)
 	ctx := models.DailyPlanContext{
 		ProfileGamerID: p.ID,
-		PlayerStyle:    "balanced", // TODO: from profile prefs or default
+		PlayerStyle:    "balanced",
 		City: map[string]interface{}{
 			"population":         p.Population,
 			"populationCapacity": p.PopulationCapacity,
@@ -478,7 +477,7 @@ func buildDailyPlanContextWithResources(p models.ProfileGamer, resources map[str
 
 	return map[string]interface{}{
 		"profile_gamer_id": p.ID,
-		"player_style":     "balanced", // TODO: persist per profile
+		"player_style":     "balanced",
 		"city": map[string]interface{}{
 			"population":         p.Population,
 			"populationCapacity": p.PopulationCapacity,

@@ -127,6 +127,14 @@ Regles UI Flutter:
 - Vert `< 60%`, orange `60-90%`, rouge `> 90%`.
 - A `90%`, afficher une alerte et declencher la notification push si autorisee.
 
+Unites de temps envoyees:
+
+- `BuildingDefinition.productionBasePerHour` et `productionGrowth`: valeurs de catalogue par heure.
+- `ProfileGamer.energyProduction`, `energyConsumption`, `energyBalance`: valeurs par heure, pour l'affichage des limites energie.
+- `PlayerResource.productionPerTick`, `consumptionPerTick`, `balancePerTick`: valeurs par seconde, pour l'animation Flutter et l'accrual serveur.
+- `ProfileGamer.populationCapacity`: limite serveur calculee depuis les habitats termines. Un habitat donne `50 + 25 * (niveau - 1)`, avant bonus de recherche.
+- nourriture consommee: `population * 0.08 / heure`, exposee dans `PlayerCityStats.foodConsumption` et convertie en `consumptionPerTick` pour la ressource `food`.
+
 ## Prerequis batiments, unites, recherches
 
 Les trois piliers utilisent le meme schema:

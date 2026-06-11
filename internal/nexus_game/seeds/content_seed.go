@@ -3,6 +3,7 @@ package seeds
 import (
 	"errors"
 	"sort"
+	"strings"
 
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/services"
@@ -604,15 +605,10 @@ func applyDefaultBuildingMMODesign(buildings []models.BuildingDefinition) {
 		b.RisksJSON = defaultBuildingRisks(b.ContentID)
 		b.AIActionsJSON = defaultBuildingAIActions(b.ContentID)
 		if b.FlavorTextKey == "" {
-			b.FlavorTextKey = b.NameKey + ".flavor"
+			b.FlavorTextKey = defaultFlavorTextKey(b.DescriptionKey)
 		}
 		if len(b.LevelDescriptionKeys) == 0 {
-			b.LevelDescriptionKeys = map[string]string{
-				"1":  b.NameKey + ".level_1",
-				"10": b.NameKey + ".level_10",
-				"20": b.NameKey + ".level_20",
-				"30": b.NameKey + ".level_30",
-			}
+			b.LevelDescriptionKeys = defaultLevelDescriptionKeys(b.DescriptionKey)
 		}
 	}
 }
@@ -1120,6 +1116,12 @@ func applyDefaultBuildingRequirements(buildings []models.BuildingDefinition) {
 func applyDefaultUnitRequirements(units []models.UnitDefinition) {
 	for i := range units {
 		units[i].RequiredBuildingsJSON = buildingReq("building_barracks", 1)
+		if units[i].FlavorTextKey == "" {
+			units[i].FlavorTextKey = defaultFlavorTextKey(units[i].DescriptionKey)
+		}
+		if len(units[i].LevelDescriptionKeys) == 0 {
+			units[i].LevelDescriptionKeys = defaultLevelDescriptionKeys(units[i].DescriptionKey)
+		}
 		switch units[i].ContentID {
 		case "unit_milicien_nexus":
 			units[i].NexusLevelRequired = maxInt(units[i].NexusLevelRequired, 1)
@@ -1171,6 +1173,12 @@ func applyDefaultUnitRequirements(units []models.UnitDefinition) {
 func applyDefaultResearchRequirements(research []models.ResearchDefinition) {
 	for i := range research {
 		research[i].RequiredBuildingsJSON = buildingReq("building_research_lab", 1)
+		if research[i].FlavorTextKey == "" {
+			research[i].FlavorTextKey = defaultFlavorTextKey(research[i].DescriptionKey)
+		}
+		if len(research[i].LevelDescriptionKeys) == 0 {
+			research[i].LevelDescriptionKeys = defaultLevelDescriptionKeys(research[i].DescriptionKey)
+		}
 		switch research[i].Branch {
 		case "economy":
 			research[i].RequiredBuildingsJSON = buildingReq("building_nexus_market", 1)
@@ -1292,11 +1300,11 @@ func fillEmptyBuildingRequirements(db *gorm.DB, existing *models.BuildingDefinit
 		existing.AIActionsJSON = seeded.AIActionsJSON
 		changed = true
 	}
-	if existing.FlavorTextKey == "" && seeded.FlavorTextKey != "" {
+	if seeded.FlavorTextKey != "" && existing.FlavorTextKey != seeded.FlavorTextKey {
 		existing.FlavorTextKey = seeded.FlavorTextKey
 		changed = true
 	}
-	if len(existing.LevelDescriptionKeys) == 0 && len(seeded.LevelDescriptionKeys) > 0 {
+	if len(seeded.LevelDescriptionKeys) > 0 && !sameStringMap(existing.LevelDescriptionKeys, seeded.LevelDescriptionKeys) {
 		existing.LevelDescriptionKeys = seeded.LevelDescriptionKeys
 		changed = true
 	}
@@ -1319,6 +1327,14 @@ func fillEmptyUnitRequirements(db *gorm.DB, existing *models.UnitDefinition, see
 		existing.RequiredResearchJSON = seeded.RequiredResearchJSON
 		changed = true
 	}
+	if seeded.FlavorTextKey != "" && existing.FlavorTextKey != seeded.FlavorTextKey {
+		existing.FlavorTextKey = seeded.FlavorTextKey
+		changed = true
+	}
+	if len(seeded.LevelDescriptionKeys) > 0 && !sameStringMap(existing.LevelDescriptionKeys, seeded.LevelDescriptionKeys) {
+		existing.LevelDescriptionKeys = seeded.LevelDescriptionKeys
+		changed = true
+	}
 	if changed {
 		_ = db.Save(existing).Error
 	}
@@ -1334,9 +1350,55 @@ func fillEmptyResearchRequirements(db *gorm.DB, existing *models.ResearchDefinit
 		existing.RequiredBuildingsJSON = seeded.RequiredBuildingsJSON
 		changed = true
 	}
+	if seeded.FlavorTextKey != "" && existing.FlavorTextKey != seeded.FlavorTextKey {
+		existing.FlavorTextKey = seeded.FlavorTextKey
+		changed = true
+	}
+	if len(seeded.LevelDescriptionKeys) > 0 && !sameStringMap(existing.LevelDescriptionKeys, seeded.LevelDescriptionKeys) {
+		existing.LevelDescriptionKeys = seeded.LevelDescriptionKeys
+		changed = true
+	}
 	if changed {
 		_ = db.Save(existing).Error
 	}
+}
+
+func defaultFlavorTextKey(descriptionKey string) string {
+	base := contentDescriptionBaseKey(descriptionKey)
+	if base == "" {
+		return ""
+	}
+	return base + ".flavor"
+}
+
+func defaultLevelDescriptionKeys(descriptionKey string) map[string]string {
+	base := contentDescriptionBaseKey(descriptionKey)
+	if base == "" {
+		return nil
+	}
+	return map[string]string{
+		"1":  base + ".level_1.description",
+		"10": base + ".level_10.description",
+		"20": base + ".level_20.description",
+		"30": base + ".level_30.description",
+	}
+}
+
+func contentDescriptionBaseKey(descriptionKey string) string {
+	key := strings.TrimSpace(descriptionKey)
+	return strings.TrimSuffix(key, ".description")
+}
+
+func sameStringMap(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for key, leftValue := range left {
+		if right[key] != leftValue {
+			return false
+		}
+	}
+	return true
 }
 
 func buildingReq(contentID string, level int) string {
