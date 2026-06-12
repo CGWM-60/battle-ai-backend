@@ -101,6 +101,8 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 	}
 
 	resourceBalances, cityStatsPayload := h.profileResourcePayload(c, p.ID)
+	_ = h.db.First(&p, p.ID).Error
+	cityPayload := profileCityPayload(p, cityStatsPayload)
 
 	// Enrich for MmoEntryScreen (same as SaveProfile)
 	avatarURL := ""
@@ -133,6 +135,7 @@ func (h *ProfileHandler) GetProfile(c *gin.Context) {
 		"faction_name":       factionName,
 		"starter_allocation": services.Level1StarterAllocation(),
 		"resources":          resourceBalances,
+		"city":               cityPayload,
 		"city_stats":         cityStatsPayload,
 		// Daily plan context sent on first load for player's AI (provider/local/governor > server fallback).
 		"daily_plan_context": func() interface{} {
@@ -265,6 +268,8 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 
 	// Enrich for MmoEntryScreen: avatar URL + world name (so we can show real chosen avatar, pseudo, lvl, power, world name)
 	resourceBalances, cityStatsPayload := h.profileResourcePayload(c, p.ID)
+	_ = h.db.First(&p, p.ID).Error
+	cityPayload := profileCityPayload(p, cityStatsPayload)
 
 	avatarURL := ""
 	if p.AvatarID > 0 {
@@ -296,6 +301,7 @@ func (h *ProfileHandler) SaveProfile(c *gin.Context) {
 		"faction_name":       factionName,
 		"starter_allocation": services.Level1StarterAllocation(),
 		"resources":          resourceBalances,
+		"city":               cityPayload,
 		"city_stats":         cityStatsPayload,
 		// Daily plan context sent on first load for player's AI (provider/local/governor > server fallback).
 		"daily_plan_context": func() interface{} {
@@ -562,6 +568,8 @@ func (h *ProfileHandler) GetDailyPlan(c *gin.Context) {
 		"plan":            plan,
 		"recommendations": recs,
 		"today":           today,
+		"applied_today":   dailyPlanAppliedToday(plan, today),
+		"applied_indices": plan.AppliedIndices,
 	})
 }
 
@@ -607,6 +615,9 @@ func (h *ProfileHandler) SaveDailyPlanRecommendations(c *gin.Context) {
 		plan.Recommendations = string(recsJSON)
 		plan.GeneratedBy = body.GeneratedBy
 		plan.Summary = body.Summary
+		plan.AcceptedActionID = ""
+		plan.AppliedAt = nil
+		plan.AppliedIndices = nil
 		plan.UpdatedAt = time.Now().UTC()
 		h.db.Save(&plan)
 	}
@@ -650,6 +661,26 @@ func (h *ProfileHandler) ApplyDailyPlan(c *gin.Context) {
 	var recs []models.DailyPlanRecommendation
 	if err := json.Unmarshal([]byte(plan.Recommendations), &recs); err != nil {
 		recs = []models.DailyPlanRecommendation{}
+	}
+
+	if dailyPlanAppliedToday(plan, today) {
+		c.JSON(http.StatusOK, gin.H{
+			"ok":              true,
+			"already_applied": true,
+			"applied_indices": plan.AppliedIndices,
+			"profile_snapshot": gin.H{
+				"level":              p.Level,
+				"power":              p.Power,
+				"population":         p.Population,
+				"populationCapacity": p.PopulationCapacity,
+				"morale":             p.Morale,
+				"security":           p.Security,
+				"energyProduction":   p.EnergyProduction,
+				"energyBalance":      p.EnergyBalance,
+				"energyStored":       p.EnergyStored,
+			},
+		})
+		return
 	}
 
 	applied := []map[string]interface{}{}
@@ -710,15 +741,19 @@ func (h *ProfileHandler) ApplyDailyPlan(c *gin.Context) {
 		return
 	}
 
-	// Mark applied in the plan (simple: append to a field or just return the list)
-	// For openness we just return what was applied; full history can be added later.
-	plan.UpdatedAt = time.Now().UTC()
+	appliedAt := time.Now().UTC()
+	plan.AppliedAt = &appliedAt
+	plan.AppliedIndices = append([]int(nil), body.Indices...)
+	plan.AcceptedActionID = fmt.Sprintf("daily-plan:%d:%s", plan.ID, today)
+	plan.UpdatedAt = appliedAt
 	h.db.Save(&plan)
 
 	c.JSON(http.StatusOK, gin.H{
-		"ok":      true,
-		"applied": applied,
-		"impacts": impacts,
+		"ok":              true,
+		"applied":         applied,
+		"applied_today":   true,
+		"applied_indices": plan.AppliedIndices,
+		"impacts":         impacts,
 		"profile_snapshot": gin.H{
 			"level":              p.Level,
 			"power":              p.Power,
@@ -738,6 +773,13 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func dailyPlanAppliedToday(plan models.DailyPlan, today string) bool {
+	if plan.AppliedAt == nil || plan.AppliedAt.IsZero() {
+		return false
+	}
+	return plan.AppliedAt.UTC().Format("2006-01-02") == today
 }
 
 func (h *ProfileHandler) buildDailyPlanContextForID(profileID uint) map[string]interface{} {
@@ -793,15 +835,76 @@ func (h *ProfileHandler) profileResourcePayload(c *gin.Context, profileID uint) 
 			cityStats = typed
 		case models.PlayerCityStats:
 			cityStats = map[string]any{
-				"storageCapacity": typed.StorageCapacity,
-				"foodProduction":  typed.FoodProduction,
-				"foodConsumption": typed.FoodConsumption,
-				"foodBalance":     typed.FoodBalance,
+				"storageCapacity":         typed.StorageCapacity,
+				"foodProduction":          typed.FoodProduction,
+				"foodConsumption":         typed.FoodConsumption,
+				"foodBalance":             typed.FoodBalance,
+				"populationCapacity":      typed.PopulationCapacity,
+				"populationFree":          typed.PopulationFree,
+				"populationGrowthPerHour": typed.PopulationGrowthHour,
+				"populationRemainder":     typed.PopulationRemainder,
+				"lastPopulationSyncAt":    typed.LastPopulationSyncAt,
+				"lastProductionSyncAt":    typed.LastProductionSyncAt,
+			}
+		case *models.PlayerCityStats:
+			if typed != nil {
+				cityStats = map[string]any{
+					"storageCapacity":         typed.StorageCapacity,
+					"foodProduction":          typed.FoodProduction,
+					"foodConsumption":         typed.FoodConsumption,
+					"foodBalance":             typed.FoodBalance,
+					"populationCapacity":      typed.PopulationCapacity,
+					"populationFree":          typed.PopulationFree,
+					"populationGrowthPerHour": typed.PopulationGrowthHour,
+					"populationRemainder":     typed.PopulationRemainder,
+					"lastPopulationSyncAt":    typed.LastPopulationSyncAt,
+					"lastProductionSyncAt":    typed.LastProductionSyncAt,
+				}
 			}
 		}
 	}
 
 	return balances, cityStats
+}
+
+func profileCityPayload(p models.ProfileGamer, stats map[string]any) map[string]any {
+	city := map[string]any{
+		"name":               p.CityName,
+		"level":              p.Level,
+		"power":              p.Power,
+		"population":         p.Population,
+		"populationCapacity": p.PopulationCapacity,
+		"populationFree":     maxInt(0, p.PopulationCapacity-p.Population),
+		"morale":             p.Morale,
+		"energyProduction":   p.EnergyProduction,
+		"energyConsumption":  p.EnergyConsumption,
+		"energyBalance":      p.EnergyBalance,
+		"energyStored":       p.EnergyStored,
+		"security":           p.Security,
+	}
+	if stats != nil {
+		for _, key := range []string{
+			"foodProduction",
+			"foodConsumption",
+			"foodBalance",
+			"populationGrowthPerHour",
+			"populationRemainder",
+			"lastPopulationSyncAt",
+			"lastProductionSyncAt",
+		} {
+			if value, ok := stats[key]; ok {
+				city[key] = value
+			}
+		}
+	}
+	return city
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func contextForRequest(c *gin.Context) context.Context {

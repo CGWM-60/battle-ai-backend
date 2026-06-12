@@ -1067,15 +1067,27 @@ func starterAllocationUpgrade(previous map[string]int64, target map[string]int64
 
 func (s *ResourceService) ensureInitialCityStats(ctx context.Context, tx *gorm.DB, profileID uint) error {
 	now := time.Now().UTC()
+	var profile models.ProfileGamer
+	if err := tx.WithContext(ctx).First(&profile, profileID).Error; err != nil {
+		return err
+	}
+	morale := profile.Morale
+	if morale == 0 {
+		morale = 50
+	}
+	security := profile.Security
+	if security == 0 {
+		security = 50
+	}
 	if err := tx.WithContext(ctx).Model(&models.ProfileGamer{}).Where("id = ?", profileID).Updates(map[string]any{
-		"population":          0,
-		"population_capacity": 0,
-		"morale":              50,
-		"energy_production":   0,
-		"energy_consumption":  0,
-		"energy_balance":      0,
-		"energy_stored":       0,
-		"security":            50,
+		"population":          profile.Population,
+		"population_capacity": profile.PopulationCapacity,
+		"morale":              morale,
+		"energy_production":   profile.EnergyProduction,
+		"energy_consumption":  profile.EnergyConsumption,
+		"energy_balance":      profile.EnergyBalance,
+		"energy_stored":       profile.EnergyStored,
+		"security":            security,
 		"updated_at":          now,
 	}).Error; err != nil {
 		return err
@@ -1089,8 +1101,8 @@ func (s *ResourceService) ensureInitialCityStats(ctx context.Context, tx *gorm.D
 	stats.FoodProduction = 0
 	stats.FoodConsumption = 0
 	stats.FoodBalance = 0
-	stats.PopulationCapacity = 0
-	stats.PopulationFree = 0
+	stats.PopulationCapacity = profile.PopulationCapacity
+	stats.PopulationFree = max(0, profile.PopulationCapacity-profile.Population)
 	stats.PopulationGrowthHour = 0
 	stats.PopulationRemainder = 0
 	stats.LastPopulationSyncAt = now
