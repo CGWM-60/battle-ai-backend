@@ -61,6 +61,10 @@ services:
       # Mount a Persistent Storage in Dokploy to this exact container path to survive rebuilds.
       NEXUS_ASSETS_BASE_DIR: /nexus_game/assets
       NEXUS_ASSETS_BASE_URL: /nexus_game/assets
+      # Build hero / RP character images share the same persistent Nexus asset volume.
+      # Public URLs stay /assets/heroes/... for Flutter compatibility.
+      HERO_IMAGE_PUBLIC_DIR: /nexus_game/assets/heroes
+      HERO_IMAGE_PUBLIC_BASE_URL: /assets/heroes
     ports:
       - "${APP_PORT:-8080}:8080"
     depends_on:
@@ -72,7 +76,7 @@ services:
       # Persistent volume for all Nexus Game assets (avatars, factions, IA companions images, etc.)
       # Declared in the top-level `volumes:` section below so Compose creates `nexus-assets` (or `cgwm-battleia-k0ryy3_nexus-assets` in Dokploy).
       # Mounted on the **app** service (not mariadb!).
-      # Images written under /nexus_game/assets/* (subdirs avatar/faction/companion) will survive every rebuild/recreate.
+      # Images written under /nexus_game/assets/* (subdirs avatar/faction/companion/heroes) will survive every rebuild/recreate.
       - nexus-assets:/nexus_game/assets
     restart: unless-stopped
 

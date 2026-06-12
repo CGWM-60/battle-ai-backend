@@ -24,6 +24,21 @@ func NewRolePlayHeroImageService(db *gorm.DB) *RolePlayHeroImageService {
 	return &RolePlayHeroImageService{db: db}
 }
 
+func heroImagePublicDir() string {
+	if dir := strings.TrimSpace(os.Getenv("HERO_IMAGE_PUBLIC_DIR")); dir != "" {
+		return dir
+	}
+	baseDir := strings.TrimSpace(os.Getenv("NEXUS_ASSETS_BASE_DIR"))
+	if baseDir == "" {
+		baseDir = "/nexus_game/assets"
+	}
+	return filepath.Join(baseDir, "heroes")
+}
+
+func heroImagePublicBaseURL() string {
+	return strings.TrimRight(defaultText(os.Getenv("HERO_IMAGE_PUBLIC_BASE_URL"), "/assets/heroes"), "/")
+}
+
 func (s *RolePlayHeroImageService) SaveUpload(ctx context.Context, name string, sex string, version int, originalName string, reader io.Reader) (*models.RolePlayHeroImage, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -42,11 +57,8 @@ func (s *RolePlayHeroImageService) SaveUpload(ctx context.Context, name string, 
 		version = maxVersion + 1
 	}
 
-	assetDir := strings.TrimSpace(os.Getenv("HERO_IMAGE_PUBLIC_DIR"))
-	if assetDir == "" {
-		assetDir = "storage/assets/heroes"
-	}
-	publicBase := strings.TrimRight(defaultText(os.Getenv("HERO_IMAGE_PUBLIC_BASE_URL"), "/assets/heroes"), "/")
+	assetDir := heroImagePublicDir()
+	publicBase := heroImagePublicBaseURL()
 	relDir := filepath.Join(sex, safeAssetSegment(name))
 	fullDir := filepath.Join(assetDir, relDir)
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {

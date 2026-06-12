@@ -12,6 +12,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -42,8 +43,9 @@ func RouterApp(database *gorm.DB) {
 	router.Use(admin.RequestMetricsMiddleware())
 	_ = os.MkdirAll(getEnv("BUILDING_ASSET_PUBLIC_DIR", "storage/assets/buildings"), 0o755)
 	router.Static("/assets/buildings", getEnv("BUILDING_ASSET_PUBLIC_DIR", "storage/assets/buildings"))
-	_ = os.MkdirAll(getEnv("HERO_IMAGE_PUBLIC_DIR", "storage/assets/heroes"), 0o755)
-	router.Static("/assets/heroes", getEnv("HERO_IMAGE_PUBLIC_DIR", "storage/assets/heroes"))
+	heroImageDir := getEnv("HERO_IMAGE_PUBLIC_DIR", filepath.Join(getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets"), "heroes"))
+	_ = os.MkdirAll(heroImageDir, 0o755)
+	router.Static("/assets/heroes", heroImageDir)
 
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
