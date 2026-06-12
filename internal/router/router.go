@@ -42,6 +42,8 @@ func RouterApp(database *gorm.DB) {
 	router.Use(admin.RequestMetricsMiddleware())
 	_ = os.MkdirAll(getEnv("BUILDING_ASSET_PUBLIC_DIR", "storage/assets/buildings"), 0o755)
 	router.Static("/assets/buildings", getEnv("BUILDING_ASSET_PUBLIC_DIR", "storage/assets/buildings"))
+	_ = os.MkdirAll(getEnv("HERO_IMAGE_PUBLIC_DIR", "storage/assets/heroes"), 0o755)
+	router.Static("/assets/heroes", getEnv("HERO_IMAGE_PUBLIC_DIR", "storage/assets/heroes"))
 
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
@@ -141,6 +143,11 @@ func RouterApp(database *gorm.DB) {
 	private.POST("/roleplay/characters/validate", validateRolePlayCharacter(database))
 	private.POST("/roleplay/characters/generate", generateRolePlayCharacter(database))
 	private.POST("/roleplay/characters/local-prompt", rolePlayCharacterLocalPrompt(database))
+	private.GET("/roleplay/characters/:id", getRolePlayCharacter(database))
+	private.PUT("/roleplay/characters/:id", updateRolePlayCharacter(database))
+	private.PATCH("/roleplay/characters/:id", updateRolePlayCharacter(database))
+	private.DELETE("/roleplay/characters/:id", deleteRolePlayCharacter(database))
+	private.GET("/roleplay/hero-images", listRolePlayHeroImages(database))
 	private.POST("/roleplay/sessions", createRolePlaySession(database))
 	private.GET("/roleplay/sessions", listRolePlaySessions(database))
 	private.GET("/roleplay/sessions/:id", getRolePlaySession(database))

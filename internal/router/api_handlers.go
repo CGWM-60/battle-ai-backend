@@ -205,6 +205,8 @@ type rolePlayCharacterRequest struct {
 	PersonalGoalAlt string         `form:"personal_goal" json:"personal_goal"`
 	Goal            string         `form:"goal" json:"goal"`
 	Level           int            `form:"level" json:"level"`
+	HeroImageID     *uint          `form:"heroImageId" json:"heroImageId"`
+	ImageURL        string         `form:"imageUrl" json:"imageUrl"`
 	Attributes      map[string]int `form:"-" json:"attributes"`
 	Skills          map[string]int `form:"-" json:"skills"`
 	Traits          []string       `form:"-" json:"traits"`
@@ -1018,6 +1020,74 @@ func createRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusCreated, gin.H{"character": character})
+	}
+}
+
+func getRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil || id == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay character id"})
+			return
+		}
+		character, err := newRolePlayCharacterService(database).Get(c.Request.Context(), currentUserID(c), uint(id))
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "roleplay character not found"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"character": character})
+	}
+}
+
+func updateRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil || id == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay character id"})
+			return
+		}
+		var req rolePlayCharacterRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay character payload"})
+			return
+		}
+		character, err := newRolePlayCharacterService(database).Update(c.Request.Context(), currentUserID(c), uint(id), toRolePlayCharacterInput(req))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"character": character})
+	}
+}
+
+func deleteRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil || id == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay character id"})
+			return
+		}
+		if err := newRolePlayCharacterService(database).Delete(c.Request.Context(), currentUserID(c), uint(id)); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot delete roleplay character"})
+			return
+		}
+		c.Status(http.StatusNoContent)
+	}
+}
+
+func listRolePlayHeroImages(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var images []models.RolePlayHeroImage
+		query := database.WithContext(c.Request.Context()).Where("is_active = ?", true)
+		sex := strings.ToLower(strings.TrimSpace(c.Query("sex")))
+		if sex == "h" || sex == "f" {
+			query = query.Where("sex = ?", sex)
+		}
+		if err := query.Order("sex ASC, name ASC, id DESC").Find(&images).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list roleplay hero images"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"images": images})
 	}
 }
 
@@ -2734,6 +2804,8 @@ func toRolePlayCharacterInput(req rolePlayCharacterRequest) service.RolePlayChar
 		PersonalGoal: defaultString(req.PersonalGoal, req.PersonalGoalAlt),
 		Goal:         req.Goal,
 		Level:        req.Level,
+		HeroImageID:  req.HeroImageID,
+		ImageURL:     req.ImageURL,
 		Attributes:   req.Attributes,
 		Skills:       req.Skills,
 		Traits:       req.Traits,

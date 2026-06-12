@@ -321,6 +321,23 @@ export type AdminRolePlayQuestsResponse = {
   quests: AdminRolePlayQuest[];
 };
 
+export type AdminRolePlayHeroImage = {
+  id: number;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  sex: "h" | "f" | string;
+  imageUrl: string;
+  imageHash: string;
+  imageSize: number;
+  version: number;
+  isActive: boolean;
+};
+
+export type AdminRolePlayHeroImagesResponse = {
+  images: AdminRolePlayHeroImage[];
+};
+
 export type TribunalGeneratedCaseAdmin = {
   id: number;
   createdAt: string;

@@ -27,6 +27,8 @@ type RolePlayCharacterInput struct {
 	PersonalGoal string         `json:"personal_goal"`
 	Goal         string         `json:"goal"`
 	Level        int            `json:"level"`
+	HeroImageID  *uint          `json:"heroImageId"`
+	ImageURL     string         `json:"imageUrl"`
 	Attributes   map[string]int `json:"attributes"`
 	Skills       map[string]int `json:"skills"`
 	Traits       []string       `json:"traits"`
@@ -76,6 +78,43 @@ func (s *RolePlayCharacterService) Create(ctx context.Context, userID uint, inpu
 		return nil, err
 	}
 	return character, nil
+}
+
+func (s *RolePlayCharacterService) Update(ctx context.Context, userID uint, id uint, input RolePlayCharacterInput) (*models.RolePlayCharacter, error) {
+	character, err := normalizeRolePlayCharacter(userID, input)
+	if err != nil {
+		return nil, err
+	}
+	fields := map[string]any{
+		"name":          character.Name,
+		"class":         character.Class,
+		"origin":        character.Origin,
+		"race":          character.Race,
+		"alignment":     character.Alignment,
+		"personality":   character.Personality,
+		"background":    character.Background,
+		"personal_goal": character.PersonalGoal,
+		"level":         character.Level,
+		"hero_image_id": character.HeroImageID,
+		"image_url":     character.ImageURL,
+		"attributes":    character.Attributes,
+		"skills":        character.Skills,
+		"traits":        character.Traits,
+		"inventory":     character.Inventory,
+		"health":        character.Health,
+		"max_health":    character.MaxHealth,
+		"stress":        character.Stress,
+		"fatigue":       character.Fatigue,
+		"morale":        character.Morale,
+	}
+	if err := s.characters.Update(ctx, id, userID, fields); err != nil {
+		return nil, err
+	}
+	return s.characters.GetOwnedByID(ctx, id, userID)
+}
+
+func (s *RolePlayCharacterService) Delete(ctx context.Context, userID uint, id uint) error {
+	return s.characters.Delete(ctx, id, userID)
 }
 
 func (s *RolePlayCharacterService) ValidateDraft(userID uint, input RolePlayCharacterInput) (*models.RolePlayCharacter, error) {
@@ -232,6 +271,8 @@ func normalizeRolePlayCharacter(userID uint, input RolePlayCharacterInput) (*mod
 		Background:   background,
 		PersonalGoal: goal,
 		Level:        clampInt(input.Level, 1, 1, 1),
+		HeroImageID:  input.HeroImageID,
+		ImageURL:     compactText(input.ImageURL, 500),
 		Attributes:   datatypes.JSON(attributesJSON),
 		Skills:       datatypes.JSON(skillsJSON),
 		Traits:       datatypes.JSON(traitsJSON),

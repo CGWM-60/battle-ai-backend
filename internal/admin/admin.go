@@ -23,13 +23,13 @@ import (
 
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
+	translations "cgwm/battle/internal/nexus_game/translations"
 	nexustribunal "cgwm/battle/internal/nexus_tribunal"
 	tribunalmodels "cgwm/battle/internal/nexus_tribunal/models"
 	"cgwm/battle/internal/provider"
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/scheduler"
 	"cgwm/battle/internal/service"
-	translations "cgwm/battle/internal/nexus_game/translations"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -305,6 +305,12 @@ type adminRolePlayQuestUpdateInput struct {
 	Status string `json:"status"`
 }
 
+type adminRolePlayHeroImageInput struct {
+	Name     string `json:"name"`
+	Sex      string `json:"sex"`
+	IsActive *bool  `json:"isActive"`
+}
+
 type generatedBattleQuest struct {
 	Title   string         `json:"title"`
 	Content string         `json:"content"`
@@ -351,6 +357,9 @@ type generatedRolePlayChapter struct {
 }
 
 func Register(router *gin.Engine, db *gorm.DB) {
+	if db != nil {
+		_ = db.AutoMigrate(&models.RolePlayHeroImage{})
+	}
 	server := &Server{
 		db:        db,
 		templates: template.Must(template.New("admin").Funcs(adminTemplateFuncs()).Parse(adminHTML)),
@@ -374,6 +383,11 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.PUT("/roleplay-quests/:id", server.updateRolePlayQuestAdminAPI)
 	api.DELETE("/roleplay-quests", server.clearRolePlayQuestsAdminAPI)
 	api.DELETE("/roleplay-quests/:id", server.deleteRolePlayQuestAdminAPI)
+	api.GET("/roleplay-hero-images", server.rolePlayHeroImagesAdminAPI)
+	api.POST("/roleplay-hero-images", server.createRolePlayHeroImageAdminAPI)
+	api.PATCH("/roleplay-hero-images/:id", server.updateRolePlayHeroImageAdminAPI)
+	api.PUT("/roleplay-hero-images/:id", server.updateRolePlayHeroImageAdminAPI)
+	api.DELETE("/roleplay-hero-images/:id", server.deleteRolePlayHeroImageAdminAPI)
 	api.GET("/tribunal-generated", server.tribunalGeneratedAdminAPI)
 	api.GET("/nexus-coin", server.nexusCoinAPI)
 	api.POST("/nexus-coin/plans", server.createNexusCoinPlanAPI)
@@ -677,6 +691,97 @@ func (s *Server) deleteRolePlayQuestAdminAPI(c *gin.Context) {
 
 func (s *Server) clearRolePlayQuestsAdminAPI(c *gin.Context) {
 	if err := s.clearRolePlayQuestTemplates(c.Request.Context()); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) rolePlayHeroImagesAdminAPI(c *gin.Context) {
+	var images []models.RolePlayHeroImage
+	query := s.db.WithContext(c.Request.Context()).Model(&models.RolePlayHeroImage{})
+	sex := strings.ToLower(strings.TrimSpace(c.Query("sex")))
+	if sex == "h" || sex == "f" {
+		query = query.Where("sex = ?", sex)
+	}
+	if err := query.Order("sex ASC, name ASC, id DESC").Find(&images).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"images": images})
+}
+
+func (s *Server) createRolePlayHeroImageAdminAPI(c *gin.Context) {
+	if !strings.Contains(c.GetHeader("Content-Type"), "multipart/form-data") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "multipart/form-data with image is required"})
+		return
+	}
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image is required"})
+		return
+	}
+	defer file.Close()
+
+	version, _ := strconv.Atoi(c.DefaultPostForm("version", "0"))
+	image, err := service.NewRolePlayHeroImageService(s.db).SaveUpload(
+		c.Request.Context(),
+		c.PostForm("name"),
+		c.PostForm("sex"),
+		version,
+		header.Filename,
+		file,
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"image": image})
+}
+
+func (s *Server) updateRolePlayHeroImageAdminAPI(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hero image id"})
+		return
+	}
+	var input adminRolePlayHeroImageInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hero image payload"})
+		return
+	}
+	updates := map[string]any{}
+	if strings.TrimSpace(input.Name) != "" {
+		updates["name"] = strings.TrimSpace(input.Name)
+	}
+	normalizedSex := strings.ToLower(strings.TrimSpace(input.Sex))
+	if normalizedSex == "h" || normalizedSex == "f" {
+		updates["sex"] = normalizedSex
+	}
+	if input.IsActive != nil {
+		updates["is_active"] = *input.IsActive
+	}
+	if len(updates) == 0 {
+		c.JSON(http.StatusOK, gin.H{"updated": false})
+		return
+	}
+	if err := s.db.WithContext(c.Request.Context()).
+		Model(&models.RolePlayHeroImage{}).
+		Where("id = ?", uint(id)).
+		Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": true})
+}
+
+func (s *Server) deleteRolePlayHeroImageAdminAPI(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hero image id"})
+		return
+	}
+	if err := s.db.WithContext(c.Request.Context()).Delete(&models.RolePlayHeroImage{}, uint(id)).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

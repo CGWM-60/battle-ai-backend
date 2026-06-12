@@ -383,6 +383,8 @@ type RolePlayCharacter struct {
 	Background   string `gorm:"type:text" json:"background"`
 	PersonalGoal string `gorm:"type:text" json:"personalGoal"`
 	Level        int    `json:"level"`
+	HeroImageID  *uint  `gorm:"index" json:"heroImageId,omitempty"`
+	ImageURL     string `gorm:"size:500" json:"imageUrl"`
 
 	Attributes datatypes.JSON `gorm:"type:json" json:"attributes"`
 	Skills     datatypes.JSON `gorm:"type:json" json:"skills"`
@@ -403,6 +405,22 @@ type RolePlayCharacter struct {
 	CoopLiveSession    *LiveSession      `gorm:"foreignKey:CoopLiveSessionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
 	CoopPartyID        *uint             `gorm:"index" json:"coopPartyId,omitempty"`
 	CoopParty          *CoopParty        `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+}
+
+// RolePlayHeroImage = catalogue d'images selectionnables pour les heros RP.
+type RolePlayHeroImage struct {
+	Id        uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	Name      string `gorm:"size:160;index" json:"name"`
+	Sex       string `gorm:"size:1;index" json:"sex"`
+	ImageURL  string `gorm:"size:500" json:"imageUrl"`
+	ImageHash string `gorm:"size:128;index" json:"imageHash"`
+	ImageSize int64  `json:"imageSize"`
+	Version   int    `gorm:"index" json:"version"`
+	IsActive  bool   `gorm:"index" json:"isActive"`
 }
 
 // RolePlaySession = sauvegarde d'une partie roleplay IA.

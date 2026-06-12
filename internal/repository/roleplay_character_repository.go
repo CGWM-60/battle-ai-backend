@@ -41,6 +41,19 @@ func (r *RolePlayCharacterRepository) Create(ctx context.Context, character *mod
 	return r.db.WithContext(ctx).Create(character).Error
 }
 
+func (r *RolePlayCharacterRepository) Update(ctx context.Context, id uint, userID uint, fields map[string]any) error {
+	return r.db.WithContext(ctx).
+		Model(&models.RolePlayCharacter{}).
+		Where("id = ? AND user_id = ?", id, userID).
+		Updates(fields).Error
+}
+
+func (r *RolePlayCharacterRepository) Delete(ctx context.Context, id uint, userID uint) error {
+	return r.db.WithContext(ctx).
+		Where("id = ? AND user_id = ?", id, userID).
+		Delete(&models.RolePlayCharacter{}).Error
+}
+
 func (r *RolePlayCharacterRepository) UpdateLinks(ctx context.Context, id uint, userID uint, fields map[string]any) error {
 	return r.db.WithContext(ctx).
 		Model(&models.RolePlayCharacter{}).

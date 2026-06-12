@@ -5,8 +5,8 @@
     "semantic_hash": "800b587e27a7f9670c50b953f0d8af9b"
   },
   "admin/app/components/AdminShell.tsx": {
-    "mtime": 1781197022.187784,
-    "ast_hash": "df7e5126cc6b2ce1d3299dadbdb0feb6",
+    "mtime": 1781258330.3261454,
+    "ast_hash": "550d4b130bfe057aba133821eeca0f1a",
     "semantic_hash": ""
   },
   "admin/app/components/LoadState.tsx": {
@@ -170,9 +170,9 @@
     "semantic_hash": "52521a2b73bd6f91818de8723c74f8d7"
   },
   "admin/app/types.ts": {
-    "mtime": 1780918503.8449733,
-    "ast_hash": "409092707718f7616f55ae62d2ba5997",
-    "semantic_hash": "409092707718f7616f55ae62d2ba5997"
+    "mtime": 1781258335.4801464,
+    "ast_hash": "f977b02aed3a2b82c179d72abc3853db",
+    "semantic_hash": ""
   },
   "admin/app/usage/page.tsx": {
     "mtime": 1779810861.9621556,
@@ -325,9 +325,9 @@
     "semantic_hash": "d5381f740cc9e114d7b0af83d6d80e04"
   },
   "internal/admin/admin.go": {
-    "mtime": 1780915420.8400927,
-    "ast_hash": "17418e3e5c4073a0600c605567671695",
-    "semantic_hash": "17418e3e5c4073a0600c605567671695"
+    "mtime": 1781258426.0490313,
+    "ast_hash": "269bcd67387f894ebbefbe3d7ef68ff0",
+    "semantic_hash": ""
   },
   "internal/admin/admin_test.go": {
     "mtime": 1779725854.1928566,
@@ -350,8 +350,8 @@
     "semantic_hash": "495974e1997cfe08f30b48c6589d4896"
   },
   "internal/db/db.go": {
-    "mtime": 1781240012.31219,
-    "ast_hash": "8cc3bcd7b24e37f9d2d108fa7070b289",
+    "mtime": 1781258171.6997113,
+    "ast_hash": "c094ad45990e05bd065841354f9798c2",
     "semantic_hash": ""
   },
   "internal/db/research_seed.go": {
@@ -450,8 +450,8 @@
     "semantic_hash": "07eff2ad967ccf76bcc38c613fd9e119"
   },
   "internal/models/models.go": {
-    "mtime": 1781240789.109625,
-    "ast_hash": "3bfc3b48fdc18353785fd421f8bcfc6d",
+    "mtime": 1781258168.2646337,
+    "ast_hash": "204195b5d5eb5e343bcfca0d1280a690",
     "semantic_hash": ""
   },
   "internal/models/nexus_translation_models.go": {
@@ -875,8 +875,8 @@
     "semantic_hash": "17ae2df3a7e7d1ef8b20887ab7d9cc7f"
   },
   "internal/router/api_handlers.go": {
-    "mtime": 1781240789.1178608,
-    "ast_hash": "0e54a8316bb338671bcb51664f8835bb",
+    "mtime": 1781258283.89101,
+    "ast_hash": "9d4961cff0b122bf4f5342cc6e473f27",
     "semantic_hash": ""
   },
   "internal/router/city_engines_handlers.go": {
@@ -905,8 +905,8 @@
     "semantic_hash": "93699356f090794281143eab1bb53c3e"
   },
   "internal/router/router.go": {
-    "mtime": 1781240187.1740153,
-    "ast_hash": "36135b6eb7d8766faea57546b5250f2e",
+    "mtime": 1781258205.9063396,
+    "ast_hash": "39739a76adcdca9e65ae34c8549977d0",
     "semantic_hash": ""
   },
   "internal/router/router_startup_test.go": {
@@ -1010,8 +1010,8 @@
     "semantic_hash": ""
   },
   "internal/service/roleplay_service.go": {
-    "mtime": 1781240145.1444354,
-    "ast_hash": "47ba7c169669155d51818919d2e98d71",
+    "mtime": 1781248836.990505,
+    "ast_hash": "1c318e10bc994bea670930d11540a933",
     "semantic_hash": ""
   },
   "internal/service/util.go": {
@@ -1230,13 +1230,23 @@
     "semantic_hash": ""
   },
   "internal/repository/roleplay_character_repository.go": {
-    "mtime": 1781240025.2051497,
-    "ast_hash": "9bb4b8d1e74c6146b6a9fb05df4c5b06",
+    "mtime": 1781258215.5630946,
+    "ast_hash": "c9b8e18e3630b517531c14c1b36831f3",
     "semantic_hash": ""
   },
   "internal/service/roleplay_character_service.go": {
-    "mtime": 1781240789.1086538,
-    "ast_hash": "9ae962b068a6cd18e66c3c6ea3612eb8",
+    "mtime": 1781258253.0342076,
+    "ast_hash": "4e1e938a9b47dca9b1bc8a54998709d3",
+    "semantic_hash": ""
+  },
+  "admin/app/roleplay-hero-images/page.tsx": {
+    "mtime": 1781258369.6488047,
+    "ast_hash": "9fff35de99d2e8ab4615fa80ec69cf75",
+    "semantic_hash": ""
+  },
+  "internal/service/roleplay_hero_image_service.go": {
+    "mtime": 1781258192.2211187,
+    "ast_hash": "929fe7f7ad8eb65d373efb059ef14ef1",
     "semantic_hash": ""
   }
 }

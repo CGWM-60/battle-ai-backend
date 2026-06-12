@@ -1289,6 +1289,95 @@ a {
   color: var(--accent);
 }
 
+.hero-image-create-panel h2 {
+  margin: 0 0 16px;
+}
+
+.hero-image-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 120px minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.hero-image-form label {
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.hero-image-form input,
+.hero-image-form select {
+  min-height: 42px;
+}
+
+.hero-image-filter {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.hero-image-filter button {
+  min-width: 52px;
+}
+
+.hero-image-filter button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.hero-image-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.hero-image-card {
+  overflow: hidden;
+  padding: 0;
+}
+
+.hero-image-card img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: #050b0f;
+}
+
+.hero-image-card-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
+.hero-image-card h3 {
+  margin: 8px 0 4px;
+  color: var(--text);
+}
+
+.hero-image-card p,
+.hero-image-card small {
+  margin: 0;
+  color: var(--muted);
+}
+
+.hero-image-card-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.hero-image-card-actions button {
+  flex: 1;
+}
+
+.empty-panel {
+  color: var(--muted);
+}
+
 @media (max-width: 1040px) {
   .admin-frame {
     grid-template-columns: 1fr;
@@ -1314,6 +1403,7 @@ a {
   .control-links,
   .rp-admin-layout,
   .rp-toolbar,
+  .hero-image-form,
   .translation-hero,
   .translation-toolbar {
     grid-template-columns: 1fr;
