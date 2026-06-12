@@ -35,14 +35,15 @@ type Users struct {
 	KeyApiProvider []provider.Provider `gorm:"-"`
 
 	// Relations de persistance.
-	BattleSaves      []BattleSave        `gorm:"foreignKey:OwnerID"`
-	HostedArenas     []BattleArena       `gorm:"foreignKey:HostUserID"`
-	ArenaMemberships []BattleArenaMember `gorm:"foreignKey:UserID"`
-	CoopParties      []CoopParty         `gorm:"foreignKey:HostUserID"`
-	CoopMemberships  []CoopPartyMember   `gorm:"foreignKey:UserID"`
-	RolePlayRuns     []RolePlayQuestRun  `gorm:"foreignKey:UserID"`
-	RolePlaySessions []RolePlaySession   `gorm:"foreignKey:OwnerID"`
-	IAProfiles       []IAProfile         `gorm:"foreignKey:OwnerID"`
+	BattleSaves        []BattleSave        `gorm:"foreignKey:OwnerID"`
+	HostedArenas       []BattleArena       `gorm:"foreignKey:HostUserID"`
+	ArenaMemberships   []BattleArenaMember `gorm:"foreignKey:UserID"`
+	CoopParties        []CoopParty         `gorm:"foreignKey:HostUserID"`
+	CoopMemberships    []CoopPartyMember   `gorm:"foreignKey:UserID"`
+	RolePlayRuns       []RolePlayQuestRun  `gorm:"foreignKey:UserID"`
+	RolePlaySessions   []RolePlaySession   `gorm:"foreignKey:OwnerID"`
+	RolePlayCharacters []RolePlayCharacter `gorm:"foreignKey:UserID"`
+	IAProfiles         []IAProfile         `gorm:"foreignKey:OwnerID"`
 }
 
 // IAProfile = profil persistant cree par un joueur pour reutiliser une IA.
@@ -354,9 +355,54 @@ type RolePlayQuestRun struct {
 	// State = etat libre de la quete, inventaire, flags, objectifs, etc.
 	State datatypes.JSON `gorm:"type:json"`
 
+	CharacterID *uint              `gorm:"index"`
+	Character   *RolePlayCharacter `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+
 	StartedAt      *time.Time `gorm:"index"`
 	LastActivityAt *time.Time `gorm:"index"`
 	FinishedAt     *time.Time `gorm:"index"`
+}
+
+// RolePlayCharacter = fiche de heros creee/validee avant une quete RP ou Coop Live.
+// Elle stocke la fiche jouable, jamais les cles API utilisees pour la generer.
+type RolePlayCharacter struct {
+	Id        uint           `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time      `json:"createdAt"`
+	UpdatedAt time.Time      `json:"updatedAt"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	UserID uint  `gorm:"index" json:"userId"`
+	User   Users `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+
+	Name         string `gorm:"size:120;index" json:"name"`
+	Class        string `gorm:"column:class;size:120;index" json:"class"`
+	Origin       string `gorm:"size:180" json:"origin"`
+	Race         string `gorm:"size:120" json:"race"`
+	Alignment    string `gorm:"size:120" json:"alignment"`
+	Personality  string `gorm:"type:text" json:"personality"`
+	Background   string `gorm:"type:text" json:"background"`
+	PersonalGoal string `gorm:"type:text" json:"personalGoal"`
+	Level        int    `json:"level"`
+
+	Attributes datatypes.JSON `gorm:"type:json" json:"attributes"`
+	Skills     datatypes.JSON `gorm:"type:json" json:"skills"`
+	Traits     datatypes.JSON `gorm:"type:json" json:"traits"`
+	Inventory  datatypes.JSON `gorm:"type:json" json:"inventory"`
+
+	Health    int `json:"health"`
+	MaxHealth int `json:"maxHealth"`
+	Stress    int `json:"stress"`
+	Fatigue   int `json:"fatigue"`
+	Morale    int `json:"morale"`
+
+	RolePlayQuestRunID *uint             `gorm:"index" json:"rolePlayQuestRunId,omitempty"`
+	RolePlayQuestRun   *RolePlayQuestRun `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+	RolePlaySessionID  *uint             `gorm:"index" json:"rolePlaySessionId,omitempty"`
+	RolePlaySession    *RolePlaySession  `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+	CoopLiveSessionID  *uint             `gorm:"index" json:"coopLiveSessionId,omitempty"`
+	CoopLiveSession    *LiveSession      `gorm:"foreignKey:CoopLiveSessionID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+	CoopPartyID        *uint             `gorm:"index" json:"coopPartyId,omitempty"`
+	CoopParty          *CoopParty        `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
 }
 
 // RolePlaySession = sauvegarde d'une partie roleplay IA.
@@ -391,6 +437,9 @@ type RolePlaySession struct {
 	// Snapshot = etat libre de la session roleplay.
 	Snapshot datatypes.JSON `gorm:"type:json"`
 
+	ActiveCharacterID *uint              `gorm:"index"`
+	ActiveCharacter   *RolePlayCharacter `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
+
 	StartedAt      *time.Time `gorm:"index"`
 	LastActivityAt *time.Time `gorm:"index"`
 	FinishedAt     *time.Time `gorm:"index"`
@@ -398,6 +447,7 @@ type RolePlaySession struct {
 	Turns        []RolePlaySessionTurn `gorm:"foreignKey:SessionID"`
 	QuestRuns    []RolePlayQuestRun    `gorm:"foreignKey:SessionID"`
 	LiveSessions []LiveSession         `gorm:"foreignKey:RolePlaySessionID"`
+	Characters   []RolePlayCharacter   `gorm:"foreignKey:RolePlaySessionID"`
 }
 
 // RolePlaySessionTurn = journal incremental d'une partie roleplay.
@@ -477,6 +527,9 @@ type CoopPartyMember struct {
 	Status     string     `gorm:"size:32;index"`
 	JoinedAt   *time.Time `gorm:"index"`
 	LastSeenAt *time.Time `gorm:"index"`
+
+	CharacterID *uint              `gorm:"index"`
+	Character   *RolePlayCharacter `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 }
 
 // LiveSession = canal live generique.

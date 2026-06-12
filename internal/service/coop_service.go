@@ -19,14 +19,16 @@ type CoopPartyInput struct {
 	RolePlaySessionID *uint
 	MaxMembers        int
 	SharedState       map[string]any
+	CharacterID       uint
 }
 
 type CoopService struct {
-	coop *repository.CoopRepository
+	coop       *repository.CoopRepository
+	characters *repository.RolePlayCharacterRepository
 }
 
-func NewCoopService(coop *repository.CoopRepository) *CoopService {
-	return &CoopService{coop: coop}
+func NewCoopService(coop *repository.CoopRepository, characters *repository.RolePlayCharacterRepository) *CoopService {
+	return &CoopService{coop: coop, characters: characters}
 }
 
 func (s *CoopService) Create(ctx context.Context, hostUserID uint, input CoopPartyInput) (*models.CoopParty, error) {
@@ -35,6 +37,19 @@ func (s *CoopService) Create(ctx context.Context, hostUserID uint, input CoopPar
 	}
 	if input.MaxMembers <= 0 {
 		input.MaxMembers = 4
+	}
+	var character *models.RolePlayCharacter
+	if input.CharacterID != 0 {
+		owned, err := s.characters.GetOwnedByID(ctx, input.CharacterID, hostUserID)
+		if err != nil {
+			return nil, fmt.Errorf("character not found")
+		}
+		character = owned
+		if input.SharedState == nil {
+			input.SharedState = map[string]any{}
+		}
+		input.SharedState["hostCharacterId"] = character.Id
+		input.SharedState["hostHero"] = CharacterSnapshot(character)
 	}
 	state, _ := json.Marshal(input.SharedState)
 	now := time.Now()
@@ -53,6 +68,12 @@ func (s *CoopService) Create(ctx context.Context, hostUserID uint, input CoopPar
 		return nil, err
 	}
 	_ = s.coop.Join(ctx, party.Id, hostUserID, "host")
+	if character != nil {
+		_ = s.characters.AttachToCoopMember(ctx, party.Id, hostUserID, character.Id)
+		_ = s.characters.UpdateLinks(ctx, character.Id, hostUserID, map[string]any{
+			"coop_party_id": party.Id,
+		})
+	}
 	return party, nil
 }
 
@@ -64,13 +85,33 @@ func (s *CoopService) Get(ctx context.Context, code string) (*models.CoopParty, 
 	return s.coop.GetByCode(ctx, code)
 }
 
-func (s *CoopService) Join(ctx context.Context, code string, userID uint) (*models.CoopParty, error) {
+func (s *CoopService) Join(ctx context.Context, code string, userID uint, characterID uint) (*models.CoopParty, error) {
 	party, err := s.coop.GetByCode(ctx, code)
 	if err != nil {
 		return nil, err
 	}
+	var character *models.RolePlayCharacter
+	if characterID != 0 {
+		owned, err := s.characters.GetOwnedByID(ctx, characterID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("character not found")
+		}
+		character = owned
+	}
 	if err := s.coop.Join(ctx, party.Id, userID, "player"); err != nil {
 		return nil, err
+	}
+	if character != nil {
+		_ = s.characters.AttachToCoopMember(ctx, party.Id, userID, character.Id)
+		state := decodeCoopSharedState(party.SharedState)
+		state["allyCharacterId"] = character.Id
+		state["allyHero"] = CharacterSnapshot(character)
+		payload, _ := json.Marshal(state)
+		_ = s.coop.UpdateSharedState(ctx, party.Id, datatypes.JSON(payload))
+		_ = s.characters.UpdateLinks(ctx, character.Id, userID, map[string]any{
+			"coop_party_id": party.Id,
+		})
+		party.SharedState = datatypes.JSON(payload)
 	}
 	if err := s.syncPartyStatus(ctx, party.Id, decodeCoopSharedState(party.SharedState)); err != nil {
 		return nil, err

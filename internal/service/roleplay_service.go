@@ -24,6 +24,7 @@ type RolePlaySessionInput struct {
 	ProviderName   string
 	ModelName      string
 	APIKey         string
+	CharacterID    uint
 }
 
 type RolePlayActionInput struct {
@@ -33,13 +34,14 @@ type RolePlayActionInput struct {
 }
 
 type RolePlayService struct {
-	roleplay *repository.RolePlayRepository
-	quests   *repository.QuestRepository
-	usage    *repository.AIUsageRepository
+	roleplay   *repository.RolePlayRepository
+	quests     *repository.QuestRepository
+	usage      *repository.AIUsageRepository
+	characters *repository.RolePlayCharacterRepository
 }
 
-func NewRolePlayService(roleplay *repository.RolePlayRepository, quests *repository.QuestRepository, usage *repository.AIUsageRepository) *RolePlayService {
-	return &RolePlayService{roleplay: roleplay, quests: quests, usage: usage}
+func NewRolePlayService(roleplay *repository.RolePlayRepository, quests *repository.QuestRepository, usage *repository.AIUsageRepository, characters *repository.RolePlayCharacterRepository) *RolePlayService {
+	return &RolePlayService{roleplay: roleplay, quests: quests, usage: usage, characters: characters}
 }
 
 func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input RolePlaySessionInput) (*models.RolePlaySession, error) {
@@ -59,6 +61,19 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 	}
 	if input.Snapshot == nil {
 		input.Snapshot = map[string]any{}
+	}
+	var activeCharacter *models.RolePlayCharacter
+	if input.TemplateID != 0 && input.CharacterID == 0 {
+		return nil, fmt.Errorf("characterId is required to launch a roleplay quest")
+	}
+	if input.CharacterID != 0 {
+		character, err := s.characters.GetOwnedByID(ctx, input.CharacterID, ownerID)
+		if err != nil {
+			return nil, fmt.Errorf("character not found")
+		}
+		activeCharacter = character
+		input.Snapshot["characterId"] = character.Id
+		input.Snapshot["hero"] = CharacterSnapshot(character)
 	}
 	if providerName != "" {
 		input.Snapshot["providerName"] = providerName
@@ -86,16 +101,17 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 		return nil, fmt.Errorf("title and scenarioPrompt are required")
 	}
 	session := &models.RolePlaySession{
-		OwnerID:        ownerID,
-		Mode:           defaultString(input.Mode, "solo"),
-		Title:          title,
-		Status:         constants.RolePlayStatusLive,
-		ScenarioPrompt: prompt,
-		CurrentScene:   "start",
-		CurrentTurn:    0,
-		Snapshot:       datatypes.JSON(snapshotBytes),
-		StartedAt:      &now,
-		LastActivityAt: &now,
+		OwnerID:           ownerID,
+		Mode:              defaultString(input.Mode, "solo"),
+		Title:             title,
+		Status:            constants.RolePlayStatusLive,
+		ScenarioPrompt:    prompt,
+		CurrentScene:      "start",
+		CurrentTurn:       0,
+		Snapshot:          datatypes.JSON(snapshotBytes),
+		ActiveCharacterID: characterIDPtr(activeCharacter),
+		StartedAt:         &now,
+		LastActivityAt:    &now,
 	}
 	if err := s.roleplay.CreateSession(ctx, session); err != nil {
 		return nil, err
@@ -114,13 +130,23 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 			CompletedChapters: datatypes.JSON([]byte("[]")),
 			Journal:           "",
 			State:             datatypes.JSON([]byte("{}")),
+			CharacterID:       characterIDPtr(activeCharacter),
 			StartedAt:         &now,
 			LastActivityAt:    &now,
 		}
-		_ = s.roleplay.CreateQuestRun(ctx, run)
+		if err := s.roleplay.CreateQuestRun(ctx, run); err == nil && activeCharacter != nil {
+			_ = s.characters.UpdateLinks(ctx, activeCharacter.Id, ownerID, map[string]any{
+				"role_play_session_id":   session.Id,
+				"role_play_quest_run_id": run.Id,
+			})
+		}
+	} else if activeCharacter != nil {
+		_ = s.characters.UpdateLinks(ctx, activeCharacter.Id, ownerID, map[string]any{
+			"role_play_session_id": session.Id,
+		})
 	}
 	if providerName != "" {
-		if err := s.appendInitialNarration(ctx, session, providerName, modelName, apiKey); err != nil {
+		if err := s.appendInitialNarration(ctx, session, activeCharacter, providerName, modelName, apiKey); err != nil {
 			failedAt := time.Now()
 			_ = s.roleplay.UpdateSessionFields(ctx, session.Id, ownerID, map[string]any{
 				"status":           constants.RolePlayStatusFailed,
@@ -133,7 +159,7 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 	return session, nil
 }
 
-func (s *RolePlayService) appendInitialNarration(ctx context.Context, session *models.RolePlaySession, providerName string, modelName string, apiKey string) error {
+func (s *RolePlayService) appendInitialNarration(ctx context.Context, session *models.RolePlaySession, character *models.RolePlayCharacter, providerName string, modelName string, apiKey string) error {
 	url, err := ProviderURL(providerName)
 	if err != nil {
 		return fmt.Errorf("providerName invalide")
@@ -166,7 +192,8 @@ func (s *RolePlayService) appendInitialNarration(ctx context.Context, session *m
 			Content: `Tu es le maitre du jeu d'une quete roleplay IA.
 Tu dois lancer la scene d'ouverture pour le joueur.
 Ecris en francais, sois immersif, concret et jouable.
-Ne termine pas la quete. Termine par une situation qui appelle une action du joueur.`,
+Ne termine pas la quete. Termine par une situation qui appelle une action du joueur.
+Si une fiche heros est fournie, elle est canonique: integre son nom, son objectif personnel, ses forces/faiblesses et son inventaire dans la scene sans remplacer la quete.`,
 		},
 		{
 			Role: "user",
@@ -175,7 +202,9 @@ Ne termine pas la quete. Termine par une situation qui appelle une action du jou
 Scenario:
 %s
 
-Lance maintenant la premiere scene.`, session.Title, session.ScenarioPrompt),
+%s
+
+Lance maintenant la premiere scene.`, session.Title, session.ScenarioPrompt, CharacterPromptSummary(character)),
 		},
 	})
 	if err != nil {
@@ -455,6 +484,14 @@ func sortedChapterIDs(completed map[uint]bool) []uint {
 		}
 	}
 	return ids
+}
+
+func characterIDPtr(character *models.RolePlayCharacter) *uint {
+	if character == nil || character.Id == 0 {
+		return nil
+	}
+	id := character.Id
+	return &id
 }
 
 func mergeRolePlaySessionSnapshot(current datatypes.JSON, payload map[string]any) datatypes.JSON {

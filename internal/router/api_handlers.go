@@ -173,6 +173,7 @@ type rolePlaySessionRequest struct {
 	ModelName      string         `form:"modelName" json:"modelName"`
 	Model          string         `form:"model" json:"model"`
 	APIKey         string         `form:"apiKey" json:"apiKey"`
+	CharacterID    uint           `form:"characterId" json:"characterId"`
 }
 
 type rolePlayActionRequest struct {
@@ -187,6 +188,46 @@ type coopPartyRequest struct {
 	RolePlaySessionID *uint          `form:"rolePlaySessionId" json:"rolePlaySessionId"`
 	MaxMembers        int            `form:"maxMembers" json:"maxMembers"`
 	SharedState       map[string]any `form:"-" json:"sharedState"`
+	CharacterID       uint           `form:"characterId" json:"characterId"`
+}
+
+type rolePlayCharacterRequest struct {
+	Name            string         `form:"name" json:"name"`
+	Class           string         `form:"class" json:"class"`
+	Archetype       string         `form:"archetype" json:"archetype"`
+	Origin          string         `form:"origin" json:"origin"`
+	Race            string         `form:"race" json:"race"`
+	Species         string         `form:"species" json:"species"`
+	Alignment       string         `form:"alignment" json:"alignment"`
+	Personality     string         `form:"personality" json:"personality"`
+	Background      string         `form:"background" json:"background"`
+	PersonalGoal    string         `form:"personalGoal" json:"personalGoal"`
+	PersonalGoalAlt string         `form:"personal_goal" json:"personal_goal"`
+	Goal            string         `form:"goal" json:"goal"`
+	Level           int            `form:"level" json:"level"`
+	Attributes      map[string]int `form:"-" json:"attributes"`
+	Skills          map[string]int `form:"-" json:"skills"`
+	Traits          []string       `form:"-" json:"traits"`
+	Inventory       []string       `form:"-" json:"inventory"`
+	Health          int            `form:"health" json:"health"`
+	MaxHealth       int            `form:"maxHealth" json:"maxHealth"`
+	MaxHealthAlt    int            `form:"max_health" json:"max_health"`
+	Stress          int            `form:"stress" json:"stress"`
+	Fatigue         int            `form:"fatigue" json:"fatigue"`
+	Morale          int            `form:"morale" json:"morale"`
+}
+
+type rolePlayCharacterGenerateRequest struct {
+	ProviderName string `form:"providerName" json:"providerName"`
+	Provider     string `form:"provider" json:"provider"`
+	ModelName    string `form:"modelName" json:"modelName"`
+	Model        string `form:"model" json:"model"`
+	APIKey       string `form:"apiKey" json:"apiKey"`
+	Prompt       string `form:"prompt" json:"prompt"`
+	QuestContext string `form:"questContext" json:"questContext"`
+	Mode         string `form:"mode" json:"mode"`
+	QuestID      uint   `form:"questId" json:"questId"`
+	CoopPartyID  uint   `form:"coopPartyId" json:"coopPartyId"`
 }
 
 type updateUserRequest struct {
@@ -953,6 +994,93 @@ func deleteIAProfile(database *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func listRolePlayCharacters(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		characters, err := newRolePlayCharacterService(database).List(c.Request.Context(), currentUserID(c), limitFromQuery(c))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list roleplay characters"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"characters": characters})
+	}
+}
+
+func createRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req rolePlayCharacterRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay character payload"})
+			return
+		}
+		character, err := newRolePlayCharacterService(database).Create(c.Request.Context(), currentUserID(c), toRolePlayCharacterInput(req))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusCreated, gin.H{"character": character})
+	}
+}
+
+func validateRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req rolePlayCharacterRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay character payload"})
+			return
+		}
+		character, err := newRolePlayCharacterService(database).ValidateDraft(currentUserID(c), toRolePlayCharacterInput(req))
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"character": character, "valid": true})
+	}
+}
+
+func rolePlayCharacterLocalPrompt(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req rolePlayCharacterGenerateRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay character generation payload"})
+			return
+		}
+		prompt, schema := newRolePlayCharacterService(database).PrepareGenerationPrompt(c.Request.Context(), service.CharacterGenerationInput{
+			PlayerPrompt: req.Prompt,
+			QuestContext: req.QuestContext,
+			Mode:         req.Mode,
+			QuestID:      req.QuestID,
+			CoopPartyID:  req.CoopPartyID,
+			LocalLLM:     true,
+		})
+		c.JSON(http.StatusOK, gin.H{"prompt": prompt, "schema": schema})
+	}
+}
+
+func generateRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req rolePlayCharacterGenerateRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay character generation payload"})
+			return
+		}
+		character, raw, err := newRolePlayCharacterService(database).Generate(c.Request.Context(), currentUserID(c), service.CharacterGenerationInput{
+			ProviderName: defaultString(req.ProviderName, req.Provider),
+			ModelName:    defaultString(req.ModelName, req.Model),
+			APIKey:       req.APIKey,
+			PlayerPrompt: req.Prompt,
+			QuestContext: req.QuestContext,
+			Mode:         req.Mode,
+			QuestID:      req.QuestID,
+			CoopPartyID:  req.CoopPartyID,
+		})
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error(), "raw": truncateString(raw, 1000)})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"character": character, "saved": false})
+	}
+}
+
 func listRolePlayQuests(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		limit := limitFromQuery(c)
@@ -1065,6 +1193,7 @@ func startRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
 			ProviderName:   defaultString(req.ProviderName, req.Provider),
 			ModelName:      defaultString(req.ModelName, req.Model),
 			APIKey:         req.APIKey,
+			CharacterID:    req.CharacterID,
 		})
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1091,6 +1220,7 @@ func createRolePlaySession(database *gorm.DB) gin.HandlerFunc {
 			ProviderName:   defaultString(req.ProviderName, req.Provider),
 			ModelName:      defaultString(req.ModelName, req.Model),
 			APIKey:         req.APIKey,
+			CharacterID:    req.CharacterID,
 		})
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1390,6 +1520,7 @@ func createCoopParty(database *gorm.DB) gin.HandlerFunc {
 			RolePlaySessionID: req.RolePlaySessionID,
 			MaxMembers:        req.MaxMembers,
 			SharedState:       req.SharedState,
+			CharacterID:       req.CharacterID,
 		})
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -1413,7 +1544,9 @@ func getCoopParty(database *gorm.DB) gin.HandlerFunc {
 
 func joinCoopParty(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		party, err := newCoopService(database).Join(c.Request.Context(), c.Param("code"), currentUserID(c))
+		var req coopPartyRequest
+		_ = bindPayload(c, &req)
+		party, err := newCoopService(database).Join(c.Request.Context(), c.Param("code"), currentUserID(c), req.CharacterID)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
@@ -2453,11 +2586,22 @@ func newRolePlayService(database *gorm.DB) *service.RolePlayService {
 		repository.NewRolePlayRepository(database),
 		repository.NewQuestRepository(database),
 		repository.NewAIUsageRepository(database),
+		repository.NewRolePlayCharacterRepository(database),
+	)
+}
+
+func newRolePlayCharacterService(database *gorm.DB) *service.RolePlayCharacterService {
+	return service.NewRolePlayCharacterService(
+		repository.NewRolePlayCharacterRepository(database),
+		repository.NewQuestRepository(database),
 	)
 }
 
 func newCoopService(database *gorm.DB) *service.CoopService {
-	return service.NewCoopService(repository.NewCoopRepository(database))
+	return service.NewCoopService(
+		repository.NewCoopRepository(database),
+		repository.NewRolePlayCharacterRepository(database),
+	)
 }
 
 func newLiveService(database *gorm.DB) *service.LiveService {
@@ -2572,6 +2716,41 @@ func toRolePlayQuestInput(req rolePlayQuestRequest) service.RolePlayQuestInput {
 		Metadata: req.Metadata,
 		Arcs:     toRolePlayArcInputs(req.Arcs),
 	}
+}
+
+func toRolePlayCharacterInput(req rolePlayCharacterRequest) service.RolePlayCharacterInput {
+	return service.RolePlayCharacterInput{
+		Name:         req.Name,
+		Class:        req.Class,
+		Archetype:    req.Archetype,
+		Origin:       req.Origin,
+		Race:         req.Race,
+		Species:      req.Species,
+		Alignment:    req.Alignment,
+		Personality:  req.Personality,
+		Background:   req.Background,
+		PersonalGoal: defaultString(req.PersonalGoal, req.PersonalGoalAlt),
+		Goal:         req.Goal,
+		Level:        req.Level,
+		Attributes:   req.Attributes,
+		Skills:       req.Skills,
+		Traits:       req.Traits,
+		Inventory:    req.Inventory,
+		Health:       req.Health,
+		MaxHealth:    firstNonZero(req.MaxHealth, req.MaxHealthAlt),
+		Stress:       req.Stress,
+		Fatigue:      req.Fatigue,
+		Morale:       req.Morale,
+	}
+}
+
+func firstNonZero(values ...int) int {
+	for _, value := range values {
+		if value != 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 func parseUintParam(c *gin.Context, name string) (uint, error) {

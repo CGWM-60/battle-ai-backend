@@ -19,6 +19,7 @@ func NewRolePlayRepository(db *gorm.DB) *RolePlayRepository {
 func (r *RolePlayRepository) ListSessionsByOwner(ctx context.Context, ownerID uint, limit int) ([]models.RolePlaySession, error) {
 	var sessions []models.RolePlaySession
 	err := r.db.WithContext(ctx).
+		Preload("ActiveCharacter").
 		Where("owner_id = ?", ownerID).
 		Order("updated_at DESC").
 		Limit(limit).
@@ -29,6 +30,7 @@ func (r *RolePlayRepository) ListSessionsByOwner(ctx context.Context, ownerID ui
 func (r *RolePlayRepository) GetSessionOwnedByID(ctx context.Context, id uint, ownerID uint) (*models.RolePlaySession, error) {
 	var session models.RolePlaySession
 	err := r.db.WithContext(ctx).
+		Preload("ActiveCharacter").
 		Where("id = ? AND owner_id = ?", id, ownerID).
 		First(&session).Error
 	if err != nil {
@@ -85,6 +87,7 @@ func (r *RolePlayRepository) GetQuestRunBySession(ctx context.Context, sessionID
 	var run models.RolePlayQuestRun
 	err := r.db.WithContext(ctx).
 		Preload("Template").
+		Preload("Character").
 		Where("session_id = ?", sessionID).
 		First(&run).Error
 	if err != nil {

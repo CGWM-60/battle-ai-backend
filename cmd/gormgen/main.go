@@ -21,6 +21,7 @@ func main() {
 		models.BattleArenaMember{},
 		models.RolePlayQuestTemplate{},
 		models.RolePlayQuestRun{},
+		models.RolePlayCharacter{},
 		models.RolePlaySession{},
 		models.RolePlaySessionTurn{},
 		models.NexusCoinPlan{},
