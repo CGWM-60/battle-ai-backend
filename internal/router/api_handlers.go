@@ -1184,6 +1184,7 @@ func startRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
 			return
 		}
+		req.Snapshot = prepareInitialRolePlaySnapshot(req.Snapshot, req.Title, req.ScenarioPrompt)
 		session, err := newRolePlayService(database).CreateSession(c.Request.Context(), currentUserID(c), service.RolePlaySessionInput{
 			TemplateID:     id,
 			Title:          req.Title,
@@ -1211,6 +1212,7 @@ func createRolePlaySession(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay session payload"})
 			return
 		}
+		req.Snapshot = prepareInitialRolePlaySnapshot(req.Snapshot, req.Title, req.ScenarioPrompt)
 		session, err := newRolePlayService(database).CreateSession(c.Request.Context(), currentUserID(c), service.RolePlaySessionInput{
 			TemplateID:     req.TemplateID,
 			Title:          req.Title,
@@ -3116,4 +3118,135 @@ func slugify(value string) string {
 	}
 
 	return slug
+}
+func prepareInitialRolePlaySnapshot(snapshot map[string]any, title string, scenarioPrompt string) map[string]any {
+	if snapshot == nil {
+		snapshot = map[string]any{}
+	}
+
+	hero := mapFromAny(snapshot["hero"])
+
+	heroName := strings.TrimSpace(fmt.Sprint(hero["name"]))
+	if heroName == "" || heroName == "<nil>" {
+		heroName = "Héros"
+		hero["name"] = heroName
+	}
+
+	heroClass := strings.TrimSpace(fmt.Sprint(hero["class"]))
+	if heroClass == "" || heroClass == "<nil>" {
+		heroClass = strings.TrimSpace(fmt.Sprint(hero["characterClass"]))
+	}
+	if heroClass == "" || heroClass == "<nil>" {
+		heroClass = "Aventurier"
+		hero["class"] = heroClass
+	}
+
+	heroRace := strings.TrimSpace(fmt.Sprint(hero["race"]))
+	if heroRace == "" || heroRace == "<nil>" {
+		heroRace = "Inconnue"
+		hero["race"] = heroRace
+	}
+
+	snapshot["hero"] = hero
+
+	if _, exists := snapshot["activeNpcs"]; !exists {
+		snapshot["activeNpcs"] = []map[string]any{
+			{
+				"id":             "npc_mentor_01",
+				"name":           "Astra Vey",
+				"role":           "Guide de mission",
+				"archetype":      "mentor",
+				"mood":           "observatrice",
+				"personality":    "calme, lucide, exigeante",
+				"goal":           "Tester le héros et l’orienter sans choisir à sa place.",
+				"relationToHero": 5,
+				"trust":          5,
+				"fear":           0,
+				"respect":        5,
+			},
+			{
+				"id":             "npc_rival_01",
+				"name":           "Kael Morvane",
+				"role":           "Rival local",
+				"archetype":      "rival",
+				"mood":           "méfiant",
+				"personality":    "sec, provocateur, calculateur",
+				"goal":           "Tester les faiblesses du héros.",
+				"relationToHero": -3,
+				"trust":          0,
+				"fear":           0,
+				"respect":        2,
+			},
+		}
+	}
+
+	if _, exists := snapshot["npcRelations"]; !exists {
+		snapshot["npcRelations"] = map[string]any{
+			"npc_mentor_01": map[string]any{
+				"trust":          5,
+				"respect":        5,
+				"fear":           0,
+				"relationToHero": 5,
+			},
+			"npc_rival_01": map[string]any{
+				"trust":          0,
+				"respect":        2,
+				"fear":           0,
+				"relationToHero": -3,
+			},
+		}
+	}
+
+	if _, exists := snapshot["sceneDialogues"]; !exists {
+		questTitle := strings.TrimSpace(title)
+		if questTitle == "" {
+			questTitle = "cette mission"
+		}
+
+		snapshot["sceneDialogues"] = []map[string]any{
+			{
+				"speakerId":   "npc_mentor_01",
+				"speakerName": "Astra Vey",
+				"speakerType": "npc",
+				"tone":        "calme",
+				"content":     fmt.Sprintf("%s, ton profil de %s attire déjà l’attention. Avant d’avancer dans %s, je veux voir comment tu réagis.", heroName, heroClass, questTitle),
+			},
+			{
+				"speakerId":   "hero",
+				"speakerName": heroName,
+				"speakerType": "hero",
+				"tone":        "déterminé",
+				"content":     "Je suis prêt. Donne-moi les faits, pas les légendes.",
+			},
+			{
+				"speakerId":   "npc_rival_01",
+				"speakerName": "Kael Morvane",
+				"speakerType": "npc",
+				"tone":        "provocateur",
+				"content":     "Les faits ? Tu n’as encore rien prouvé. Ici, chaque mauvais choix laisse une trace.",
+			},
+		}
+	}
+
+	return snapshot
+}
+
+func mapFromAny(value any) map[string]any {
+	if value == nil {
+		return map[string]any{}
+	}
+
+	if typed, ok := value.(map[string]any); ok {
+		return typed
+	}
+
+	if typed, ok := value.(map[string]interface{}); ok {
+		result := map[string]any{}
+		for key, item := range typed {
+			result[key] = item
+		}
+		return result
+	}
+
+	return map[string]any{}
 }

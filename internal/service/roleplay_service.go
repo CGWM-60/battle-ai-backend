@@ -40,6 +40,7 @@ type RolePlayService struct {
 	characters *repository.RolePlayCharacterRepository
 }
 
+
 func NewRolePlayService(roleplay *repository.RolePlayRepository, quests *repository.QuestRepository, usage *repository.AIUsageRepository, characters *repository.RolePlayCharacterRepository) *RolePlayService {
 	return &RolePlayService{roleplay: roleplay, quests: quests, usage: usage, characters: characters}
 }
