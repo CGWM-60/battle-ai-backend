@@ -9,10 +9,10 @@ import (
 	translations "cgwm/battle/internal/nexus_game/translations"
 	nexustribunal "cgwm/battle/internal/nexus_tribunal"
 	"cgwm/battle/internal/repository"
+	"cgwm/battle/internal/service"
 	"errors"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -43,7 +43,7 @@ func RouterApp(database *gorm.DB) {
 	router.Use(admin.RequestMetricsMiddleware())
 	_ = os.MkdirAll(getEnv("BUILDING_ASSET_PUBLIC_DIR", "storage/assets/buildings"), 0o755)
 	router.Static("/assets/buildings", getEnv("BUILDING_ASSET_PUBLIC_DIR", "storage/assets/buildings"))
-	heroImageDir := getEnv("HERO_IMAGE_PUBLIC_DIR", filepath.Join(getEnv("NEXUS_ASSETS_BASE_DIR", "/nexus_game/assets"), "heroes"))
+	heroImageDir := service.HeroImagePublicDir()
 	_ = os.MkdirAll(heroImageDir, 0o755)
 	router.Static("/assets/heroes", heroImageDir)
 
@@ -77,6 +77,7 @@ func RouterApp(database *gorm.DB) {
 	publicFeed.GET("/live/sessions/:id/events", getPublicLiveSessionEvents(database))
 	publicFeed.GET("/live/:channel/history", getPublicLiveHistory(database))
 	publicFeed.GET("/live/:channel/stream", streamPublicLiveChannel(database))
+	publicFeed.GET("/roleplay/hero-images/:id/image", getPublicRolePlayHeroImage(database))
 
 	authenticated := api.Group("")
 	authenticated.Use(jwtAuth())

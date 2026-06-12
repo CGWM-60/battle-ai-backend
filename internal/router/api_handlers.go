@@ -15,6 +15,9 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -1003,7 +1006,11 @@ func listRolePlayCharacters(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list roleplay characters"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"characters": characters})
+		response := make([]models.RolePlayCharacter, 0, len(characters))
+		for i := range characters {
+			response = append(response, rolePlayCharacterWithServedImage(database, c.Request.Context(), &characters[i]))
+		}
+		c.JSON(http.StatusOK, gin.H{"characters": response})
 	}
 }
 
@@ -1019,7 +1026,8 @@ func createRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusCreated, gin.H{"character": character})
+		response := rolePlayCharacterWithServedImage(database, c.Request.Context(), character)
+		c.JSON(http.StatusCreated, gin.H{"character": response})
 	}
 }
 
@@ -1035,7 +1043,8 @@ func getRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusNotFound, gin.H{"error": "roleplay character not found"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"character": character})
+		response := rolePlayCharacterWithServedImage(database, c.Request.Context(), character)
+		c.JSON(http.StatusOK, gin.H{"character": response})
 	}
 }
 
@@ -1056,8 +1065,26 @@ func updateRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"character": character})
+		response := rolePlayCharacterWithServedImage(database, c.Request.Context(), character)
+		c.JSON(http.StatusOK, gin.H{"character": response})
 	}
+}
+
+func rolePlayCharacterWithServedImage(database *gorm.DB, ctx context.Context, character *models.RolePlayCharacter) models.RolePlayCharacter {
+	if character == nil {
+		return models.RolePlayCharacter{}
+	}
+	response := *character
+	if response.HeroImageID == nil || *response.HeroImageID == 0 {
+		return response
+	}
+	var image models.RolePlayHeroImage
+	if err := database.WithContext(ctx).
+		Where("id = ? AND is_active = ?", *response.HeroImageID, true).
+		First(&image).Error; err == nil {
+		response.ImageURL = rolePlayHeroImagePublicURL(image)
+	}
+	return response
 }
 
 func deleteRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {
@@ -1087,8 +1114,153 @@ func listRolePlayHeroImages(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list roleplay hero images"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"images": images})
+		response := make([]gin.H, 0, len(images))
+		for _, image := range images {
+			if len(image.ImageData) == 0 {
+				if path, err := rolePlayHeroImageDiskPath(image); err == nil {
+					backfillRolePlayHeroImageData(database, c.Request.Context(), &image, path)
+				}
+			}
+			response = append(response, rolePlayHeroImagePayload(image))
+		}
+		c.JSON(http.StatusOK, gin.H{"images": response})
 	}
+}
+
+func getPublicRolePlayHeroImage(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil || id == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hero image id"})
+			return
+		}
+
+		var image models.RolePlayHeroImage
+		if err := database.WithContext(c.Request.Context()).
+			Where("id = ? AND is_active = ?", uint(id), true).
+			First(&image).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "hero image not found"})
+			return
+		}
+
+		path, err := rolePlayHeroImageDiskPath(image)
+		if err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "hero image file not found"})
+			return
+		}
+		backfillRolePlayHeroImageData(database, c.Request.Context(), &image, path)
+
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		c.File(path)
+	}
+}
+
+func backfillRolePlayHeroImageData(database *gorm.DB, ctx context.Context, image *models.RolePlayHeroImage, path string) {
+	if image == nil || image.Id == 0 || len(image.ImageData) > 0 {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 || len(data) > 10*1024*1024 {
+		return
+	}
+	updates := map[string]any{
+		"image_data": data,
+	}
+	if image.ImageSize <= 0 {
+		updates["image_size"] = int64(len(data))
+	}
+	if err := database.WithContext(ctx).
+		Model(&models.RolePlayHeroImage{}).
+		Where("id = ? AND image_data IS NULL", image.Id).
+		Updates(updates).Error; err == nil {
+		image.ImageData = data
+		if image.ImageSize <= 0 {
+			image.ImageSize = int64(len(data))
+		}
+	}
+}
+
+func rolePlayHeroImagePayload(image models.RolePlayHeroImage) gin.H {
+	return gin.H{
+		"id":        image.Id,
+		"createdAt": image.CreatedAt,
+		"updatedAt": image.UpdatedAt,
+		"name":      image.Name,
+		"sex":       image.Sex,
+		"imageUrl":  rolePlayHeroImagePublicURL(image),
+		"imageHash": image.ImageHash,
+		"imageSize": image.ImageSize,
+		"version":   image.Version,
+		"isActive":  image.IsActive,
+	}
+}
+
+func rolePlayHeroImagePublicURL(image models.RolePlayHeroImage) string {
+	return fmt.Sprintf("/api/v1/public/roleplay/hero-images/%d/image?v=%d", image.Id, image.Version)
+}
+
+func rolePlayHeroImageDiskPath(image models.RolePlayHeroImage) (string, error) {
+	rel, err := rolePlayHeroImageRelativePath(image.ImageURL)
+	if err != nil {
+		return "", err
+	}
+	root, err := filepath.Abs(service.HeroImagePublicDir())
+	if err != nil {
+		return "", err
+	}
+	candidate, err := filepath.Abs(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		return "", err
+	}
+	if candidate != root && !strings.HasPrefix(candidate, root+string(os.PathSeparator)) {
+		return "", fmt.Errorf("invalid hero image path")
+	}
+	info, err := os.Stat(candidate)
+	if err != nil || info.IsDir() {
+		if len(image.ImageData) == 0 {
+			return "", fmt.Errorf("hero image file not found")
+		}
+		if err := os.MkdirAll(filepath.Dir(candidate), 0o755); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(candidate, image.ImageData, 0o644); err != nil {
+			return "", err
+		}
+	}
+	return candidate, nil
+}
+
+func rolePlayHeroImageRelativePath(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", fmt.Errorf("empty hero image URL")
+	}
+	if parsed, err := url.Parse(trimmed); err == nil && parsed.Path != "" {
+		trimmed = parsed.Path
+	}
+
+	publicBase := service.HeroImagePublicBaseURL()
+	if parsed, err := url.Parse(publicBase); err == nil && parsed.Path != "" {
+		publicBase = parsed.Path
+	}
+	publicBase = "/" + strings.Trim(strings.TrimSpace(publicBase), "/")
+	prefixes := []string{
+		publicBase + "/",
+		"/assets/heroes/",
+		"/nexus_game/assets/heroes/",
+		"assets/heroes/",
+		"nexus_game/assets/heroes/",
+	}
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(trimmed, prefix) {
+			rel := strings.TrimPrefix(trimmed, prefix)
+			rel = strings.TrimPrefix(rel, "/")
+			if rel != "" {
+				return filepath.ToSlash(rel), nil
+			}
+		}
+	}
+	return "", fmt.Errorf("unsupported hero image URL")
 }
 
 func validateRolePlayCharacter(database *gorm.DB) gin.HandlerFunc {

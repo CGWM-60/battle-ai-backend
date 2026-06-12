@@ -24,7 +24,7 @@ func NewRolePlayHeroImageService(db *gorm.DB) *RolePlayHeroImageService {
 	return &RolePlayHeroImageService{db: db}
 }
 
-func heroImagePublicDir() string {
+func HeroImagePublicDir() string {
 	if dir := strings.TrimSpace(os.Getenv("HERO_IMAGE_PUBLIC_DIR")); dir != "" {
 		return dir
 	}
@@ -35,7 +35,7 @@ func heroImagePublicDir() string {
 	return filepath.Join(baseDir, "heroes")
 }
 
-func heroImagePublicBaseURL() string {
+func HeroImagePublicBaseURL() string {
 	return strings.TrimRight(defaultText(os.Getenv("HERO_IMAGE_PUBLIC_BASE_URL"), "/assets/heroes"), "/")
 }
 
@@ -57,12 +57,21 @@ func (s *RolePlayHeroImageService) SaveUpload(ctx context.Context, name string, 
 		version = maxVersion + 1
 	}
 
-	assetDir := heroImagePublicDir()
-	publicBase := heroImagePublicBaseURL()
+	assetDir := HeroImagePublicDir()
+	publicBase := HeroImagePublicBaseURL()
 	relDir := filepath.Join(sex, safeAssetSegment(name))
 	fullDir := filepath.Join(assetDir, relDir)
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		return nil, err
+	}
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	size := int64(len(data))
+	if size > 10*1024*1024 {
+		return nil, fmt.Errorf("asset file is too large")
 	}
 
 	ext := strings.ToLower(filepath.Ext(originalName))
@@ -71,21 +80,12 @@ func (s *RolePlayHeroImageService) SaveUpload(ctx context.Context, name string, 
 	}
 	filename := fmt.Sprintf("hero_%s_v%d_%d%s", safeAssetSegment(name), version, time.Now().UnixNano(), ext)
 	fullPath := filepath.Join(fullDir, filename)
-	out, err := os.Create(fullPath)
-	if err != nil {
-		return nil, err
-	}
-	defer out.Close()
-
 	hasher := sha256.New()
-	size, err := io.Copy(io.MultiWriter(out, hasher), reader)
-	if err != nil {
-		_ = os.Remove(fullPath)
+	if _, err := hasher.Write(data); err != nil {
 		return nil, err
 	}
-	if size > 10*1024*1024 {
-		_ = os.Remove(fullPath)
-		return nil, fmt.Errorf("asset file is too large")
+	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+		return nil, err
 	}
 
 	relURL := filepath.ToSlash(filepath.Join(relDir, filename))
@@ -95,6 +95,7 @@ func (s *RolePlayHeroImageService) SaveUpload(ctx context.Context, name string, 
 		ImageURL:  publicBase + "/" + relURL,
 		ImageHash: hex.EncodeToString(hasher.Sum(nil)),
 		ImageSize: size,
+		ImageData: data,
 		Version:   version,
 		IsActive:  true,
 	}

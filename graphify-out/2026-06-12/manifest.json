@@ -875,8 +875,8 @@
     "semantic_hash": "17ae2df3a7e7d1ef8b20887ab7d9cc7f"
   },
   "internal/router/api_handlers.go": {
-    "mtime": 1781258283.89101,
-    "ast_hash": "9d4961cff0b122bf4f5342cc6e473f27",
+    "mtime": 1781270731.2306802,
+    "ast_hash": "c15e37f47657b2a92ddfc711c7b92296",
     "semantic_hash": ""
   },
   "internal/router/city_engines_handlers.go": {
@@ -905,8 +905,8 @@
     "semantic_hash": "93699356f090794281143eab1bb53c3e"
   },
   "internal/router/router.go": {
-    "mtime": 1781258205.9063396,
-    "ast_hash": "39739a76adcdca9e65ae34c8549977d0",
+    "mtime": 1781270701.6581578,
+    "ast_hash": "7ce5478c59e772898dee249cbd6b3be1",
     "semantic_hash": ""
   },
   "internal/router/router_startup_test.go": {
@@ -1110,9 +1110,9 @@
     "semantic_hash": "65ac1ff3b8e2df02ed2c626b4a49c363"
   },
   "compose.prod.yml": {
-    "mtime": 1780930512.8965423,
-    "ast_hash": "b7aa95dea5f41b5d5f8d7d6648d22241",
-    "semantic_hash": "b7aa95dea5f41b5d5f8d7d6648d22241"
+    "mtime": 1781269982.3209798,
+    "ast_hash": "13486aae540ad2fc955f4b1268c95d73",
+    "semantic_hash": ""
   },
   "docs/WORLD_API_CONTRACT.md": {
     "mtime": 1781092297.63618,
@@ -1245,8 +1245,8 @@
     "semantic_hash": ""
   },
   "internal/service/roleplay_hero_image_service.go": {
-    "mtime": 1781258192.2211187,
-    "ast_hash": "929fe7f7ad8eb65d373efb059ef14ef1",
+    "mtime": 1781270678.8016937,
+    "ast_hash": "e0e09a30d8930d6a5951eadff8f916fd",
     "semantic_hash": ""
   }
 }

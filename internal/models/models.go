@@ -419,6 +419,7 @@ type RolePlayHeroImage struct {
 	ImageURL  string `gorm:"size:500" json:"imageUrl"`
 	ImageHash string `gorm:"size:128;index" json:"imageHash"`
 	ImageSize int64  `json:"imageSize"`
+	ImageData []byte `gorm:"type:longblob" json:"-"`
 	Version   int    `gorm:"index" json:"version"`
 	IsActive  bool   `gorm:"index" json:"isActive"`
 }
