@@ -70,8 +70,8 @@
     "semantic_hash": "5bfb445bddbe552ad424311fb06df150"
   },
   "admin/app/nexus/ai-server/page.tsx": {
-    "mtime": 1781197038.2009344,
-    "ast_hash": "1d13eade82ad22d5ed3188f2f51db2db",
+    "mtime": 1781338001.8491385,
+    "ast_hash": "9b7adec72f2a70b3654405c6ad715df0",
     "semantic_hash": ""
   },
   "admin/app/nexus/ai-server/prompts/page.tsx": {
@@ -450,8 +450,8 @@
     "semantic_hash": "07eff2ad967ccf76bcc38c613fd9e119"
   },
   "internal/models/models.go": {
-    "mtime": 1781258168.2646337,
-    "ast_hash": "204195b5d5eb5e343bcfca0d1280a690",
+    "mtime": 1781299796.0918062,
+    "ast_hash": "79988733d927e3193e3d0ccd1388d6c5",
     "semantic_hash": ""
   },
   "internal/models/nexus_translation_models.go": {
@@ -545,8 +545,8 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/handlers/resource_handler.go": {
-    "mtime": 1781197642.3567638,
-    "ast_hash": "0c6f2eec2b23341f1e06e3cb17933021",
+    "mtime": 1781337894.0914767,
+    "ast_hash": "625df6e396869ef2ace37c7464615649",
     "semantic_hash": ""
   },
   "internal/nexus_game/handlers/world_handler.go": {
@@ -625,8 +625,8 @@
     "semantic_hash": "f3e5230e35b1d69253af9d09a930bdf8"
   },
   "internal/nexus_game/routes/routes.go": {
-    "mtime": 1781186185.1177022,
-    "ast_hash": "1b677fbd012f21299c680e9982793097",
+    "mtime": 1781337898.2680304,
+    "ast_hash": "3c7d8d9498bc925b4d905a45c6c6b005",
     "semantic_hash": ""
   },
   "internal/nexus_game/routes/routes_test.go": {
@@ -665,8 +665,8 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/services/content_service.go": {
-    "mtime": 1781188369.1093457,
-    "ast_hash": "21e110ca88c135bc6bd36d1f579eb393",
+    "mtime": 1781337829.2986484,
+    "ast_hash": "d52b0769874e55df2c82ecb693129882",
     "semantic_hash": ""
   },
   "internal/nexus_game/services/resource_service.go": {
@@ -875,8 +875,8 @@
     "semantic_hash": "17ae2df3a7e7d1ef8b20887ab7d9cc7f"
   },
   "internal/router/api_handlers.go": {
-    "mtime": 1781270802.8081338,
-    "ast_hash": "29209287ae6019112fcfb403490dab9b",
+    "mtime": 1781299888.8550735,
+    "ast_hash": "1328ab4ee1d575a150f3ac489492f477",
     "semantic_hash": ""
   },
   "internal/router/city_engines_handlers.go": {
@@ -1245,8 +1245,8 @@
     "semantic_hash": ""
   },
   "internal/service/roleplay_hero_image_service.go": {
-    "mtime": 1781270678.8016937,
-    "ast_hash": "e0e09a30d8930d6a5951eadff8f916fd",
+    "mtime": 1781299796.0925903,
+    "ast_hash": "0990fcca5a6d01ca7975743b262f6626",
     "semantic_hash": ""
   }
 }

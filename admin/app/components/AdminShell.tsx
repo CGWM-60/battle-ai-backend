@@ -42,6 +42,7 @@ const navSections: { title: string; items: NavItem[] }[] = [
     title: "Nexus World",
     items: [
       { href: "/nexus/world/", path: "/admin/nexus/world/", label: "Tour de controle", icon: RadioTower },
+      { href: "/nexus/system/", path: "/admin/nexus/system/", label: "Gestion systeme", icon: Settings },
       { href: "/nexus/mmo/", path: "/admin/nexus/mmo/", label: "Console MMO", icon: Users, exact: true },
       { href: "/nexus/mmo/buildings", path: "/admin/nexus/mmo/buildings", label: "Batiments", icon: Building2 },
       { href: "/nexus/mmo/units", path: "/admin/nexus/mmo/units", label: "Unites", icon: Zap },

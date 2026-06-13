@@ -394,6 +394,10 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.PUT("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
 	api.PATCH("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
 	api.DELETE("/nexus-coin/plans/:id", server.deleteNexusCoinPlanAPI)
+	api.GET("/nexus-system", server.nexusSystemAPI)
+	api.POST("/nexus-system/resources/grant", server.nexusSystemGrantResourceAPI)
+	api.POST("/nexus-system/units/grant", server.nexusSystemGrantUnitsAPI)
+	api.POST("/nexus-system/ai/jobs/run-due", server.nexusSystemRunDueAIJobsAPI)
 	// Monde IA desactive: ne pas exposer /admin/api/game.
 	// server.registerGameAdminAPI(api)
 

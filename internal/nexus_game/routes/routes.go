@@ -98,12 +98,16 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	worldH := handlers.NewWorldHandler(database, redis)
 	resourceH := handlers.NewResourceHandler(database)
 	gameConfigH := handlers.NewGameConfigHandler(database)
+	contentSvc := services.NewContentService(database, nexusContentAssetsDir())
+	armyH := handlers.NewArmyHandler(services.NewArmyService(database, contentSvc))
 
 	// Auto migrate models (inside nexus_game only)
 	if database != nil {
 		database.AutoMigrate(&models.Avatar{}, &models.Faction{}, &models.IACompanion{}, &models.ProfileGamer{}, &models.World{}, &models.Continent{}, &models.Prompt{}, &models.AIOutput{}, &models.MmoIAAgent{}, &models.DailyPlan{},
 			&models.BuildingDefinition{}, &models.PlayerBuilding{},
 			&models.UnitDefinition{}, &models.PlayerUnit{},
+			&models.UnitTrainingQueue{}, &models.ArmyFormation{}, &models.ArmyFormationSlot{}, &models.ArmySlotAssignment{},
+			&models.ArmyAutomationSettings{}, &models.ArmyCombatReport{}, &models.ArmyTransactionLog{},
 			&models.ResearchDefinition{}, &models.PlayerResearch{},
 			&models.ResourceCatalog{}, &models.PlayerResource{}, &models.PlayerCityStats{},
 			&models.ResourceTransaction{}, &models.DailyGrantClaim{}, &models.DailyGrantConfig{},
@@ -112,7 +116,6 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 
 		// Seed initial content for dev (full reference v2.0: buildings, units, research).
 		// In prod: use admin CRUD + asset upload for the complete catalogs.
-		contentSvc := services.NewContentService(database, nexusContentAssetsDir())
 		_ = seeds.SeedInitialBuildings(database, contentSvc)
 		_ = seeds.SeedInitialUnits(database, contentSvc)
 		_ = seeds.SeedInitialResearch(database, contentSvc)
@@ -198,13 +201,32 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/daily-grant/status", resourceH.DailyGrantStatus)
 	group.POST("/daily-grant/claim", resourceH.DailyGrantClaim)
 	group.GET("/daily-grant/history", resourceH.DailyGrantHistory)
+
+	// Nexus army and units. Backend validates prerequisites, resources, capacity, queue and slots.
+	group.GET("/units/catalog", armyH.Catalog)
+	group.GET("/units", armyH.PlayerUnits)
+	group.GET("/units/training-queue", armyH.TrainingQueue)
+	group.POST("/units/train", armyH.Train)
+	group.POST("/units/training/:id/cancel", armyH.CancelTraining)
+	group.POST("/units/training/:id/claim", armyH.ClaimTraining)
+	group.GET("/army/formations", armyH.Formations)
+	group.GET("/army/formations/:id", armyH.Formation)
+	group.POST("/army/formations/:id/slots/:slotId/assign", armyH.Assign)
+	group.POST("/army/formations/:id/slots/:slotId/remove", armyH.Remove)
+	group.POST("/army/formations/:id/auto-compose", armyH.CommanderSuggest)
+	group.POST("/army/formations/:id/validate", armyH.ValidateFormation)
+	group.POST("/army/formations/:id/save-preset", armyH.ValidateFormation)
+	group.POST("/army/formations/:id/commander-ai/suggest", armyH.CommanderSuggest)
+	group.GET("/army/automation", armyH.Automation)
+	group.PUT("/army/automation", armyH.SaveAutomation)
+	group.GET("/army/combat-reports", armyH.CombatReports)
 	serverairoutes.Register(group, database)
 
 	// Content system (Buildings first, extensible to Units/Research per NEXUS GAME CONTENT REFERENCE v2.0).
 	// Admin CRUD + asset upload (images served by this server after upload).
 	// Player construction endpoints (queues, completion).
 	// Each major item (buildings/units/research) will have its table + CRUD here.
-	contentH := handlers.NewContentHandler(services.NewContentService(database, nexusContentAssetsDir()))
+	contentH := handlers.NewContentHandler(contentSvc)
 
 	// Admin / catalog
 	// Page routes must be mounted before /:contentId routes so "/page" is not
@@ -221,6 +243,14 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/admin/resources/seed/preview", resourceH.AdminSeedPreview)
 	group.POST("/admin/resources/seed/commit", resourceH.AdminSeedCommit)
 	group.GET("/admin/resources/seed/status", resourceH.AdminSeedStatus)
+	group.GET("/admin/army/snapshot", armyH.AdminSnapshot)
+	group.GET("/admin/units/catalog", armyH.AdminCatalog)
+	group.GET("/admin/units/players/:profileId", armyH.AdminPlayerUnits)
+	group.POST("/admin/units/players/:profileId/grant", armyH.AdminGrantUnits)
+	group.POST("/admin/units/players/:profileId/remove", armyH.AdminGrantUnits)
+	group.GET("/admin/army/formations", armyH.AdminSnapshot)
+	group.GET("/admin/army/combat-reports", armyH.AdminSnapshot)
+	group.GET("/admin/army/training-queues", armyH.AdminSnapshot)
 	group.GET("/admin/game-config", gameConfigH.Get)
 	group.PUT("/admin/game-config", gameConfigH.Update)
 

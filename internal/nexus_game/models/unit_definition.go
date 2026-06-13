@@ -44,11 +44,16 @@ type UnitDefinition struct {
 
 // PlayerUnit - owned units (for army, training queues etc.)
 type PlayerUnit struct {
-	ID             uint   `gorm:"primaryKey" json:"id"`
-	ProfileGamerID uint   `json:"profileGamerId"`
-	ContentID      string `json:"contentId"`
-	Count          int    `json:"count" gorm:"default:0"`
-	// For training queue etc.
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID                uint      `gorm:"primaryKey" json:"id"`
+	ProfileGamerID    uint      `json:"profileGamerId"`
+	ContentID         string    `json:"contentId"`
+	Count             int       `json:"count" gorm:"default:0"`
+	ReserveQuantity   int       `json:"reserveQuantity" gorm:"default:0"`
+	AssignedQuantity  int       `json:"assignedQuantity" gorm:"default:0"`
+	WoundedQuantity   int       `json:"woundedQuantity" gorm:"default:0"`
+	DamagedQuantity   int       `json:"damagedQuantity" gorm:"default:0"`
+	InactiveQuantity  int       `json:"inactiveQuantity" gorm:"default:0"`
+	DestroyedQuantity int       `json:"destroyedQuantity" gorm:"default:0"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
 }

@@ -5,8 +5,8 @@
     "semantic_hash": "800b587e27a7f9670c50b953f0d8af9b"
   },
   "admin/app/components/AdminShell.tsx": {
-    "mtime": 1781258330.3261454,
-    "ast_hash": "550d4b130bfe057aba133821eeca0f1a",
+    "mtime": 1781339692.0524766,
+    "ast_hash": "53452cdc4da0d25af5360c1c1d9cc7bc",
     "semantic_hash": ""
   },
   "admin/app/components/LoadState.tsx": {
@@ -325,8 +325,8 @@
     "semantic_hash": "d5381f740cc9e114d7b0af83d6d80e04"
   },
   "internal/admin/admin.go": {
-    "mtime": 1781258426.0490313,
-    "ast_hash": "269bcd67387f894ebbefbe3d7ef68ff0",
+    "mtime": 1781339683.5842738,
+    "ast_hash": "2ae1e6a4debef889a90e5cd28fbe1b40",
     "semantic_hash": ""
   },
   "internal/admin/admin_test.go": {
@@ -610,8 +610,8 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/models/unit_definition.go": {
-    "mtime": 1781100437.0278928,
-    "ast_hash": "7cf0a70091874d27f0785312884c9e0c",
+    "mtime": 1781339760.22649,
+    "ast_hash": "a1e35d66d3dd924c905faf0db34c3240",
     "semantic_hash": ""
   },
   "internal/nexus_game/models/world.go": {
@@ -625,8 +625,8 @@
     "semantic_hash": "f3e5230e35b1d69253af9d09a930bdf8"
   },
   "internal/nexus_game/routes/routes.go": {
-    "mtime": 1781337898.2680304,
-    "ast_hash": "3c7d8d9498bc925b4d905a45c6c6b005",
+    "mtime": 1781339641.8479412,
+    "ast_hash": "693195224323c2e80b835720792b4e23",
     "semantic_hash": ""
   },
   "internal/nexus_game/routes/routes_test.go": {
@@ -1247,6 +1247,41 @@
   "internal/service/roleplay_hero_image_service.go": {
     "mtime": 1781299796.0925903,
     "ast_hash": "0990fcca5a6d01ca7975743b262f6626",
+    "semantic_hash": ""
+  },
+  "admin/app/nexus/system/page.tsx": {
+    "mtime": 1781339750.9218178,
+    "ast_hash": "a15c96bcaa52155dadfa2f338a2d917a",
+    "semantic_hash": ""
+  },
+  "internal/admin/nexus_system_api.go": {
+    "mtime": 1781339760.2262864,
+    "ast_hash": "0204046ca5c175c6f9928a25903118d9",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/handlers/army_handler.go": {
+    "mtime": 1781339781.1507783,
+    "ast_hash": "e30ac33e754a5fca39898d0fa7538cd8",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/models/army.go": {
+    "mtime": 1781339760.2263753,
+    "ast_hash": "1b8d526d92132b2ea9bd708ac3c472f5",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/repositories/army_repository.go": {
+    "mtime": 1781339286.8923008,
+    "ast_hash": "1a172505b7db881097bc6fefacee8c2d",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/services/army_rules_test.go": {
+    "mtime": 1781339828.2130253,
+    "ast_hash": "ac7d8521dd68146fb6eb0b01b705af78",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/services/army_service.go": {
+    "mtime": 1781339760.2292352,
+    "ast_hash": "0f66cc6d82a869bd3553d68b24eefd23",
     "semantic_hash": ""
   }
 }
