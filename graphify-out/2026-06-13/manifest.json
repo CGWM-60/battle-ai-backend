@@ -1130,8 +1130,8 @@
     "semantic_hash": ""
   },
   "admin/app/nexus/world/page.tsx": {
-    "mtime": 1781197539.7019658,
-    "ast_hash": "8fe197ba32cefd930d5d4dce5499024f",
+    "mtime": 1781342745.341235,
+    "ast_hash": "df5899a60192bcf1ebeca673733174f5",
     "semantic_hash": ""
   },
   "internal/nexus_game/services/content_prerequisites_test.go": {
@@ -1255,8 +1255,8 @@
     "semantic_hash": ""
   },
   "internal/admin/nexus_system_api.go": {
-    "mtime": 1781339760.2262864,
-    "ast_hash": "0204046ca5c175c6f9928a25903118d9",
+    "mtime": 1781342661.7142358,
+    "ast_hash": "7f7c4fc305edbab5555df5a9ead6a707",
     "semantic_hash": ""
   },
   "internal/nexus_game/handlers/army_handler.go": {

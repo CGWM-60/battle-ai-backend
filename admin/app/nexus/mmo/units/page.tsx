@@ -9,6 +9,8 @@ const API_BASE = (process.env.NEXT_PUBLIC_NEXUS_API_BASE || "").replace(/\/$/, "
 interface Unit {
   id: number;
   contentId: string;
+  type?: string;
+  domain?: string;
   nameKey?: string;
   descriptionKey?: string;
   flavorTextKey?: string;
@@ -24,9 +26,11 @@ interface Unit {
   assetId?: string;
   assetsByTier?: Record<string, string>;
   effects?: string;
+  isPublished?: boolean;
 }
 
 const ASSET_KEYS = ["main", "tier1", "tier2", "tier3", "tier4"] as const;
+const UNIT_TYPES = ["infantry", "drone", "support", "special", "mecha", "artillerie", "defense", "commander", "officer"] as const;
 
 function buildAssetUrl(folder: string, fileName?: string) {
   if (!fileName) return null;
@@ -93,7 +97,7 @@ export default function UnitsAdminPage() {
   };
   useEffect(() => { fetchItems(); }, []);
 
-  const openCreate = () => { setCurrent(null); setForm({ contentId: '', nameKey: '', descriptionKey: '', flavorTextKey: '', levelDescriptionKeys: '{}', rarity: 'common', maxLevel: 30, healthBase: 100, attackBase: 20 }); setModal('create'); };
+  const openCreate = () => { setCurrent(null); setForm({ contentId: '', domain: 'unit', type: 'infantry', nameKey: '', descriptionKey: '', flavorTextKey: '', levelDescriptionKeys: '{}', rarity: 'common', maxLevel: 30, healthBase: 100, attackBase: 20, defenseBase: 10, speedBase: 10, trainingTimeBaseSeconds: 300, upkeepBase: 1, isPublished: true }); setModal('create'); };
   const openEdit = (item: Unit) => { setCurrent(item); setForm({ ...item, levelDescriptionKeys: stringifyRecord(item.levelDescriptionKeys) }); setModal('edit'); };
   const openDelete = (item: Unit) => { setCurrent(item); setModal('delete'); };
   const closeModal = () => { setModal(null); setCurrent(null); setForm({}); setError(null); };
@@ -170,7 +174,7 @@ export default function UnitsAdminPage() {
                     translations={translations}
                     titleKey={u.nameKey}
                     contentId={u.contentId}
-                    badges={[u.rarity || '-', `lvl ${u.maxLevel || '-'}`]}
+                    badges={[u.type ? `type ${u.type}` : 'type manquant', u.rarity || '-', `lvl ${u.maxLevel || '-'}`, u.isPublished === false ? 'draft' : 'published']}
                   />
                 </td>
                 <td><DescriptionSummary translations={translations} descriptionKey={u.descriptionKey} flavorTextKey={u.flavorTextKey} /></td>
@@ -197,6 +201,10 @@ export default function UnitsAdminPage() {
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 8 }}>
                   <input placeholder="contentId" value={form.contentId || ''} onChange={e=>setForm({...form, contentId:e.target.value})} />
+                  <select value={form.type || ''} onChange={e=>setForm({...form, type:e.target.value})}>
+                    <option value="" disabled>type tactique requis</option>
+                    {UNIT_TYPES.map((type) => <option value={type} key={type}>{type}</option>)}
+                  </select>
                   <input placeholder="nameKey" value={form.nameKey || ''} onChange={e=>setForm({...form, nameKey:e.target.value})} />
                   <input placeholder="descriptionKey" value={form.descriptionKey || ''} onChange={e=>setForm({...form, descriptionKey:e.target.value})} />
                   <input placeholder="flavorTextKey (optionnel)" value={form.flavorTextKey || ''} onChange={e=>setForm({...form, flavorTextKey:e.target.value})} />
@@ -206,7 +214,19 @@ export default function UnitsAdminPage() {
                   <input type="number" placeholder="maxLevel" value={form.maxLevel || 30} onChange={e=>setForm({...form, maxLevel:parseInt(e.target.value)})} />
                   <input type="number" placeholder="healthBase" value={form.healthBase || ''} onChange={e=>setForm({...form, healthBase:parseInt(e.target.value)})} />
                   <input type="number" placeholder="attackBase" value={form.attackBase || ''} onChange={e=>setForm({...form, attackBase:parseInt(e.target.value)})} />
+                  <input type="number" placeholder="defenseBase" value={form.defenseBase || ''} onChange={e=>setForm({...form, defenseBase:parseInt(e.target.value)})} />
+                  <input type="number" placeholder="speedBase" value={form.speedBase || ''} onChange={e=>setForm({...form, speedBase:parseInt(e.target.value)})} />
+                  <input type="number" placeholder="trainingTimeBaseSeconds" value={form.trainingTimeBaseSeconds || ''} onChange={e=>setForm({...form, trainingTimeBaseSeconds:parseInt(e.target.value)})} />
+                  <input type="number" placeholder="upkeepBase" value={form.upkeepBase || ''} onChange={e=>setForm({...form, upkeepBase:parseInt(e.target.value)})} />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#cbd5e1', fontSize: 13 }}>
+                    <input type="checkbox" checked={form.isPublished !== false} onChange={e=>setForm({...form, isPublished:e.target.checked})} />
+                    Publiée / utilisable
+                  </label>
                 </div>
+
+                <p style={{ marginTop: 8, color: '#94a3b8', fontSize: 12 }}>
+                  Le type tactique est utilisé par les slots d'armée: infantry, drone, support, special, mecha, artillerie, defense, commander, officer.
+                </p>
 
                 <div style={{ marginTop: 12 }}>
                   <label style={{ fontSize: 12, color: '#94a3b8' }}>Descriptions par niveau (clés i18n JSON, ex: niveau 1 → nexus_game.unit.xxx.level_1.description)</label>
@@ -229,7 +249,7 @@ export default function UnitsAdminPage() {
                 </div>
 
                 <div style={{ marginTop: 16 }}>
-                  <button onClick={submitForm} disabled={loading || !form.contentId} style={{ background: '#3b82f6', color: 'white', padding: '10px 20px' }}>{modal==='create'?'Créer':'Sauvegarder'}</button>
+                  <button onClick={submitForm} disabled={loading || !form.contentId || !form.type} style={{ background: '#3b82f6', color: 'white', padding: '10px 20px' }}>{modal==='create'?'Créer':'Sauvegarder'}</button>
                   <button onClick={closeModal} style={{ marginLeft: 8 }}>Annuler</button>
                 </div>
               </>
