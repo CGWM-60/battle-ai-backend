@@ -198,6 +198,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/resources", resourceH.Resources)
 	group.GET("/resources/catalog", resourceH.Catalog)
 	group.GET("/resources/transactions", resourceH.Transactions)
+	group.POST("/resources/collect", resourceH.Collect) // explicit RECOLTER: accrues pending production to reserve Amount, resets cycle
 	group.GET("/city/stats", resourceH.CityStats)
 	group.GET("/daily-grant/status", resourceH.DailyGrantStatus)
 	group.POST("/daily-grant/claim", resourceH.DailyGrantClaim)

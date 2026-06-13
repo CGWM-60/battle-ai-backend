@@ -1179,7 +1179,14 @@ func (s *ResourceService) PlayerSnapshot(ctx context.Context, profileID uint) (m
 	if err := s.EnsureInitialAllocation(ctx, profileID); err != nil {
 		return nil, err
 	}
-	if err := s.SyncBuildingProduction(ctx, profileID, true); err != nil {
+	// Normal snapshot (for UI, rates, bootstrap, production screen live prediction, etc.)
+	// does NOT auto-accrue production to the main reserve Amount.
+	// Accrual to Amount (adding produced to the player's stored reserve) only happens on explicit
+	// player "recolter/harvest" action. This enforces the rule:
+	//   reserve stays at last harvested value until the player clicks recolter.
+	//   Production accumulates in "pending" (visible in production UI via live prediction).
+	//   On recolter: reserve += pending, pending resets (new cycle because sync time updated).
+	if err := s.SyncBuildingProduction(ctx, profileID, false); err != nil {
 		return nil, err
 	}
 	var profile models.ProfileGamer

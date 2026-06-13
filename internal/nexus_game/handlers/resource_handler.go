@@ -64,6 +64,34 @@ func (h *ResourceHandler) Resources(c *gin.Context) {
 	c.JSON(http.StatusOK, snapshot)
 }
 
+// Collect is the explicit player "RECOLTER" action for production.
+// It forces accrual of pending production into the main reserve Amount (via Sync true),
+// then returns a fresh snapshot (which uses false internally so no further auto-accrual).
+// This implements the rule:
+//   - Reserve (Amount) stays at the last harvested value until explicit recolter.
+//   - Production accumulates separately (shown via live prediction in production UI).
+//   - On recolter: reserve += current produced, produced resets to 0 (new cycle, because LastProductionSyncAt is updated).
+//   - Applies to all production resources.
+func (h *ResourceHandler) Collect(c *gin.Context) {
+	profileID, ok := h.profileID(c)
+	if !ok {
+		return
+	}
+	ctx := c.Request.Context()
+	if err := h.resourceService.SyncBuildingProduction(ctx, profileID, true); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to harvest/collect production"})
+		return
+	}
+	// Return updated snapshot. The internal PlayerSnapshot now uses applyAccrual=false,
+	// so Amount reflects the just-harvested value, and rates are fresh for the new cycle.
+	snapshot, err := h.resourceService.PlayerSnapshot(ctx, profileID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load snapshot after harvest"})
+		return
+	}
+	c.JSON(http.StatusOK, snapshot)
+}
+
 func (h *ResourceHandler) Catalog(c *gin.Context) {
 	resources, err := repositories.NewResourceCatalogRepository(h.db).List(c.Request.Context(), true)
 	if err != nil {
