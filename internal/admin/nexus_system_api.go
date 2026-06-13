@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"context"
 	"net/http"
 	"strings"
 
@@ -116,8 +115,4 @@ func firstProfileID(snapshot map[string]any) uint {
 		return 0
 	}
 	return players[0].ID
-}
-
-func runWithBackgroundContext(fn func(context.Context) error) error {
-	return fn(context.Background())
 }

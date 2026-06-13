@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminShell } from "../../components/AdminShell";
 import { formatDate, formatNumber, loadAdminData } from "../../components/api";
 import type { DashboardData } from "../../types";
@@ -117,6 +117,14 @@ function contentLabel(item: any, ownerKey: string) {
   );
 }
 
+function resourceCode(resource: any) {
+  return String(resource?.resourceCode || resource?.resource_code || "");
+}
+
+function resourceAmount(resource: any) {
+  return Number(resource?.amount || 0);
+}
+
 export default function NexusWorldControlPage() {
   const [state, setState] = useState<CockpitState>(emptyState);
   const [loading, setLoading] = useState(true);
@@ -127,6 +135,9 @@ export default function NexusWorldControlPage() {
   const [playerDetail, setPlayerDetail] = useState<any | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState("");
+  const [resourceEdits, setResourceEdits] = useState<Record<string, string>>({});
+  const [savingResources, setSavingResources] = useState<Record<string, boolean>>({});
+  const resourceSaveTimers = useRef<Record<string, number>>({});
 
   const load = useCallback(async () => {
     setManualError("");
@@ -188,6 +199,12 @@ export default function NexusWorldControlPage() {
     const timer = window.setInterval(load, REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [load]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(resourceSaveTimers.current).forEach((timer) => window.clearTimeout(timer));
+    };
+  }, []);
 
   const worldStats = useMemo(() => {
     const continents = state.worlds.flatMap((world) =>
@@ -262,6 +279,8 @@ export default function NexusWorldControlPage() {
     setSelectedPlayer(player);
     setPlayerDetail(null);
     setDetailError("");
+    setResourceEdits({});
+    setSavingResources({});
     setDetailLoading(true);
     try {
       const res = await fetch(`${API_BASE}/api/nexus-game/worlds/${worldId}/players/${profileId}/detail`, {
@@ -275,6 +294,90 @@ export default function NexusWorldControlPage() {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const saveResourceAmount = async (resource: any, rawTarget: string) => {
+    const code = resourceCode(resource);
+    if (rawTarget.trim() === "") return;
+    const target = Math.max(0, Math.trunc(Number(rawTarget)));
+    const current = Math.trunc(resourceAmount(resource));
+    const delta = target - current;
+    const profileId = Number(playerDetail?.profile?.id || selectedPlayer?.profile_id || selectedPlayer?.profileId || selectedPlayer?.id || 0);
+    const worldId = Number(
+      selectedPlayer?.worldId ||
+        selectedPlayer?.world_id ||
+        playerDetail?.identity?.world?.id ||
+        playerDetail?.profile?.worldId ||
+        playerDetail?.profile?.world_id ||
+        0,
+    );
+
+    if (!code || !Number.isFinite(target) || !profileId) return;
+    if (delta === 0) {
+      setResourceEdits((prev) => {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      });
+      return;
+    }
+
+    setSavingResources((prev) => ({ ...prev, [code]: true }));
+    setManualError("");
+    try {
+      const res = await fetch(`${API_BASE}/admin/api/nexus-system/resources/grant`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profileGamerId: profileId,
+          resourceCode: code,
+          amount: delta,
+          reason: "player_telemetry_adjust",
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      if (worldId > 0) {
+        const detailRes = await fetch(`${API_BASE}/api/nexus-game/worlds/${worldId}/players/${profileId}/detail`, {
+          credentials: "same-origin",
+        });
+        if (detailRes.ok) {
+          const data = await detailRes.json();
+          setPlayerDetail(data?.player || data);
+        }
+      }
+      setResourceEdits((prev) => {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      });
+      setActionMessage(`${code}: stock ajuste de ${formatNumber(current)} a ${formatNumber(target)}.`);
+    } catch (error: any) {
+      setManualError(error?.message || `Impossible de modifier ${code}.`);
+    } finally {
+      setSavingResources((prev) => {
+        const next = { ...prev };
+        delete next[code];
+        return next;
+      });
+    }
+  };
+
+  const scheduleResourceAmountSave = (resource: any, rawTarget: string) => {
+    const code = resourceCode(resource);
+    if (!code) return;
+    setResourceEdits((prev) => ({ ...prev, [code]: rawTarget }));
+    if (resourceSaveTimers.current[code]) {
+      window.clearTimeout(resourceSaveTimers.current[code]);
+    }
+    if (rawTarget.trim() === "" || !Number.isFinite(Number(rawTarget))) {
+      return;
+    }
+    resourceSaveTimers.current[code] = window.setTimeout(() => {
+      delete resourceSaveTimers.current[code];
+      void saveResourceAmount(resource, rawTarget);
+    }, 650);
   };
 
   const commandLinks = [
@@ -697,21 +800,59 @@ export default function NexusWorldControlPage() {
 
                   <div className="panel">
                     <h2>Ressources</h2>
+                    <p className="hint">Modifie le stock cible: sauvegarde automatique apres 650 ms. Une valeur plus basse debite le joueur.</p>
                     <div className="table-wrap">
                       <table>
-                        <thead><tr><th>Code</th><th>Stock</th><th>Capacite</th><th>Prod/tick</th><th>Conso/tick</th><th>Solde</th></tr></thead>
+                        <thead><tr><th>Code</th><th>Stock cible</th><th>Capacite</th><th>Prod/tick</th><th>Conso/tick</th><th>Solde</th><th>Etat</th></tr></thead>
                         <tbody>
-                          {detailArray(playerDetail.resources).map((resource: any) => (
-                            <tr key={resource.resourceCode || resource.resource_code}>
-                              <td>{resource.resourceCode || resource.resource_code}</td>
-                              <td>{formatNumber(Number(resource.amount || 0))}</td>
-                              <td>{formatNumber(Number(resource.capacity || 0))}</td>
-                              <td>{formatNumber(Number(resource.productionPerTick || resource.production_per_tick || 0))}</td>
-                              <td>{formatNumber(Number(resource.consumptionPerTick || resource.consumption_per_tick || 0))}</td>
-                              <td>{formatNumber(Number(resource.balancePerTick || resource.balance_per_tick || 0))}</td>
-                            </tr>
-                          ))}
-                          {detailArray(playerDetail.resources).length === 0 ? <tr><td colSpan={6}>Aucune ressource joueur.</td></tr> : null}
+                          {detailArray(playerDetail.resources).map((resource: any) => {
+                            const code = resourceCode(resource);
+                            const amount = Math.trunc(resourceAmount(resource));
+                            const displayedValue = resourceEdits[code] ?? String(amount);
+                            const busy = Boolean(savingResources[code]);
+                            return (
+                              <tr key={code}>
+                                <td>{code}</td>
+                                <td>
+                                  <div style={{ display: "flex", gap: 6, alignItems: "center", minWidth: 220 }}>
+                                    <button
+                                      className="secondary"
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={() => scheduleResourceAmountSave(resource, String(Math.max(0, Number(displayedValue || amount) - 100)))}
+                                      style={{ padding: "6px 8px" }}
+                                    >
+                                      -100
+                                    </button>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      value={displayedValue}
+                                      disabled={busy}
+                                      onChange={(event) => scheduleResourceAmountSave(resource, event.target.value)}
+                                      style={{ width: 110 }}
+                                    />
+                                    <button
+                                      className="secondary"
+                                      type="button"
+                                      disabled={busy}
+                                      onClick={() => scheduleResourceAmountSave(resource, String(Number(displayedValue || amount) + 100))}
+                                      style={{ padding: "6px 8px" }}
+                                    >
+                                      +100
+                                    </button>
+                                  </div>
+                                </td>
+                                <td>{formatNumber(Number(resource.capacity || 0))}</td>
+                                <td>{formatNumber(Number(resource.productionPerTick || resource.production_per_tick || 0))}</td>
+                                <td>{formatNumber(Number(resource.consumptionPerTick || resource.consumption_per_tick || 0))}</td>
+                                <td>{formatNumber(Number(resource.balancePerTick || resource.balance_per_tick || 0))}</td>
+                                <td>{busy ? "Sauvegarde..." : resourceEdits[code] !== undefined ? "En attente" : "Synchro"}</td>
+                              </tr>
+                            );
+                          })}
+                          {detailArray(playerDetail.resources).length === 0 ? <tr><td colSpan={7}>Aucune ressource joueur.</td></tr> : null}
                         </tbody>
                       </table>
                     </div>
