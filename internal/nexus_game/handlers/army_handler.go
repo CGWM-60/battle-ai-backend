@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/services"
@@ -82,6 +83,22 @@ func (h *ArmyHandler) Formations(c *gin.Context) {
 	writeArmy(c, gin.H{"formations": formations}, err)
 }
 
+func (h *ArmyHandler) Progression(c *gin.Context) {
+	profileID, ok := armyProfileID(c)
+	if !ok {
+		return
+	}
+	progression, err := h.svc.Progression(c.Request.Context(), profileID)
+	payload := gin.H{"progression": progression}
+	if progression != nil {
+		payload["armyCapacity"] = progression.ArmyCapacity
+		payload["armyCapacityUsed"] = progression.ArmyCapacityUsed
+		payload["trainingSlots"] = progression.TrainingSlots
+		payload["formations"] = progression.Formations
+	}
+	writeArmy(c, payload, err)
+}
+
 func (h *ArmyHandler) Formation(c *gin.Context) {
 	profileID, ok := armyProfileID(c)
 	if !ok {
@@ -132,7 +149,16 @@ func (h *ArmyHandler) ValidateFormation(c *gin.Context) {
 	if !ok {
 		return
 	}
-	detail, err := h.svc.Formation(c.Request.Context(), profileID, uintFromParam(c, "id"))
+	detail, err := h.svc.ValidateFormation(c.Request.Context(), profileID, uintFromParam(c, "id"))
+	writeArmy(c, gin.H{"success": err == nil, "formation": detail}, err)
+}
+
+func (h *ArmyHandler) RecalculateFormation(c *gin.Context) {
+	profileID, ok := armyProfileID(c)
+	if !ok {
+		return
+	}
+	detail, err := h.svc.RecalculateFormationForPlayer(c.Request.Context(), profileID, uintFromParam(c, "id"))
 	writeArmy(c, gin.H{"success": err == nil, "formation": detail}, err)
 }
 
@@ -208,6 +234,98 @@ func (h *ArmyHandler) AdminGrantUnits(c *gin.Context) {
 func (h *ArmyHandler) AdminSnapshot(c *gin.Context) {
 	data, err := h.svc.AdminSnapshot(c.Request.Context())
 	writeArmy(c, data, err)
+}
+
+func (h *ArmyHandler) AdminProgressionRules(c *gin.Context) {
+	rules, err := h.svc.ProgressionRules(c.Request.Context(), c.Query("activeOnly") == "true")
+	writeArmy(c, gin.H{"rules": rules, "count": len(rules)}, err)
+}
+
+func (h *ArmyHandler) AdminCreateProgressionRule(c *gin.Context) {
+	var rule models.ArmyFormationProgressionRule
+	if err := c.ShouldBindJSON(&rule); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "errorCode": "invalid_payload", "message": err.Error()})
+		return
+	}
+	err := h.svc.SaveProgressionRule(c.Request.Context(), &rule)
+	writeArmy(c, gin.H{"success": err == nil, "rule": rule}, err)
+}
+
+func (h *ArmyHandler) AdminUpdateProgressionRule(c *gin.Context) {
+	var rule models.ArmyFormationProgressionRule
+	if err := c.ShouldBindJSON(&rule); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "errorCode": "invalid_payload", "message": err.Error()})
+		return
+	}
+	rule.ID = uintFromParam(c, "id")
+	err := h.svc.SaveProgressionRule(c.Request.Context(), &rule)
+	writeArmy(c, gin.H{"success": err == nil, "rule": rule}, err)
+}
+
+func (h *ArmyHandler) AdminDeleteProgressionRule(c *gin.Context) {
+	err := h.svc.DeleteProgressionRule(c.Request.Context(), uintFromParam(c, "id"))
+	writeArmy(c, gin.H{"success": err == nil}, err)
+}
+
+func (h *ArmyHandler) AdminProgressionRulesPath(c *gin.Context) {
+	path := strings.Trim(c.Param("path"), "/")
+	switch path {
+	case "seed/preview":
+		if c.Request.Method != http.MethodPost {
+			c.JSON(http.StatusMethodNotAllowed, gin.H{"success": false, "errorCode": "method_not_allowed"})
+			return
+		}
+		h.AdminProgressionSeedPreview(c)
+	case "seed/commit":
+		if c.Request.Method != http.MethodPost {
+			c.JSON(http.StatusMethodNotAllowed, gin.H{"success": false, "errorCode": "method_not_allowed"})
+			return
+		}
+		h.AdminProgressionSeedCommit(c)
+	case "seed/status":
+		if c.Request.Method != http.MethodGet {
+			c.JSON(http.StatusMethodNotAllowed, gin.H{"success": false, "errorCode": "method_not_allowed"})
+			return
+		}
+		h.AdminProgressionSeedStatus(c)
+	default:
+		id, err := strconv.ParseUint(path, 10, 64)
+		if err != nil || id == 0 {
+			c.JSON(http.StatusNotFound, gin.H{"success": false, "errorCode": "not_found", "message": "Route progression-rules inconnue."})
+			return
+		}
+		switch c.Request.Method {
+		case http.MethodPut:
+			var rule models.ArmyFormationProgressionRule
+			if err := c.ShouldBindJSON(&rule); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"success": false, "errorCode": "invalid_payload", "message": err.Error()})
+				return
+			}
+			rule.ID = uint(id)
+			saveErr := h.svc.SaveProgressionRule(c.Request.Context(), &rule)
+			writeArmy(c, gin.H{"success": saveErr == nil, "rule": rule}, saveErr)
+		case http.MethodDelete:
+			deleteErr := h.svc.DeleteProgressionRule(c.Request.Context(), uint(id))
+			writeArmy(c, gin.H{"success": deleteErr == nil}, deleteErr)
+		default:
+			c.JSON(http.StatusMethodNotAllowed, gin.H{"success": false, "errorCode": "method_not_allowed"})
+		}
+	}
+}
+
+func (h *ArmyHandler) AdminProgressionSeedPreview(c *gin.Context) {
+	result, err := h.svc.ProgressionSeedPreview(c.Request.Context())
+	writeArmy(c, result, err)
+}
+
+func (h *ArmyHandler) AdminProgressionSeedCommit(c *gin.Context) {
+	result, err := h.svc.SeedDefaultProgressionRules(c.Request.Context())
+	writeArmy(c, result, err)
+}
+
+func (h *ArmyHandler) AdminProgressionSeedStatus(c *gin.Context) {
+	result, err := h.svc.ProgressionSeedStatus(c.Request.Context())
+	writeArmy(c, result, err)
 }
 
 func writeArmy(c *gin.Context, payload any, err error) {

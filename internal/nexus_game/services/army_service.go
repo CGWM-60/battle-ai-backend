@@ -301,6 +301,14 @@ func (s *ArmyService) CancelTraining(ctx context.Context, profileID uint, queueI
 }
 
 func (s *ArmyService) EnsureDefaultFormations(ctx context.Context, profileID uint) error {
+	if err := s.ensureFormationRows(ctx, profileID); err != nil {
+		return err
+	}
+	_, err := NewArmyProgressionService(s.db, s.contentSvc).RecalculateFormationSlots(ctx, profileID)
+	return err
+}
+
+func (s *ArmyService) ensureFormationRows(ctx context.Context, profileID uint) error {
 	var profile models.ProfileGamer
 	if err := s.db.WithContext(ctx).First(&profile, profileID).Error; err != nil {
 		return err
@@ -312,30 +320,7 @@ func (s *ArmyService) EnsureDefaultFormations(ctx context.Context, profileID uin
 			return err
 		}
 	}
-	formations, err := formationRepo.List(ctx, profileID)
-	if err != nil {
-		return err
-	}
-	slotRepo := repositories.NewArmySlotRepository(s.db)
-	for _, formation := range formations {
-		slots, err := slotRepo.ListSlots(ctx, formation.ID)
-		if err != nil {
-			return err
-		}
-		if len(slots) > 0 {
-			continue
-		}
-		for _, slot := range defaultSlotsForFormation(formation.Type) {
-			row := models.ArmyFormationSlot{
-				FormationID: formation.ID, SlotIndex: slot.Index, SlotType: slot.Type,
-				Capacity: slot.Capacity, AllowedUnitTypesJSON: mustArmyJSON(allowedTypesForSlot(slot.Type)),
-			}
-			if err := slotRepo.CreateSlot(ctx, &row); err != nil {
-				return err
-			}
-		}
-	}
-	_, err = repositories.NewArmyAutomationRepository(s.db).GetOrCreate(ctx, profileID, profile.WorldID)
+	_, err := repositories.NewArmyAutomationRepository(s.db).GetOrCreate(ctx, profileID, profile.WorldID)
 	return err
 }
 
@@ -361,6 +346,10 @@ func (s *ArmyService) Formations(ctx context.Context, profileID uint) ([]ArmyFor
 	return details, nil
 }
 
+func (s *ArmyService) Progression(ctx context.Context, profileID uint) (*ArmyProgressionSnapshot, error) {
+	return NewArmyProgressionService(s.db, s.contentSvc).Progression(ctx, profileID)
+}
+
 func (s *ArmyService) Formation(ctx context.Context, profileID uint, formationID uint) (*ArmyFormationDetail, error) {
 	formation, err := repositories.NewArmyFormationRepository(s.db).Get(ctx, formationID)
 	if err != nil {
@@ -378,6 +367,20 @@ func (s *ArmyService) Formation(ctx context.Context, profileID uint, formationID
 		return nil, err
 	}
 	return &ArmyFormationDetail{Formation: *formation, Slots: slots, Assignments: assignments}, nil
+}
+
+func (s *ArmyService) ValidateFormation(ctx context.Context, profileID uint, formationID uint) (*ArmyFormationDetail, error) {
+	return NewArmyProgressionService(s.db, s.contentSvc).ValidateFormation(ctx, profileID, formationID)
+}
+
+func (s *ArmyService) RecalculateFormationForPlayer(ctx context.Context, profileID uint, formationID uint) (*ArmyFormationDetail, error) {
+	if _, err := NewArmyProgressionService(s.db, s.contentSvc).RecalculateFormationSlots(ctx, profileID); err != nil {
+		return nil, err
+	}
+	if err := s.RecalculateFormation(ctx, formationID); err != nil {
+		return nil, err
+	}
+	return s.Formation(ctx, profileID, formationID)
 }
 
 func (s *ArmyService) AssignUnit(ctx context.Context, profileID uint, formationID uint, slotID uint, req ArmyAssignmentRequest) (*ArmyFormationDetail, error) {
@@ -420,7 +423,7 @@ func (s *ArmyService) AssignUnit(ctx context.Context, profileID uint, formationI
 			currentSlotUsed += assignment.CapacityUsed
 		}
 	}
-	if currentSlotUsed+capacityUsed > slot.Capacity {
+	if currentSlotUsed+capacityUsed > effectiveSlotCapacity(*slot) {
 		return nil, codedError("slot_capacity_exceeded", "La capacite du slot est depassee.")
 	}
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -631,7 +634,7 @@ func (s *ArmyService) CommanderSuggest(ctx context.Context, profileID uint, form
 			if err != nil || !slotAllowsUnit(slot.SlotType, def) {
 				continue
 			}
-			qty := minInt(unit.ReserveQuantity, maxInt(1, slot.Capacity/capacityCostForUnit(def)))
+			qty := minInt(unit.ReserveQuantity, maxInt(1, effectiveSlotCapacity(slot)/capacityCostForUnit(def)))
 			suggestions = append(suggestions, map[string]any{"slotId": slot.ID, "slotIndex": slot.SlotIndex, "unitCode": unit.ContentID, "quantity": qty})
 			break
 		}
@@ -708,16 +711,45 @@ func (s *ArmyService) AdminSnapshot(ctx context.Context) (map[string]any, error)
 	if err != nil {
 		return nil, err
 	}
+	progressionRules, err := repositories.NewArmyProgressionRuleRepository(s.db).List(ctx, false)
+	if err != nil {
+		return nil, err
+	}
 	return map[string]any{
 		"players": players, "unitCatalog": catalog, "trainingQueues": queues,
-		"formations": formations, "combatReports": reports,
+		"formations": formations, "combatReports": reports, "progressionRules": progressionRules,
 		"modules": []map[string]any{
 			{"key": "resources", "label": "Ressources joueur", "crud": true, "endpoint": "/admin/api/nexus-system/resources/grant"},
 			{"key": "units", "label": "Unites et training queue", "crud": true, "endpoint": "/api/nexus-game/admin/units/catalog"},
 			{"key": "formations", "label": "Formations et slots", "crud": true, "endpoint": "/api/nexus-game/admin/army/formations"},
+			{"key": "army_progression", "label": "Progression des slots", "crud": true, "endpoint": "/api/nexus-game/admin/army/progression-rules"},
 			{"key": "server_ai", "label": "IA serveur et crons", "crud": false, "endpoint": "/api/nexus-game/admin/ai-server/jobs"},
 		},
 	}, nil
+}
+
+func (s *ArmyService) ProgressionRules(ctx context.Context, activeOnly bool) ([]models.ArmyFormationProgressionRule, error) {
+	return NewArmyProgressionService(s.db, s.contentSvc).ProgressionRules(ctx, activeOnly)
+}
+
+func (s *ArmyService) SaveProgressionRule(ctx context.Context, rule *models.ArmyFormationProgressionRule) error {
+	return NewArmyProgressionService(s.db, s.contentSvc).SaveProgressionRule(ctx, rule)
+}
+
+func (s *ArmyService) DeleteProgressionRule(ctx context.Context, id uint) error {
+	return NewArmyProgressionService(s.db, s.contentSvc).DeleteProgressionRule(ctx, id)
+}
+
+func (s *ArmyService) ProgressionSeedPreview(ctx context.Context) (map[string]any, error) {
+	return NewArmyProgressionService(s.db, s.contentSvc).SeedPreview(ctx)
+}
+
+func (s *ArmyService) SeedDefaultProgressionRules(ctx context.Context) (map[string]any, error) {
+	return NewArmyProgressionService(s.db, s.contentSvc).SeedDefaultRules(ctx)
+}
+
+func (s *ArmyService) ProgressionSeedStatus(ctx context.Context) (map[string]any, error) {
+	return NewArmyProgressionService(s.db, s.contentSvc).SeedStatus(ctx)
 }
 
 func (s *ArmyService) playerBuildingLevel(ctx context.Context, profileID uint, contentID string) int {
@@ -798,6 +830,8 @@ func allowedTypesForSlot(slotType string) []string {
 		return []string{"support", "defense"}
 	case "cyber_slot":
 		return []string{"support", "special", "drone"}
+	case "anti_sabotage_slot":
+		return []string{"drone", "support", "special"}
 	case "commander_slot":
 		return []string{"commander", "officer"}
 	case "scout_slot":
@@ -805,7 +839,7 @@ func allowedTypesForSlot(slotType string) []string {
 	case "free_light_slot":
 		return []string{"infantry", "drone", "support", "special"}
 	default:
-		return []string{"infantry", "drone", "support", "special", "mecha", "artillerie", "defense"}
+		return []string{"infantry", "drone", "support", "special", "mecha", "artillerie", "defense", "commander", "officer"}
 	}
 }
 

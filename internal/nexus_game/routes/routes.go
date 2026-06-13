@@ -107,7 +107,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 			&models.BuildingDefinition{}, &models.PlayerBuilding{},
 			&models.UnitDefinition{}, &models.PlayerUnit{},
 			&models.UnitTrainingQueue{}, &models.ArmyFormation{}, &models.ArmyFormationSlot{}, &models.ArmySlotAssignment{},
-			&models.ArmyAutomationSettings{}, &models.ArmyCombatReport{}, &models.ArmyTransactionLog{},
+			&models.ArmyAutomationSettings{}, &models.ArmyCombatReport{}, &models.ArmyTransactionLog{}, &models.ArmyFormationProgressionRule{},
 			&models.ResearchDefinition{}, &models.PlayerResearch{},
 			&models.ResourceCatalog{}, &models.PlayerResource{}, &models.PlayerCityStats{},
 			&models.ResourceTransaction{}, &models.DailyGrantClaim{}, &models.DailyGrantConfig{},
@@ -120,6 +120,7 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 		_ = seeds.SeedInitialUnits(database, contentSvc)
 		_ = seeds.SeedInitialResearch(database, contentSvc)
 		_ = services.NewResourceService(database).SeedDefaults(context.Background())
+		_, _ = services.NewArmyProgressionService(database, contentSvc).SeedDefaultRules(context.Background())
 		_, _ = services.NewGameBalanceConfigService(database).GetActive(context.Background())
 		_ = serverairoutes.SeedDefaults(database)
 		// Full catalogue from reference v2.0 seeded for buildings (20), units (15), research (11 branches x7). Use admin to add/update images and data.
@@ -209,8 +210,10 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.POST("/units/train", armyH.Train)
 	group.POST("/units/training/:id/cancel", armyH.CancelTraining)
 	group.POST("/units/training/:id/claim", armyH.ClaimTraining)
+	group.GET("/army/progression", armyH.Progression)
 	group.GET("/army/formations", armyH.Formations)
 	group.GET("/army/formations/:id", armyH.Formation)
+	group.POST("/army/formations/:id/recalculate", armyH.RecalculateFormation)
 	group.POST("/army/formations/:id/slots/:slotId/assign", armyH.Assign)
 	group.POST("/army/formations/:id/slots/:slotId/remove", armyH.Remove)
 	group.POST("/army/formations/:id/auto-compose", armyH.CommanderSuggest)
@@ -251,6 +254,9 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/admin/army/formations", armyH.AdminSnapshot)
 	group.GET("/admin/army/combat-reports", armyH.AdminSnapshot)
 	group.GET("/admin/army/training-queues", armyH.AdminSnapshot)
+	group.GET("/admin/army/progression-rules", armyH.AdminProgressionRules)
+	group.POST("/admin/army/progression-rules", armyH.AdminCreateProgressionRule)
+	group.Any("/admin/army/progression-rules/*path", armyH.AdminProgressionRulesPath)
 	group.GET("/admin/game-config", gameConfigH.Get)
 	group.PUT("/admin/game-config", gameConfigH.Update)
 

@@ -100,6 +100,14 @@ func TestRegisterRoutesMountsContentCRUDRoutes(t *testing.T) {
 		"POST /api/v1/construction/:id/speedup",
 		"POST /api/v1/construction/:id/cancel",
 		"POST /api/v1/construction/:id/complete",
+		"GET /api/nexus-game/army/progression",
+		"POST /api/nexus-game/army/formations/:id/recalculate",
+		"GET /api/nexus-game/admin/army/progression-rules",
+		"POST /api/nexus-game/admin/army/progression-rules",
+		"GET /api/nexus-game/admin/army/progression-rules/*path",
+		"POST /api/nexus-game/admin/army/progression-rules/*path",
+		"PUT /api/nexus-game/admin/army/progression-rules/*path",
+		"DELETE /api/nexus-game/admin/army/progression-rules/*path",
 	}
 
 	for _, route := range expected {

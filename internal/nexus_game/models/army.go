@@ -52,11 +52,45 @@ type ArmyFormationSlot struct {
 	SlotIndex             int            `json:"slotIndex"`
 	SlotType              string         `gorm:"size:48;index;not null" json:"slotType"`
 	Capacity              int            `json:"capacity"`
+	SlotLevel             int            `gorm:"default:1" json:"slotLevel"`
+	BaseCapacity          int            `gorm:"default:0" json:"baseCapacity"`
+	CurrentCapacity       int            `gorm:"default:0" json:"currentCapacity"`
+	MaxCapacity           int            `gorm:"default:0" json:"maxCapacity"`
 	AllowedUnitTypesJSON  datatypes.JSON `gorm:"type:json" json:"allowedUnitTypesJson"`
 	IsLocked              bool           `json:"isLocked"`
+	Status                string         `gorm:"size:32;default:unlocked" json:"status"`
 	UnlockRequirementJSON datatypes.JSON `gorm:"type:json" json:"unlockRequirementJson"`
+	CapacityModifiersJSON datatypes.JSON `gorm:"type:json" json:"capacityModifiersJson"`
+	LockedReason          string         `gorm:"type:text" json:"lockedReason"`
+	SourceType            string         `gorm:"size:80;index" json:"sourceType"`
+	SourceCode            string         `gorm:"size:160;index" json:"sourceCode"`
+	UnlockedAt            *time.Time     `json:"unlockedAt,omitempty"`
 	CreatedAt             time.Time      `json:"createdAt"`
 	UpdatedAt             time.Time      `json:"updatedAt"`
+}
+
+type ArmyFormationProgressionRule struct {
+	ID                  uint      `gorm:"primaryKey" json:"id"`
+	FormationType       string    `gorm:"size:48;index;not null" json:"formationType"`
+	RuleType            string    `gorm:"size:48;index;not null" json:"ruleType"`
+	SlotType            string    `gorm:"size:80;index" json:"slotType"`
+	SlotIndex           int       `json:"slotIndex"`
+	BaseCapacity        int       `json:"baseCapacity"`
+	MaxCapacity         int       `json:"maxCapacity"`
+	UnlockBuildingCode  string    `gorm:"size:128;index" json:"unlockBuildingCode"`
+	UnlockBuildingLevel int       `json:"unlockBuildingLevel"`
+	UnlockResearchCode  string    `gorm:"size:128;index" json:"unlockResearchCode"`
+	UnlockPlayerLevel   int       `json:"unlockPlayerLevel"`
+	UnlockCityLevel     int       `json:"unlockCityLevel"`
+	RequiredGuildLevel  int       `json:"requiredGuildLevel"`
+	CapacityBonus       int       `json:"capacityBonus"`
+	TargetSlotType      string    `gorm:"size:80;index" json:"targetSlotType"`
+	SourceType          string    `gorm:"size:80" json:"sourceType"`
+	SourceCode          string    `gorm:"uniqueIndex;size:160;not null" json:"sourceCode"`
+	SortOrder           int       `gorm:"index" json:"sortOrder"`
+	IsActive            bool      `gorm:"default:true;index" json:"isActive"`
+	CreatedAt           time.Time `json:"createdAt"`
+	UpdatedAt           time.Time `json:"updatedAt"`
 }
 
 type ArmySlotAssignment struct {

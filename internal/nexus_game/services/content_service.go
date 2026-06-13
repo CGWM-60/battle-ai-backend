@@ -635,6 +635,9 @@ func (s *ContentService) CompleteConstructionIfReady(pb *models.PlayerBuilding) 
 	if err := NewResourceService(s.db).SyncBuildingProduction(context.Background(), pb.ProfileGamerID, false); err != nil {
 		return true, err
 	}
+	if _, err := NewArmyProgressionService(s.db, s).SyncFormationSlotsAfterBuildingUpgrade(context.Background(), pb.ProfileGamerID, pb.ContentID, pb.Level); err != nil {
+		return true, err
+	}
 	return true, nil
 }
 

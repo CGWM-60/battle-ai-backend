@@ -164,6 +164,28 @@ func (r *ArmySlotRepository) CreateSlot(ctx context.Context, row *models.ArmyFor
 	return r.db.WithContext(ctx).Create(row).Error
 }
 
+func (r *ArmySlotRepository) SaveSlot(ctx context.Context, row *models.ArmyFormationSlot) error {
+	return r.db.WithContext(ctx).Save(row).Error
+}
+
+func (r *ArmySlotRepository) FindSlotBySource(ctx context.Context, formationID uint, sourceCode string) (*models.ArmyFormationSlot, error) {
+	var row models.ArmyFormationSlot
+	err := r.db.WithContext(ctx).Where("formation_id = ? AND source_code = ?", formationID, sourceCode).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *ArmySlotRepository) FindSlotByIndexType(ctx context.Context, formationID uint, slotIndex int, slotType string) (*models.ArmyFormationSlot, error) {
+	var row models.ArmyFormationSlot
+	err := r.db.WithContext(ctx).Where("formation_id = ? AND slot_index = ? AND slot_type = ?", formationID, slotIndex, slotType).First(&row).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *ArmySlotRepository) ListAssignments(ctx context.Context, formationID uint) ([]models.ArmySlotAssignment, error) {
 	var rows []models.ArmySlotAssignment
 	err := r.db.WithContext(ctx).Where("formation_id = ?", formationID).Order("slot_id ASC, id ASC").Find(&rows).Error
@@ -263,4 +285,61 @@ func NewArmyTransactionLogRepository(db *gorm.DB) *ArmyTransactionLogRepository 
 
 func (r *ArmyTransactionLogRepository) Create(ctx context.Context, row *models.ArmyTransactionLog) error {
 	return r.db.WithContext(ctx).Create(row).Error
+}
+
+type ArmyProgressionRuleRepository struct {
+	db *gorm.DB
+}
+
+func NewArmyProgressionRuleRepository(db *gorm.DB) *ArmyProgressionRuleRepository {
+	return &ArmyProgressionRuleRepository{db: db}
+}
+
+func (r *ArmyProgressionRuleRepository) List(ctx context.Context, activeOnly bool) ([]models.ArmyFormationProgressionRule, error) {
+	var rows []models.ArmyFormationProgressionRule
+	q := r.db.WithContext(ctx).Model(&models.ArmyFormationProgressionRule{})
+	if activeOnly {
+		q = q.Where("is_active = ?", true)
+	}
+	err := q.Order("formation_type ASC, sort_order ASC, id ASC").Find(&rows).Error
+	return rows, err
+}
+
+func (r *ArmyProgressionRuleRepository) ListByFormation(ctx context.Context, formationType string, activeOnly bool) ([]models.ArmyFormationProgressionRule, error) {
+	var rows []models.ArmyFormationProgressionRule
+	q := r.db.WithContext(ctx).Where("formation_type = ?", formationType)
+	if activeOnly {
+		q = q.Where("is_active = ?", true)
+	}
+	err := q.Order("sort_order ASC, id ASC").Find(&rows).Error
+	return rows, err
+}
+
+func (r *ArmyProgressionRuleRepository) Get(ctx context.Context, id uint) (*models.ArmyFormationProgressionRule, error) {
+	var row models.ArmyFormationProgressionRule
+	err := r.db.WithContext(ctx).First(&row, id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *ArmyProgressionRuleRepository) UpsertBySourceCode(ctx context.Context, row *models.ArmyFormationProgressionRule) error {
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "source_code"}},
+		DoUpdates: clause.AssignmentColumns([]string{
+			"formation_type", "rule_type", "slot_type", "slot_index", "base_capacity", "max_capacity",
+			"unlock_building_code", "unlock_building_level", "unlock_research_code", "unlock_player_level",
+			"unlock_city_level", "required_guild_level", "capacity_bonus", "target_slot_type", "source_type",
+			"sort_order", "is_active", "updated_at",
+		}),
+	}).Create(row).Error
+}
+
+func (r *ArmyProgressionRuleRepository) Save(ctx context.Context, row *models.ArmyFormationProgressionRule) error {
+	return r.db.WithContext(ctx).Save(row).Error
+}
+
+func (r *ArmyProgressionRuleRepository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&models.ArmyFormationProgressionRule{}, id).Error
 }
