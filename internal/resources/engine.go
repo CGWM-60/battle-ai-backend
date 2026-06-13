@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"cgwm/battle/internal/models"
@@ -31,6 +34,13 @@ type Engine struct {
 	// Resolvers (use whatever is exported today)
 	researchResolver *research.Resolver
 	policyEngine     *policies.Engine
+}
+
+const collectorCycleDuration = time.Hour
+
+type collectorProfile struct {
+	Resource string
+	BaseRate float64
 }
 
 func NewEngine(db *gorm.DB) *Engine {
@@ -261,6 +271,300 @@ func (e *Engine) Tick(ctx context.Context, playerID uint, minutes float64) error
 
 // ManualCollect implements POST /api/v1/buildings/:id/collect for collector buildings.
 func (e *Engine) ManualCollect(ctx context.Context, playerID uint, buildingID string) (map[string]float64, error) {
-	// TODO: find the building, transfer its accumulator into Current, reset accumulator.
-	return map[string]float64{"food": 124.5, "materials": 18}, nil
+	if normalizeBuildingKey(buildingID) == "demolish_refund" {
+		return map[string]float64{}, nil
+	}
+
+	if e.db == nil {
+		return nil, fmt.Errorf("resources engine is not connected to a database")
+	}
+
+	var collectedAmount float64
+	var collectedProgress float64
+	collectedResource := ""
+
+	err := e.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var save models.PlayerSave
+		if err := tx.Where("player_id = ?", playerID).First(&save).Error; err != nil {
+			return err
+		}
+
+		buildings, err := decodePlayerBuildings(save.BuildingsJSON)
+		if err != nil {
+			return err
+		}
+
+		idx := findCollectibleBuildingIndex(buildings, buildingID)
+		if idx < 0 {
+			return fmt.Errorf("building %q not found for player %d", buildingID, playerID)
+		}
+
+		building := buildings[idx]
+		buildingKey := normalizeBuildingKey(stringFromAny(building["buildingKey"]))
+		if buildingKey == "" {
+			return fmt.Errorf("building %q is missing a buildingKey", buildingID)
+		}
+
+		profileForKey, ok := collectorProfileForBuilding(buildingKey)
+		if !ok {
+			return fmt.Errorf("building %q does not support manual collection", buildingKey)
+		}
+
+		level := intFromAnyDefault(building["level"], 0)
+		if level <= 0 {
+			level = 1
+		}
+
+		now := time.Now().UTC()
+		lastCollectedAt := timeFromAny(building["lastCollectedAt"])
+		completedAt := timeFromAny(building["completedAt"])
+		baseline := lastCollectedAt
+		if baseline == nil {
+			baseline = completedAt
+		}
+		amount, progress := computeCollectorHarvest(profileForKey, level, baseline, now)
+		if amount <= 0 {
+			amount = 0
+		}
+		collectedAmount = amount
+		collectedProgress = progress
+		collectedResource = profileForKey.Resource
+
+		inventory := map[string]float64{}
+		if len(save.InventoryJSON) > 0 {
+			_ = json.Unmarshal(save.InventoryJSON, &inventory)
+		}
+
+		addResourceToSave(&save, inventory, profileForKey.Resource, amount)
+		building["lastCollectedAt"] = now
+		buildings[idx] = building
+
+		buildingRowID, hasBuildingRowID := uintFromAny(building["id"])
+		query := tx.Model(&models.PlayerBuilding{}).Where("player_id = ? AND building_key = ?", save.PlayerID, buildingKey)
+		if hasBuildingRowID {
+			query = tx.Model(&models.PlayerBuilding{}).Where("player_id = ? AND (building_key = ? OR id = ?)", save.PlayerID, buildingKey, buildingRowID)
+		}
+		if err := query.Update("last_collected_at", now).Error; err != nil {
+			return err
+		}
+
+		buildingsJSON, err := json.Marshal(buildings)
+		if err != nil {
+			return err
+		}
+		inventoryJSON, err := json.Marshal(inventory)
+		if err != nil {
+			return err
+		}
+
+		return tx.Model(&models.PlayerSave{}).
+			Where("id = ?", save.Id).
+			Updates(map[string]any{
+				"buildings_json": datatypes.JSON(buildingsJSON),
+				"inventory_json": datatypes.JSON(inventoryJSON),
+				"food":           save.Food,
+				"energy":         save.Energy,
+				"credits":        save.Credits,
+				"last_synced_at": now,
+			}).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if collectedResource == "" {
+		collectedResource = "materials"
+	}
+
+	return map[string]float64{
+		collectedResource: collectedAmount,
+		"progress":        collectedProgress,
+	}, nil
+}
+
+func collectorProfileForBuilding(buildingKey string) (collectorProfile, bool) {
+	switch normalizeBuildingKey(buildingKey) {
+	case "solar_park", "energy_plant":
+		return collectorProfile{Resource: "energy", BaseRate: 40}, true
+	case "vertical_farm", "farm":
+		return collectorProfile{Resource: "food", BaseRate: 35}, true
+	case "mine", "quarry", "composite_mine":
+		return collectorProfile{Resource: "materials", BaseRate: 22}, true
+	case "market", "trading_post":
+		return collectorProfile{Resource: "credits", BaseRate: 55}, true
+	default:
+		return collectorProfile{}, false
+	}
+}
+
+func normalizeBuildingKey(buildingKey string) string {
+	return strings.ToLower(strings.TrimSpace(buildingKey))
+}
+
+func computeCollectorHarvest(profile collectorProfile, level int, lastCollectedAt *time.Time, now time.Time) (float64, float64) {
+	if level <= 0 || lastCollectedAt == nil || lastCollectedAt.IsZero() {
+		return 0, 0
+	}
+	elapsed := now.Sub(*lastCollectedAt)
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	progress := elapsed.Seconds() / collectorCycleDuration.Seconds()
+	if progress > 1 {
+		progress = 1
+	}
+	if progress < 0 {
+		progress = 0
+	}
+	amount := profile.BaseRate * float64(level) * progress
+	return math.Round(amount*100) / 100, math.Round(progress*10000) / 100
+}
+
+func timeFromAny(value any) *time.Time {
+	switch v := value.(type) {
+	case time.Time:
+		if v.IsZero() {
+			return nil
+		}
+		vv := v
+		return &vv
+	case *time.Time:
+		if v == nil || v.IsZero() {
+			return nil
+		}
+		return v
+	case string:
+		if strings.TrimSpace(v) == "" {
+			return nil
+		}
+		if parsed, err := time.Parse(time.RFC3339, v); err == nil {
+			return &parsed
+		}
+		if parsed, err := time.Parse(time.RFC3339Nano, v); err == nil {
+			return &parsed
+		}
+	}
+	return nil
+}
+
+func addResourceToSave(save *models.PlayerSave, inventory map[string]float64, resource string, amount float64) {
+	if amount <= 0 {
+		return
+	}
+	if resource == "credits" || resource == "gold" {
+		inventory["credits"] += amount
+		inventory["gold"] += amount
+	} else {
+		inventory[resource] += amount
+	}
+	additive := int64(math.Round(amount))
+	if additive <= 0 {
+		return
+	}
+	switch resource {
+	case "food":
+		save.Food += additive
+	case "energy":
+		save.Energy += additive
+	case "credits", "gold":
+		save.Credits += additive
+	default:
+		// Keep the resource in InventoryJSON even if it has no dedicated column.
+	}
+}
+
+func decodePlayerBuildings(raw datatypes.JSON) ([]map[string]any, error) {
+	if len(raw) == 0 {
+		return []map[string]any{}, nil
+	}
+	buildings := []map[string]any{}
+	if err := json.Unmarshal(raw, &buildings); err != nil {
+		return nil, err
+	}
+	return buildings, nil
+}
+
+func findCollectibleBuildingIndex(buildings []map[string]any, buildingID string) int {
+	if len(buildings) == 0 {
+		return -1
+	}
+	needle := strings.ToLower(strings.TrimSpace(buildingID))
+	if needle == "" {
+		return -1
+	}
+	for i := range buildings {
+		if strings.ToLower(strings.TrimSpace(stringFromAny(buildings[i]["buildingKey"]))) == needle {
+			return i
+		}
+		if strings.ToLower(strings.TrimSpace(stringFromAny(buildings[i]["id"]))) == needle {
+			return i
+		}
+		if strings.ToLower(strings.TrimSpace(stringFromAny(buildings[i]["buildingId"]))) == needle {
+			return i
+		}
+		if id, ok := uintFromAny(buildings[i]["id"]); ok && strconv.FormatUint(uint64(id), 10) == needle {
+			return i
+		}
+	}
+	return -1
+}
+
+func stringFromAny(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case fmt.Stringer:
+		return v.String()
+	case []byte:
+		return string(v)
+	default:
+		return fmt.Sprintf("%v", value)
+	}
+}
+
+func intFromAnyDefault(value any, fallback int) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			return int(n)
+		}
+	}
+	return fallback
+}
+
+func uintFromAny(value any) (uint, bool) {
+	switch v := value.(type) {
+	case uint:
+		return v, true
+	case uint64:
+		return uint(v), true
+	case int:
+		if v < 0 {
+			return 0, false
+		}
+		return uint(v), true
+	case int64:
+		if v < 0 {
+			return 0, false
+		}
+		return uint(v), true
+	case float64:
+		if v < 0 {
+			return 0, false
+		}
+		return uint(v), true
+	case json.Number:
+		if n, err := v.Int64(); err == nil && n >= 0 {
+			return uint(n), true
+		}
+	}
+	return 0, false
 }
