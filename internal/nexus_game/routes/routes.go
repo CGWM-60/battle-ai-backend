@@ -216,6 +216,8 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	group.GET("/admin/content/assets/status", contentH.AssetStatus)
 	group.GET("/admin/content/translations/status", contentH.TranslationStatus)
 	group.GET("/admin/resources/catalog", resourceH.AdminCatalog)
+	group.GET("/admin/resources/players", resourceH.AdminPlayers)
+	group.POST("/admin/resources/grant", resourceH.AdminGrantResource)
 	group.POST("/admin/resources/seed/preview", resourceH.AdminSeedPreview)
 	group.POST("/admin/resources/seed/commit", resourceH.AdminSeedCommit)
 	group.GET("/admin/resources/seed/status", resourceH.AdminSeedStatus)

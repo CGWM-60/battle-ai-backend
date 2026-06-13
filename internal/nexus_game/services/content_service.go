@@ -575,6 +575,9 @@ func (s *ContentService) StartConstruction(profileID uint, contentID string, tar
 	if targetLevel <= 0 {
 		targetLevel = 1
 	}
+	if targetLevel != 1 {
+		return nil, fmt.Errorf("BUILDING_UPGRADE_ENDPOINT_REQUIRED: /construction/start cree uniquement un nouveau batiment niveau 1. Utilisez /construction/:id/upgrade pour passer au niveau %d.", targetLevel)
+	}
 	if targetLevel > def.MaxLevel {
 		return nil, errors.New("max level exceeded")
 	}
@@ -592,56 +595,30 @@ func (s *ContentService) StartConstruction(profileID uint, contentID string, tar
 		slotsMax = 1
 	}
 
-	if targetLevel == 1 {
-		if len(owned) >= slotsMax {
-			return nil, fmt.Errorf("BUILDING_SLOT_LIMIT_REACHED: %s limite a %d par cite.", contentID, slotsMax)
-		}
-
-		// Server must remove the resources when the construction is launched.
-		if err := s.deductConstructionCost(profileID, def, targetLevel); err != nil {
-			return nil, err
-		}
-
-		now := time.Now()
-		ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
-
-		pb := &models.PlayerBuilding{
-			ProfileGamerID:        profileID,
-			ContentID:             contentID,
-			Level:                 0,
-			IsConstructing:        true,
-			ConstructionStartedAt: &now,
-			ConstructionEndsAt:    &ends,
-		}
-		if err := s.db.Create(pb).Error; err != nil {
-			return nil, err
-		}
-		return pb, nil
+	if len(owned) >= slotsMax {
+		return nil, fmt.Errorf("BUILDING_SLOT_LIMIT_REACHED: %s limite a %d par cite.", contentID, slotsMax)
 	}
 
-	for i := range owned {
-		if owned[i].Level == targetLevel-1 {
-			if owned[i].IsConstructing {
-				return nil, errors.New("BUILDING_ALREADY_CONSTRUCTING: Une construction est deja en cours pour ce batiment.")
-			}
-
-			// Server must remove the resources when the construction (upgrade) is launched.
-			if err := s.deductConstructionCost(profileID, def, targetLevel); err != nil {
-				return nil, err
-			}
-
-			now := time.Now()
-			ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
-			owned[i].IsConstructing = true
-			owned[i].ConstructionStartedAt = &now
-			owned[i].ConstructionEndsAt = &ends
-			if err := s.db.Save(&owned[i]).Error; err != nil {
-				return nil, err
-			}
-			return &owned[i], nil
-		}
+	// Server must remove the resources when the construction is launched.
+	if err := s.deductConstructionCost(profileID, def, targetLevel); err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("BUILDING_LEVEL_SEQUENCE_REQUIRED: Le niveau %d doit exister avant le niveau %d.", targetLevel-1, targetLevel)
+
+	now := time.Now()
+	ends := now.Add(time.Duration(s.CalculateBuildingDurationAtLevel(def, targetLevel, def.Rarity)) * time.Second)
+
+	pb := &models.PlayerBuilding{
+		ProfileGamerID:        profileID,
+		ContentID:             contentID,
+		Level:                 0,
+		IsConstructing:        true,
+		ConstructionStartedAt: &now,
+		ConstructionEndsAt:    &ends,
+	}
+	if err := s.db.Create(pb).Error; err != nil {
+		return nil, err
+	}
+	return pb, nil
 }
 
 func (s *ContentService) CompleteConstructionIfReady(pb *models.PlayerBuilding) (bool, error) {

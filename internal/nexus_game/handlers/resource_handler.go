@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"cgwm/battle/internal/nexus_game/models"
 	"cgwm/battle/internal/nexus_game/repositories"
@@ -181,6 +182,71 @@ func (h *ResourceHandler) AdminSeedStatus(c *gin.Context) {
 		"current":  len(resources),
 		"complete": len(resources) >= len(services.OfficialResourceDefinitions()),
 	})
+}
+
+func (h *ResourceHandler) AdminPlayers(c *gin.Context) {
+	limit := limitFromQuery(c, 50, 200)
+	var players []models.ProfileGamer
+	if err := h.db.WithContext(c.Request.Context()).
+		Order("updated_at DESC, id DESC").
+		Limit(limit).
+		Find(&players).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load players"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"players": players})
+}
+
+func (h *ResourceHandler) AdminGrantResource(c *gin.Context) {
+	var body struct {
+		ProfileGamerID uint   `json:"profileGamerId"`
+		ResourceCode   string `json:"resourceCode"`
+		Amount         int64  `json:"amount"`
+		Reason         string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	body.ResourceCode = strings.TrimSpace(body.ResourceCode)
+	if body.ProfileGamerID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "profileGamerId is required"})
+		return
+	}
+	if body.ResourceCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "resourceCode is required"})
+		return
+	}
+	if body.Amount == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "amount must be different from 0"})
+		return
+	}
+	var player models.ProfileGamer
+	if err := h.db.WithContext(c.Request.Context()).First(&player, body.ProfileGamerID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify profile"})
+		return
+	}
+	if err := h.resourceService.EnsureInitialAllocation(c.Request.Context(), body.ProfileGamerID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to initialize player resources"})
+		return
+	}
+	source := "admin"
+	if reason := strings.TrimSpace(body.Reason); reason != "" {
+		source = "admin:" + reason
+		if len(source) > 128 {
+			source = source[:128]
+		}
+	}
+	resource, err := h.resourceService.ApplyResourceDelta(c.Request.Context(), body.ProfileGamerID, body.ResourceCode, body.Amount, "admin_grant", source)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"resource": resource, "profile": player})
 }
 
 func (h *ResourceHandler) profileID(c *gin.Context) (uint, bool) {
