@@ -625,13 +625,13 @@
     "semantic_hash": "f3e5230e35b1d69253af9d09a930bdf8"
   },
   "internal/nexus_game/routes/routes.go": {
-    "mtime": 1781339641.8479412,
-    "ast_hash": "693195224323c2e80b835720792b4e23",
+    "mtime": 1781344560.7265832,
+    "ast_hash": "cf339e774096aedde13c9a863f856eb2",
     "semantic_hash": ""
   },
   "internal/nexus_game/routes/routes_test.go": {
-    "mtime": 1781196912.904009,
-    "ast_hash": "8f7e60114573ab2fa0212064f1c94834",
+    "mtime": 1781344707.606088,
+    "ast_hash": "14124c0e1681c294709aed49442eba00",
     "semantic_hash": ""
   },
   "internal/nexus_game/seeds/content_seed.go": {
@@ -665,8 +665,8 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/services/content_service.go": {
-    "mtime": 1781337829.2986484,
-    "ast_hash": "d52b0769874e55df2c82ecb693129882",
+    "mtime": 1781344597.1590588,
+    "ast_hash": "612ffa22645d25e391d4ed2d1abca588",
     "semantic_hash": ""
   },
   "internal/nexus_game/services/resource_service.go": {
@@ -1260,18 +1260,18 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/handlers/army_handler.go": {
-    "mtime": 1781339781.1507783,
-    "ast_hash": "e30ac33e754a5fca39898d0fa7538cd8",
+    "mtime": 1781344741.1979523,
+    "ast_hash": "afcb592092d0cdfceb15ef92ea9d485c",
     "semantic_hash": ""
   },
   "internal/nexus_game/models/army.go": {
-    "mtime": 1781339760.2263753,
-    "ast_hash": "1b8d526d92132b2ea9bd708ac3c472f5",
+    "mtime": 1781344269.120443,
+    "ast_hash": "ad926c60da977b63f437b0f0640b396b",
     "semantic_hash": ""
   },
   "internal/nexus_game/repositories/army_repository.go": {
-    "mtime": 1781339286.8923008,
-    "ast_hash": "1a172505b7db881097bc6fefacee8c2d",
+    "mtime": 1781344292.0894518,
+    "ast_hash": "1939effd7baf4fb019e714176f637cda",
     "semantic_hash": ""
   },
   "internal/nexus_game/services/army_rules_test.go": {
@@ -1280,8 +1280,18 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/services/army_service.go": {
-    "mtime": 1781339760.2292352,
-    "ast_hash": "0f66cc6d82a869bd3553d68b24eefd23",
+    "mtime": 1781344730.9712071,
+    "ast_hash": "177aed0d1821410ae14b10d47631dc16",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/services/army_progression_service.go": {
+    "mtime": 1781344751.236429,
+    "ast_hash": "83aa64c972486a0e961fbb74810af9c6",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/services/army_slot_progression_service_test.go": {
+    "mtime": 1781344757.738036,
+    "ast_hash": "4bea5e5ea7b8a7f699f8d50277d7b3d0",
     "semantic_hash": ""
   }
 }
