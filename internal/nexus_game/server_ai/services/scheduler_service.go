@@ -1,6 +1,7 @@
 package services
 
 import (
+	"cgwm/battle/internal/features"
 	"context"
 	"log"
 	"os"
@@ -19,6 +20,10 @@ var (
 
 func StartServerAIJobScheduler(db *gorm.DB) {
 	if db == nil {
+		return
+	}
+	if !features.NexusGameEnabled() {
+		log.Printf("[nexus-server-ai-cron] status=deprecated_disabled reason=NEXUS_GAME_ENABLED is not true")
 		return
 	}
 	if strings.EqualFold(os.Getenv("NEXUS_SERVER_AI_CRON_ENABLED"), "false") {

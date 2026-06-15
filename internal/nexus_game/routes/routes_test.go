@@ -9,6 +9,7 @@ import (
 )
 
 func TestRegisterRoutesMountsHealthAndDebug(t *testing.T) {
+	t.Setenv("NEXUS_GAME_ENABLED", "true")
 	t.Setenv("REDIS_URL", "")
 	gin.SetMode(gin.TestMode)
 
@@ -47,6 +48,7 @@ func TestRegisterRoutesMountsHealthAndDebug(t *testing.T) {
 }
 
 func TestRegisterRoutesMountsContentCRUDRoutes(t *testing.T) {
+	t.Setenv("NEXUS_GAME_ENABLED", "true")
 	t.Setenv("REDIS_URL", "")
 	gin.SetMode(gin.TestMode)
 
@@ -118,6 +120,7 @@ func TestRegisterRoutesMountsContentCRUDRoutes(t *testing.T) {
 }
 
 func TestRegisterRoutesMountsServerAIRoutes(t *testing.T) {
+	t.Setenv("NEXUS_GAME_ENABLED", "true")
 	t.Setenv("REDIS_URL", "")
 	gin.SetMode(gin.TestMode)
 
@@ -162,5 +165,20 @@ func TestRegisterRoutesMountsServerAIRoutes(t *testing.T) {
 		if !mounted[route] {
 			t.Fatalf("%s was not mounted", route)
 		}
+	}
+}
+
+func TestRegisterRoutesIsDeprecatedDisabledByDefault(t *testing.T) {
+	t.Setenv("REDIS_URL", "")
+	gin.SetMode(gin.TestMode)
+
+	router := gin.New()
+	RegisterRoutes(router, nil)
+
+	recorder := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/nexus-game/health", nil)
+	router.ServeHTTP(recorder, req)
+	if recorder.Code != http.StatusGone {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusGone)
 	}
 }

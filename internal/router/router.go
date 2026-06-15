@@ -2,6 +2,7 @@ package router
 
 import (
 	"cgwm/battle/internal/admin"
+	"cgwm/battle/internal/features"
 	"cgwm/battle/internal/models"
 	nexuscache "cgwm/battle/internal/nexus_game/cache"
 	nexusdev "cgwm/battle/internal/nexus_game/dev"
@@ -51,10 +52,12 @@ func RouterApp(database *gorm.DB) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})
 	})
 
-	// Register Nexus game asset files early. The Next.js admin UI itself is served later by
-	// admin.Register through NoRoute, not by a Gin /admin/*filepath wildcard, so /admin/login
-	// and other explicit admin routes do not conflict at startup.
-	nexusroutes.RegisterAdminStatic(router)
+	if features.NexusGameEnabled() {
+		// Register Nexus game asset files early. The Next.js admin UI itself is served later by
+		// admin.Register through NoRoute, not by a Gin /admin/*filepath wildcard, so /admin/login
+		// and other explicit admin routes do not conflict at startup.
+		nexusroutes.RegisterAdminStatic(router)
+	}
 
 	admin.Register(router, database)
 
@@ -92,10 +95,14 @@ func RouterApp(database *gorm.DB) {
 	private.POST("/ai/providers/test", testAIProvider())
 	private.POST("/ai/providers/generate", generateAIProviderText())
 	nexustribunal.RegisterRoutes(router, database, jwtAuth(), adminAPIAuth())
-	translations.RegisterRoutes(router, database)
-	nexusdev.RegisterRoutes(router)
-	nexuscache.RegisterRoutes(router)
-	nexusroutes.RegisterRoutes(router, database)
+	if features.NexusGameEnabled() {
+		translations.RegisterRoutes(router, database)
+		nexusdev.RegisterRoutes(router)
+		nexuscache.RegisterRoutes(router)
+		nexusroutes.RegisterRoutes(router, database)
+	} else {
+		registerDeprecatedNexusGameRoutes(router)
+	}
 
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())
@@ -105,7 +112,9 @@ func RouterApp(database *gorm.DB) {
 
 	strictAdminAPI := router.Group("/api/admin")
 	strictAdminAPI.Use(jwtAuth(), adminAPIAuth(), queue.Middleware())
-	translations.RegisterAdminRoutes(strictAdminAPI, database)
+	if features.NexusGameEnabled() {
+		translations.RegisterAdminRoutes(strictAdminAPI, database)
+	}
 	// Monde IA desactive: routes strictes /api/admin/game non enregistrees.
 	// registerStrictAdminWorldGameRoutes(strictAdminAPI, database)
 
@@ -195,6 +204,34 @@ func getEnv(key string, fallback string) string {
 	}
 
 	return fallback
+}
+
+func registerDeprecatedNexusGameRoutes(router *gin.Engine) {
+	handler := func(c *gin.Context) {
+		c.JSON(http.StatusGone, features.NexusGameDisabledPayload())
+	}
+	adminHandler := func(c *gin.Context) {
+		c.Data(http.StatusGone, "text/html; charset=utf-8", []byte(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Nexus Games desactive</title><style>body{font-family:Inter,Arial,sans-serif;background:#0f172a;color:#e2e8f0;margin:0;display:grid;min-height:100vh;place-items:center}main{max-width:680px;padding:32px}a{color:#67e8f9}</style></head><body><main><h1>Nexus Games / MMO desactive</h1><p>Ce module est deprecie et masque dans l'administration. Les modules conserves sont Battle IA, Quetes RP, Coop et Live.</p><p><a href="/admin/">Retour admin</a></p></main></body></html>`))
+	}
+
+	router.Any("/api/nexus-game", handler)
+	router.Any("/api/nexus-game/*path", handler)
+	router.Any("/api/v1/prerequisites/validate", handler)
+	router.Any("/api/v1/buildings", handler)
+	router.Any("/api/v1/buildings/*path", handler)
+	router.Any("/api/v1/construction", handler)
+	router.Any("/api/v1/construction/*path", handler)
+	router.Any("/api/v1/units/catalog", handler)
+	router.Any("/api/v1/units/:key", handler)
+	router.Any("/api/v1/research/catalog", handler)
+	router.Any("/api/v1/research/:key", handler)
+	router.Any("/api/v1/assets/buildings/manifest", handler)
+	router.Any("/api/v1/assets/buildings/updates", handler)
+
+	router.GET("/admin/nexus", adminHandler)
+	router.GET("/admin/nexus/*path", adminHandler)
+	router.GET("/admin/nexus-coin", adminHandler)
+	router.GET("/admin/nexus-coin/*path", adminHandler)
 }
 
 func signup(database *gorm.DB) gin.HandlerFunc {

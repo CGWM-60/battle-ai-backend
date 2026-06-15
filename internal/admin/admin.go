@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"cgwm/battle/internal/app/constants"
+	"cgwm/battle/internal/features"
 	"cgwm/battle/internal/models"
 	translations "cgwm/battle/internal/nexus_game/translations"
 	nexustribunal "cgwm/battle/internal/nexus_tribunal"
@@ -389,15 +390,19 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.PUT("/roleplay-hero-images/:id", server.updateRolePlayHeroImageAdminAPI)
 	api.DELETE("/roleplay-hero-images/:id", server.deleteRolePlayHeroImageAdminAPI)
 	api.GET("/tribunal-generated", server.tribunalGeneratedAdminAPI)
-	api.GET("/nexus-coin", server.nexusCoinAPI)
-	api.POST("/nexus-coin/plans", server.createNexusCoinPlanAPI)
-	api.PUT("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
-	api.PATCH("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
-	api.DELETE("/nexus-coin/plans/:id", server.deleteNexusCoinPlanAPI)
-	api.GET("/nexus-system", server.nexusSystemAPI)
-	api.POST("/nexus-system/resources/grant", server.nexusSystemGrantResourceAPI)
-	api.POST("/nexus-system/units/grant", server.nexusSystemGrantUnitsAPI)
-	api.POST("/nexus-system/ai/jobs/run-due", server.nexusSystemRunDueAIJobsAPI)
+	if features.NexusGameEnabled() {
+		api.GET("/nexus-coin", server.nexusCoinAPI)
+		api.POST("/nexus-coin/plans", server.createNexusCoinPlanAPI)
+		api.PUT("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
+		api.PATCH("/nexus-coin/plans/:id", server.updateNexusCoinPlanAPI)
+		api.DELETE("/nexus-coin/plans/:id", server.deleteNexusCoinPlanAPI)
+		api.GET("/nexus-system", server.nexusSystemAPI)
+		api.POST("/nexus-system/resources/grant", server.nexusSystemGrantResourceAPI)
+		api.POST("/nexus-system/units/grant", server.nexusSystemGrantUnitsAPI)
+		api.POST("/nexus-system/ai/jobs/run-due", server.nexusSystemRunDueAIJobsAPI)
+	} else {
+		registerDeprecatedNexusAdminAPI(api)
+	}
 	// Monde IA desactive: ne pas exposer /admin/api/game.
 	// server.registerGameAdminAPI(api)
 
@@ -407,9 +412,15 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	// Fixes 404 when visiting /admin/nexus/translations/ (the page loads the static,
 	// but its data fetches to /admin/api/... were 404ing because the handlers were only
 	// mounted under the separate /api/admin group).
-	translations.RegisterAdminRoutes(api, db)
+	if features.NexusGameEnabled() {
+		translations.RegisterAdminRoutes(api, db)
+	}
 
-	router.GET("/api/v1/nexus-coin/plans", server.publicNexusCoinPlansAPI)
+	if features.NexusGameEnabled() {
+		router.GET("/api/v1/nexus-coin/plans", server.publicNexusCoinPlansAPI)
+	} else {
+		router.Any("/api/v1/nexus-coin/plans", deprecatedNexusAdminAPIHandler())
+	}
 
 	group := router.Group("/admin")
 	group.Use(server.requireAdmin())
@@ -454,6 +465,22 @@ func RequestMetricsMiddleware() gin.HandlerFunc {
 			atomic.AddInt64(&adminRequestStats.status5xx, 1)
 		}
 	}
+}
+
+func deprecatedNexusAdminAPIHandler() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.JSON(http.StatusGone, features.NexusGameDisabledPayload())
+	}
+}
+
+func registerDeprecatedNexusAdminAPI(api *gin.RouterGroup) {
+	handler := deprecatedNexusAdminAPIHandler()
+	api.Any("/nexus-coin", handler)
+	api.Any("/nexus-coin/*path", handler)
+	api.Any("/nexus-system", handler)
+	api.Any("/nexus-system/*path", handler)
+	api.Any("/translations", handler)
+	api.Any("/translations/*path", handler)
 }
 
 func adminTemplateFuncs() template.FuncMap {

@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"cgwm/battle/internal/features"
 	"cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/nexus_game/handlers"
 	"cgwm/battle/internal/nexus_game/models"
@@ -88,6 +89,11 @@ func copyLegacyContentAssetsToVolume(dstRoot string) {
 }
 
 func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
+	if !features.NexusGameEnabled() {
+		registerDeprecatedRoutes(router)
+		return
+	}
+
 	redis := cache.NewRedisServiceFromEnv()
 	health := handlers.NewHealthHandler(database, redis)
 	bootstrap := handlers.NewBootstrapHandler(database)
@@ -362,4 +368,23 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// POST /ai/generate {world_id, feature, prompt_id?, prompt_version?, extra?}
 	// Powers the rich generation console in admin with visible progress + success/error.
 	group.POST("/ai/generate", worldH.RunAIGeneration)
+}
+
+func registerDeprecatedRoutes(router *gin.Engine) {
+	handler := func(c *gin.Context) {
+		c.JSON(410, features.NexusGameDisabledPayload())
+	}
+	router.Any("/api/nexus-game", handler)
+	router.Any("/api/nexus-game/*path", handler)
+	router.Any("/api/v1/prerequisites/validate", handler)
+	router.Any("/api/v1/buildings", handler)
+	router.Any("/api/v1/buildings/*path", handler)
+	router.Any("/api/v1/construction", handler)
+	router.Any("/api/v1/construction/*path", handler)
+	router.Any("/api/v1/units/catalog", handler)
+	router.Any("/api/v1/units/:key", handler)
+	router.Any("/api/v1/research/catalog", handler)
+	router.Any("/api/v1/research/:key", handler)
+	router.Any("/api/v1/assets/buildings/manifest", handler)
+	router.Any("/api/v1/assets/buildings/updates", handler)
 }
