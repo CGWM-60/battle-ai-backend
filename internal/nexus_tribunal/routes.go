@@ -1585,7 +1585,8 @@ func (m *module) listGeneratedCases(c *gin.Context) {
 	q.Count(&total)
 
 	var items []tribunalmodels.TribunalGeneratedCase
-	if err := q.Order("level asc, created_at desc").Offset(offset).Limit(limit).Find(&items).Error; err != nil {
+	// Stable order by created_at + id for consistent pagination and unique results (no duplicate pages)
+	if err := q.Order("created_at desc, id desc").Offset(offset).Limit(limit).Find(&items).Error; err != nil {
 		respondErr(c, http.StatusInternalServerError, "DB_ERROR", "Erreur lecture affaires generees.", nil)
 		return
 	}
