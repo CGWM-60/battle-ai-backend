@@ -42,7 +42,7 @@ func (r *QuestRepository) ListBattleQuestsPage(ctx context.Context, status strin
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&quests).Error
+	err := query.Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&quests).Error
 	return quests, total, err
 }
 
@@ -96,7 +96,7 @@ func (r *QuestRepository) ListRolePlayQuestsPage(ctx context.Context, status str
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	err := query.Order("created_at DESC").Limit(limit).Offset(offset).Find(&quests).Error
+	err := query.Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&quests).Error
 	return quests, total, err
 }
 
