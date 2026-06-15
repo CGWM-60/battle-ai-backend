@@ -98,8 +98,17 @@ function DashboardContent({ data }: { data: DashboardData }) {
                   <td><span className={`status ${data.Cron.RolePlay.LastStatus || ''}`}>{data.Cron.RolePlay.LastStatus || 'idle'}</span></td>
                   <td>{data.Cron.RolePlay.LastDurationMS} ms</td>
                 </tr>
+                <tr>
+                  <td><strong>tribunal</strong></td>
+                  <td>{(data.Cron.Tribunal?.LastRunID) || '-'}</td>
+                  <td>{data.Cron.Tribunal?.LastProvider ? `${data.Cron.Tribunal.LastProvider} / ${data.Cron.Tribunal.LastModel || ''}` : '-'}</td>
+                  <td>{(data.Cron.Tribunal?.LastStep) || '-'}</td>
+                  <td><span className={`status ${data.Cron.Tribunal?.LastStatus || ''}`}>{data.Cron.Tribunal?.LastStatus || 'idle'}</span></td>
+                  <td>{(data.Cron.Tribunal?.LastDurationMS ?? 0)} ms</td>
+                </tr>
               </tbody>
             </table>
+            <p className="hint" style={{ marginTop: 4, fontSize: '0.8em' }}>Tribunal IA cases generator (10 niveaux par cycle) - meme mecanisme que les quetes.</p>
           </div>
         </article>
       </section>
@@ -108,6 +117,12 @@ function DashboardContent({ data }: { data: DashboardData }) {
         <RecentList title="Dernieres quetes Battle" items={data.Recent.BattleQuests.map((item) => `#${item.Id} ${item.Title} - ${item.Status}`)} />
         <RecentList title="Dernieres quetes RP" items={data.Recent.RolePlayQuests.map((item) => `#${item.Id} ${item.Title} - ${item.Status}`)} />
         <RecentList title="Dernieres battles" items={data.Recent.Battles.map((item) => `#${item.Id} ${item.Title} - ${item.Status}`)} />
+      </section>
+
+      <section className="panel">
+        <h2>Tribunal IA - Affaires generees</h2>
+        <p>Consultez l'historique complet des 10 affaires par cycle, avec temoins, preuves, declarations, contradictions et generation manuelle.</p>
+        <a href="/admin/tribunal-ai" style={{ display: 'inline-block', marginTop: 8 }} className="secondary">Ouvrir la page Tribunal IA</a>
       </section>
 
     </>

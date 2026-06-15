@@ -1,16 +1,16 @@
 # Graph Report - go-battle-ia  (2026-06-15)
 
 ## Corpus Check
-- 255 files · ~469,325 words
+- 255 files · ~469,425 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 6061 nodes · 13699 edges · 312 communities (269 shown, 43 thin omitted)
+- 6061 nodes · 13699 edges · 314 communities (271 shown, 43 thin omitted)
 - Extraction: 94% EXTRACTED · 6% INFERRED · 0% AMBIGUOUS · INFERRED: 757 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9ccc7010`
+- Built from commit: `67023bec`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -313,11 +313,12 @@
 - [[_COMMUNITY_Community 303|Community 303]]
 - [[_COMMUNITY_Community 304|Community 304]]
 - [[_COMMUNITY_Community 305|Community 305]]
-- [[_COMMUNITY_Community 306|Community 306]]
 - [[_COMMUNITY_Community 307|Community 307]]
 - [[_COMMUNITY_Community 308|Community 308]]
 - [[_COMMUNITY_Community 309|Community 309]]
 - [[_COMMUNITY_Community 310|Community 310]]
+- [[_COMMUNITY_Community 312|Community 312]]
+- [[_COMMUNITY_Community 313|Community 313]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `DB` - 106 edges
@@ -351,7 +352,7 @@
 - **Battle Persistence Flow** — api_endpoints_battles, api_endpoints_battlesave, api_endpoints_battlesaveturn, battle_ia_json_formats_saved_battle_schema, guide_backend_source_of_truth_battles [EXTRACTED 1.00]
 - **Dokploy Production Deployment Stack** — dokploy_dokploy_deployment, compose_prod_app_service, compose_prod_mariadb_service, compose_prod_redis_service, compose_prod_required_secrets [EXTRACTED 1.00]
 
-## Communities (312 total, 43 thin omitted)
+## Communities (314 total, 43 thin omitted)
 
 ### Community 0 - "Internal Scheduler Quest Scheduler"
 Cohesion: 0.05
@@ -390,8 +391,8 @@ Cohesion: 0.14
 Nodes (5): Context, Contradiction, module, currentOwnerID(), respondOK()
 
 ### Community 9 - "Internal Generated Users Gen"
-Cohesion: 0.05
-Nodes (10): usersHasManyArenaMembershipsTx, usersHasManyBattleSavesTx, usersHasManyCoopMembershipsTx, usersHasManyCoopPartiesTx, usersHasManyHostedArenasTx, usersHasManyRolePlayRunsTx, usersHasManyRolePlaySessionsTx, CoopPartyMember (+2 more)
+Cohesion: 0.04
+Nodes (15): usersHasManyArenaMembershipsTx, usersHasManyBattleSavesTx, usersHasManyCoopMembershipsTx, usersHasManyCoopPartiesTx, usersHasManyHostedArenasTx, usersHasManyRolePlayRunsTx, usersHasManyRolePlaySessionsTx, BattleArena (+7 more)
 
 ### Community 10 - "Nexus Tribunal Adapters Nexus Games"
 Cohesion: 0.07
@@ -542,7 +543,7 @@ Cohesion: 0.12
 Nodes (4): liveSessionDo, Dao, DO, Tabler
 
 ### Community 47 - "Internal Generated Role Play Quest"
-Cohesion: 0.13
+Cohesion: 0.12
 Nodes (3): rolePlayQuestRunDo, DO, Tabler
 
 ### Community 48 - "Internal Generated Users Gen"
@@ -578,7 +579,7 @@ Cohesion: 0.08
 Nodes (16): coopPartyBelongsToBattleSave, coopPartyBelongsToHostUser, coopPartyBelongsToRolePlaySession, coopPartyHasManyLiveSessions, coopPartyHasManyMembers, coopParty, Asterisk, Columns (+8 more)
 
 ### Community 56 - "Internal Generated Battle Arenas Gen"
-Cohesion: 0.09
+Cohesion: 0.10
 Nodes (5): battleArenaBelongsToBattleSaveTx, battleArenaBelongsToHostUserTx, battleArenaHasManyLiveSessionsTx, battleArenaHasManyMembersTx, ResultInfo
 
 ### Community 57 - "Internal Generated Quest IA Battles"
@@ -642,8 +643,8 @@ Cohesion: 0.08
 Nodes (14): rolePlayQuestRun, Asterisk, Columns, Dao, Expr, Field, Int, OrderExpr (+6 more)
 
 ### Community 72 - "Internal Generated Role Play Quest"
-Cohesion: 0.11
-Nodes (4): rolePlayQuestRunBelongsToRolePlaySessionTx, rolePlayQuestRunBelongsToTemplateTx, rolePlayQuestRunBelongsToUserTx, ResultInfo
+Cohesion: 0.09
+Nodes (7): rolePlayQuestRunBelongsToRolePlaySessionTx, rolePlayQuestRunBelongsToTemplateTx, rolePlayQuestRunBelongsToUserTx, ResultInfo, RolePlayQuestTemplate, RolePlaySession, Users
 
 ### Community 73 - "Internal Generated Role Play Quest"
 Cohesion: 0.13
@@ -714,8 +715,8 @@ Cohesion: 0.21
 Nodes (8): Context, DB, QuestIaBattle, RolePlayQuestArc, RolePlayQuestTemplate, applyQuestQuery(), createRolePlayQuestStructure(), QuestRepository
 
 ### Community 90 - "Nexus Game Repositories Resource Repository"
-Cohesion: 0.13
-Nodes (17): DailyGrantConfig, Context, DailyGrantClaim, DB, PlayerCityStats, PlayerResource, DailyGrantClaimRepository, DailyGrantConfigRepository (+9 more)
+Cohesion: 0.16
+Nodes (9): DailyGrantConfig, Context, DailyGrantClaim, PlayerCityStats, PlayerResource, DailyGrantClaimRepository, PlayerResourceRepository, ResourceCatalog (+1 more)
 
 ### Community 91 - "Nexus Game Handlers World Handler"
 Cohesion: 0.05
@@ -726,11 +727,11 @@ Cohesion: 0.07
 Nodes (25): AccountSummary, AdminRolePlayArc, AdminRolePlayChapter, AdminRolePlayHeroImage, AdminRolePlayHeroImagesResponse, Battle, ConfigData, CronData (+17 more)
 
 ### Community 93 - "Internal Generated Battle Arena Members"
-Cohesion: 0.12
+Cohesion: 0.14
 Nodes (5): battleArenaMemberBelongsToArenaTx, battleArenaMemberBelongsToUserTx, BattleArena, ResultInfo, Users
 
 ### Community 94 - "Internal Generated Coop Party Members"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (5): coopPartyMemberBelongsToCoopPartyTx, coopPartyMemberBelongsToUserTx, CoopParty, ResultInfo, Users
 
 ### Community 95 - "Internal Models Nexus Translation Models"
@@ -762,12 +763,12 @@ Cohesion: 0.12
 Nodes (15): Query, battleArena, battleArenaMember, battleSave, battleSaveTurn, coopParty, coopPartyMember, liveEvent (+7 more)
 
 ### Community 102 - "Nexus Game Routes Routes"
-Cohesion: 0.16
-Nodes (15): activeProviderSummary(), bindJSON(), boolFromAny(), clamp(), defaultModel(), defaultText(), defaultTribunalProvider(), displayProvider() (+7 more)
+Cohesion: 0.20
+Nodes (10): DefaultModelForProvider(), providerTestRequest, bindJSON(), boolFromAny(), clamp(), defaultText(), respondErr(), stringSliceFromAny() (+2 more)
 
 ### Community 103 - "Internal Nexus Tribunal Routes"
 Cohesion: 0.08
-Nodes (44): DB, Engine, HandlerFunc, RouterGroup, Time, TribunalCaseGenerationBatch, apiError, createCaseRequest (+36 more)
+Nodes (42): DB, Engine, HandlerFunc, RouterGroup, Time, TribunalCaseGenerationBatch, apiError, createCaseRequest (+34 more)
 
 ### Community 104 - "Internal Repository Roleplay Repository"
 Cohesion: 0.20
@@ -798,12 +799,12 @@ Cohesion: 0.22
 Nodes (6): Context, CoopParty, CoopPartyMember, DB, NewCoopRepository(), CoopRepository
 
 ### Community 111 - "Internal Generated Battle Arena Members"
-Cohesion: 0.18
-Nodes (7): newBattleArenaMember(), battleArenaMemberBelongsToArena, battleArenaMemberBelongsToUser, battleArenaMember, DB, RelationField, Session
+Cohesion: 0.12
+Nodes (10): battleArenaMemberBelongsToArenaTx, battleArenaMemberBelongsToUserTx, newBattleArenaMember(), battleArenaMemberBelongsToArena, battleArenaMemberBelongsToUser, Association, battleArenaMember, DB (+2 more)
 
 ### Community 112 - "Internal Generated Coop Party Members"
-Cohesion: 0.12
-Nodes (10): coopPartyMemberBelongsToCoopPartyTx, coopPartyMemberBelongsToUserTx, newCoopPartyMember(), coopPartyMemberBelongsToCoopParty, coopPartyMemberBelongsToUser, Association, coopPartyMember, DB (+2 more)
+Cohesion: 0.18
+Nodes (7): newCoopPartyMember(), coopPartyMemberBelongsToCoopParty, coopPartyMemberBelongsToUser, coopPartyMember, DB, RelationField, Session
 
 ### Community 113 - "Internal Router Middleware"
 Cohesion: 0.10
@@ -818,8 +819,8 @@ Cohesion: 0.25
 Nodes (6): Context, DB, LiveEvent, LiveSession, NewLiveRepository(), LiveRepository
 
 ### Community 116 - "Internal Scenarios Dev E2e Test"
-Cohesion: 0.13
-Nodes (24): T, PrerequisiteValidation, UnitDefinition, TestArmyRulesCapacityCostByUnitType(), TestArmyRulesDefaultFormationSlots(), TestArmyRulesSlotCompatibility(), TestArmyRulesTrainingCostUsesExpectedResources(), allowedTypesForSlot() (+16 more)
+Cohesion: 0.10
+Nodes (35): T, ArmyFormation, ArmyFormationSlot, ArmySlotAssignment, JSON, PrerequisiteValidation, UnitDefinition, NewArmyFormationRepository() (+27 more)
 
 ### Community 117 - "Internal Admin Admin"
 Cohesion: 0.26
@@ -891,7 +892,7 @@ Nodes (6): Context, DB, TribunalCaseGenerationBatch, TribunalGeneratedCase, NewC
 
 ### Community 134 - "Internal Router API Handlers"
 Cohesion: 0.11
-Nodes (17): API go-battle-ia, Arena Et Coop, Authentification, Codes De Reponse Courants, Exemple Flutter, Lister les fournisseurs IA, Login, Modifier mon profil (+9 more)
+Nodes (18): API go-battle-ia, Arena and Coop Route Implementation Status, Arena Et Coop, Arenas, Authentification, Codes De Reponse Courants, Coop, Exemple Flutter (+10 more)
 
 ### Community 135 - "Internal Economy Engine"
 Cohesion: 0.30
@@ -922,8 +923,8 @@ Cohesion: 0.27
 Nodes (11): ImportPayload, Context, DB, Engine, RouterGroup, bindImportPayload(), RegisterAdminRoutes(), RegisterRoutes() (+3 more)
 
 ### Community 142 - "Nexus Game Services Resource Service"
-Cohesion: 0.19
-Nodes (14): InitialAllocationLog, Context, DailyGrantClaim, DB, PlayerResource, Time, NewDailyGrantClaimRepository(), NewPlayerResourceRepository() (+6 more)
+Cohesion: 0.22
+Nodes (16): InitialAllocationLog, DB, Context, DB, PlayerResource, DailyGrantConfigRepository, PlayerCityStatsRepository, NewDailyGrantConfigRepository() (+8 more)
 
 ### Community 143 - "Nexus Game Services Resource Service"
 Cohesion: 0.29
@@ -962,8 +963,8 @@ Cohesion: 0.33
 Nodes (8): DbConnect(), getEnv(), getEnvInt(), jsonValue(), seedDefaultBuildingDefinitions(), DB, JSON, main()
 
 ### Community 153 - "Nexus Game Handlers IA Companion"
-Cohesion: 0.10
-Nodes (26): ArmyProgressionSnapshot, ContentService, DB, ArmyCombatReport, ArmyFormation, ArmyFormationProgressionRule, ArmyFormationSlot, ArmySlotAssignment (+18 more)
+Cohesion: 0.11
+Nodes (17): ArmyProgressionSnapshot, ContentService, DB, ArmyAutomationSettings, ArmyCombatReport, ArmyFormationProgressionRule, ContentService, Context (+9 more)
 
 ### Community 154 - "Nexus Tribunal Models Narrative Models"
 Cohesion: 0.42
@@ -1018,8 +1019,8 @@ Cohesion: 0.11
 Nodes (17): 10) Améliorations "toutes phases d'un coup" (exécution immédiate), 10. Endpoints Météo & Risques, 12. Actions Flutter disponibles, 13. Règles métier, 14. Routines serveur, 15. Erreurs possibles, 16. TODO Flutter, 1. Vue générale (+9 more)
 
 ### Community 174 - "Nexus Tribunal Adapters AI Provider"
-Cohesion: 0.24
-Nodes (12): DefaultModelForProvider(), LocalChatCompletionsURL(), NewAIProviderAdapter(), TestLocalChatCompletionsURL(), TestLocalChatCompletionsURLRejectsInvalidEndpoint(), TestResolveLocalProviderDoesNotRequireKey(), TestResolveProviderRequiresRemoteKey(), TestResolveProviderUsesEnvKeyForRemote() (+4 more)
+Cohesion: 0.42
+Nodes (8): LocalChatCompletionsURL(), NewAIProviderAdapter(), TestLocalChatCompletionsURL(), TestLocalChatCompletionsURLRejectsInvalidEndpoint(), TestResolveLocalProviderDoesNotRequireKey(), TestResolveProviderRequiresRemoteKey(), TestResolveProviderUsesEnvKeyForRemote(), T
 
 ### Community 175 - "Internal Admin Admin"
 Cohesion: 0.14
@@ -1130,8 +1131,8 @@ Cohesion: 0.50
 Nodes (3): DB, WorldService, SeedInitialWorlds()
 
 ### Community 216 - "Nexus Game Translations Service"
-Cohesion: 0.24
-Nodes (10): ArmyCombatReport, DB, ArmyAutomationSettings, NewArmyAutomationRepository(), NewArmyReportRepository(), NewArmyTransactionLogRepository(), ArmyAutomationRepository, ArmyReportRepository (+2 more)
+Cohesion: 0.35
+Nodes (8): ArmyCombatReport, DB, NewArmyAutomationRepository(), NewArmyReportRepository(), NewArmyTransactionLogRepository(), ArmyAutomationRepository, ArmyReportRepository, ArmyTransactionLogRepository
 
 ### Community 217 - "Internal Router City Engines Handlers"
 Cohesion: 0.50
@@ -1142,8 +1143,8 @@ Cohesion: 0.67
 Nodes (3): adminRolePlayQuestsResponse, adminRolePlayQuestData, adminRolePlayQuestStats
 
 ### Community 219 - "Internal Admin Admin"
-Cohesion: 0.50
-Nodes (3): battleArenaMemberBelongsToArenaTx, battleArenaMemberBelongsToUserTx, Association
+Cohesion: 0.25
+Nodes (11): activeProviderSummary(), configuredStatus(), defaultModel(), defaultTribunalProvider(), displayProvider(), nextScreen(), normalizeProvider(), providerEnvKey() (+3 more)
 
 ### Community 230 - "Nexus Game Models World"
 Cohesion: 1.00
@@ -1174,8 +1175,8 @@ Cohesion: 0.17
 Nodes (11): 10. Checklist avant de passer a l'etape suivante, 11. Premier plan de travail concret, 12. Regle finale, 1. Objectif du projet, 2. Regle d'or, 3. Etat actuel du repo, 4. Structure cible recommandee, 6. Ordre des fichiers a coder (+3 more)
 
 ### Community 251 - "Community 251"
-Cohesion: 0.40
-Nodes (5): Backend Construction Order, Battle Service, Backend Guide, Recommended Backend Structure, Backend Testing Strategy
+Cohesion: 0.18
+Nodes (11): RolePlay Quests, RolePlay Sessions API, RolePlaySession, 7. Contrats minimums par domaine, Backend Construction Order, Battle Service, Backend Guide, Live Service (+3 more)
 
 ### Community 252 - "Community 252"
 Cohesion: 0.20
@@ -1190,8 +1191,8 @@ Cohesion: 0.35
 Nodes (6): companionBaseDir(), companionBaseURL(), NewIACompanionHandler(), IACompanionHandler, Context, DB
 
 ### Community 255 - "Community 255"
-Cohesion: 0.11
-Nodes (21): Arena and Coop Route Implementation Status, Arenas, Coop, Creer une live session, Historique live par channel, Lister et lire une live session, Live Sessions, LiveEvent (+13 more)
+Cohesion: 0.20
+Nodes (10): Creer une live session, Historique live par channel, Lister et lire une live session, Live Sessions, LiveEvent, Schema Live, Security and HTTP Queue, Stream WebSocket (+2 more)
 
 ### Community 256 - "Community 256"
 Cohesion: 0.22
@@ -1330,8 +1331,8 @@ Cohesion: 0.38
 Nodes (10): JSON, Time, ArmyAutomationSettings, ArmyCombatReport, ArmyFormation, ArmyFormationProgressionRule, ArmyFormationSlot, ArmySlotAssignment (+2 more)
 
 ### Community 295 - "Community 295"
-Cohesion: 0.29
-Nodes (3): RolePlayQuestTemplate, RolePlaySession, Users
+Cohesion: 0.32
+Nodes (6): DailyGrantClaim, Time, NewDailyGrantClaimRepository(), DailyGrantService, DailyGrantStatus, applyStreakMultiplier()
 
 ### Community 296 - "Community 296"
 Cohesion: 0.32
@@ -1373,10 +1374,6 @@ Nodes (4): 1. Modèles GORM existants liés aux unités, Dans `internal/nexus_ga
 Cohesion: 0.50
 Nodes (4): 2. Modèles GORM existants liés au catalogue d’unités, Catalogue côté Go, Point important, Traitement de la rareté et du coût
 
-### Community 306 - "Community 306"
-Cohesion: 0.18
-Nodes (5): BattleArena, BattleArenaMember, BattleSave, CoopParty, RolePlaySession
-
 ### Community 307 - "Community 307"
 Cohesion: 0.50
 Nodes (4): 6. Services existants liés à la validation des prérequis, Ce qui est déjà important pour ce ticket, `internal/nexus_game/services/content_service.go`, Limite actuelle
@@ -1392,6 +1389,14 @@ Nodes (4): 9. Seeds existants pour recherches, Branche militaire déjà seedée,
 ### Community 310 - "Community 310"
 Cohesion: 0.67
 Nodes (3): 3. Modèles GORM existants liés aux recherches, Dans `internal/nexus_game/models/research_definition.go`, Observation
+
+### Community 312 - "Community 312"
+Cohesion: 0.50
+Nodes (3): coopPartyMemberBelongsToCoopPartyTx, coopPartyMemberBelongsToUserTx, Association
+
+### Community 313 - "Community 313"
+Cohesion: 0.50
+Nodes (4): Modifier mon profil, Modifier xp / coin d'un utilisateur, Recuperer mon profil, Routes Utilisateur
 
 ## Ambiguous Edges - Review These
 - `Arenas` → `Arena and Coop Route Implementation Status`  [AMBIGUOUS]

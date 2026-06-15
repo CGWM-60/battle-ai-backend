@@ -39,6 +39,7 @@ const navSections: { title: string; items: NavItem[] }[] = [
       { href: "/quests/", path: "/admin/quests/", label: "Battle IA", icon: ListChecks },
       { href: "/roleplay-quests/", path: "/admin/roleplay-quests/", label: "Quetes RP", icon: ListChecks },
       { href: "/roleplay-hero-images/", path: "/admin/roleplay-hero-images/", label: "Images heros", icon: Image },
+      { href: "/tribunal-ai/", path: "/admin/tribunal-ai/", label: "Tribunal IA", icon: Shield },
     ],
   },
 ];
