@@ -2,7 +2,9 @@ package handler
 
 import (
 	"net/http"
+
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"cgwm/battle/internal/cgwm/models"
 	"cgwm/battle/internal/cgwm/service"
 )
@@ -92,9 +94,39 @@ func SubmitSocialCard(c *gin.Context) {
 
 // Admin (protected)
 func AdminSyncState(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"syncs": []string{"example"}, "errors": 0})
+	c.JSON(http.StatusOK, gin.H{"syncs": []string{}, "errors": 0})
 }
 
-func AdminParkState(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"park": "live state here"})
+func AdminParkState(c *gin.Context, db *gorm.DB) {
+	var activePlayers int64
+	db.Model(&models.AnimaProfile{}).Where("cloud_enabled = ?", true).Distinct("owner_user_id").Count(&activePlayers)
+
+	var activeAnimas int64
+	db.Model(&models.AnimaProfile{}).Where("cloud_enabled = ?", true).Count(&activeAnimas)
+
+	var aloneAnimas int64
+	db.Model(&models.AnimaParkPresence{}).Where("is_alone = ?", true).Count(&aloneAnimas)
+
+	var currentMeetings int64
+	db.Model(&models.AnimaSocialEncounter{}).Count(&currentMeetings)
+
+	// For simplicity, social events = recent encounters or 0
+	socialEvents := int(currentMeetings / 2)
+
+	atmosphere := "seedGarden"
+	if activeAnimas > 5 {
+		atmosphere = "livingPark"
+	}
+	if activeAnimas > 20 {
+		atmosphere = "luminousForest"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"activePlayers":        activePlayers,
+		"activeAnimas":         activeAnimas,
+		"aloneAnimas":          aloneAnimas,
+		"currentMeetings":      currentMeetings,
+		"socialLearningEvents": socialEvents,
+		"atmosphereLevel":      atmosphere,
+	})
 }

@@ -2,12 +2,13 @@ package cgwm
 
 import (
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 	"cgwm/battle/internal/cgwm/handler"
 	"cgwm/battle/internal/cgwm/realtime"
 	"cgwm/battle/internal/cgwm/scheduler"
 )
 
-func RegisterCGWMRoutes(r *gin.Engine) {
+func RegisterCGWMRoutes(r *gin.Engine, database *gorm.DB) {
 	// User protected routes (add auth middleware)
 	cgwm := r.Group("/api/cgwm")
 	{
@@ -24,7 +25,7 @@ func RegisterCGWMRoutes(r *gin.Engine) {
 	admin := r.Group("/api/admin/cgwm")
 	{
 		admin.GET("/sync-state", handler.AdminSyncState)
-		admin.GET("/park-state", handler.AdminParkState)
+		admin.GET("/park-state", func(c *gin.Context) { handler.AdminParkState(c, database) })
 	}
 
 	// Realtime

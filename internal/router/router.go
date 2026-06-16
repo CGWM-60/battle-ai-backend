@@ -106,7 +106,7 @@ func RouterApp(database *gorm.DB) {
 	}
 
 	// Register full CGWM (ANIMA Cloud Game World Memory - Park + Social + realtime + schedulers)
-	cgwm.RegisterCGWMRoutes(router)
+	cgwm.RegisterCGWMRoutes(router, database)
 
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())
