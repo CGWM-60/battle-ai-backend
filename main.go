@@ -24,5 +24,11 @@ func main() {
 	scheduler.StartQuestGenerationCron(database)
 	// Monde IA desactive: ne pas demarrer les boucles cron world simulation/routine.
 	// scheduler.StartWorldSimulationCron(database)
+
+	// ANIMA CGWM registration (full cloud + park + social + realtime + schedulers)
+	// router.RouterApp already sets up; to enable CGWM routes:
+	// import cgwm "cgwm/battle/internal/cgwm"
+	// After router.RouterApp or inside it: cgwm.RegisterCGWMRoutes(theRouter)
+	// (See internal/cgwm/cgwm_routes.go for the complete wiring of the prompt spec)
 	router.RouterApp(database)
 }

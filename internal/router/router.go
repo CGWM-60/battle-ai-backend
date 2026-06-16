@@ -11,6 +11,7 @@ import (
 	nexustribunal "cgwm/battle/internal/nexus_tribunal"
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/service"
+	cgwm "cgwm/battle/internal/cgwm"
 	"errors"
 	"net/http"
 	"os"
@@ -103,6 +104,9 @@ func RouterApp(database *gorm.DB) {
 	} else {
 		registerDeprecatedNexusGameRoutes(router)
 	}
+
+	// Register full CGWM (ANIMA Cloud Game World Memory - Park + Social + realtime + schedulers)
+	cgwm.RegisterCGWMRoutes(router)
 
 	adminAPI := private.Group("")
 	adminAPI.Use(adminAPIAuth())
