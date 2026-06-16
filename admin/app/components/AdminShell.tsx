@@ -42,6 +42,12 @@ const navSections: { title: string; items: NavItem[] }[] = [
       { href: "/tribunal-ai/", path: "/admin/tribunal-ai/", label: "Tribunal IA", icon: Shield },
     ],
   },
+  {
+    title: "ANIMA CGWM",
+    items: [
+      { href: "/anima/", path: "/admin/anima/", label: "Anima (CGWM Park)", icon: Users },
+    ],
+  },
 ];
 
 export function AdminShell({
