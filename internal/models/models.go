@@ -297,6 +297,9 @@ type RolePlayQuestScene struct {
 	QuestID uint                  `gorm:"index" json:"questId"`
 	Quest   RolePlayQuestTemplate `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 
+	ArcID     *uint `gorm:"index" json:"arcId"`
+	ChapterID *uint `gorm:"index" json:"chapterId"`
+
 	SceneKey     string `gorm:"size:120;index" json:"sceneKey"`
 	ChapterIndex int    `gorm:"index" json:"chapterIndex"`
 	ArcIndex     int    `gorm:"index" json:"arcIndex"`

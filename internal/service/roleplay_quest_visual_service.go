@@ -30,6 +30,8 @@ func NewRolePlayQuestVisualService(db *gorm.DB) *RolePlayQuestVisualService {
 
 type RolePlaySceneInput struct {
 	SceneKey            string
+	ArcID               *uint
+	ChapterID           *uint
 	ChapterIndex        int
 	ArcIndex            int
 	Title               string
@@ -46,9 +48,10 @@ type RolePlaySceneInput struct {
 }
 
 type BackfillImagePromptsInput struct {
-	OnlyMissing       bool `json:"onlyMissing"`
-	ForceRegenerate   bool `json:"forceRegenerate"`
-	SceneCount        int  `json:"sceneCount"`
+	OnlyMissing       bool   `json:"onlyMissing"`
+	ForceRegenerate   bool   `json:"forceRegenerate"`
+	SceneMode         string `json:"sceneMode"`
+	SceneCount        int    `json:"sceneCount"`
 }
 
 type BackfillImagePromptsResult struct {
@@ -61,6 +64,7 @@ type BackfillImagePromptsResult struct {
 type GenerateImagePromptsInput struct {
 	OnlyMissing     bool   `json:"onlyMissing"`
 	ForceRegenerate bool   `json:"forceRegenerate"`
+	SceneMode       string `json:"sceneMode"`
 	SceneCount      int    `json:"sceneCount"`
 	Provider        string `json:"provider"`
 	Model           string `json:"model"`
@@ -162,6 +166,8 @@ func (s *RolePlayQuestVisualService) CreateScenes(ctx context.Context, questID u
 		rpg, _ := json.Marshal(input.RpgMetadata)
 		scene := models.RolePlayQuestScene{
 			QuestID:             questID,
+			ArcID:               input.ArcID,
+			ChapterID:           input.ChapterID,
 			SceneKey:            defaultString(input.SceneKey, fmt.Sprintf("scene_%02d", input.ChapterIndex)),
 			ChapterIndex:        input.ChapterIndex,
 			ArcIndex:            input.ArcIndex,
@@ -213,7 +219,7 @@ func (s *RolePlayQuestVisualService) ApplyGeneratedVisuals(
 		return err
 	}
 	if len(scenes) == 0 {
-		scenes = buildDefaultScenes(theme, level, title, summary)
+		return nil
 	}
 	_, err := s.CreateScenes(ctx, questID, scenes)
 	return err
@@ -223,6 +229,7 @@ func (s *RolePlayQuestVisualService) BackfillImagePrompts(ctx context.Context, i
 	genInput := GenerateImagePromptsInput{
 		OnlyMissing:     input.OnlyMissing,
 		ForceRegenerate: input.ForceRegenerate,
+		SceneMode:       input.SceneMode,
 		SceneCount:      input.SceneCount,
 	}
 	result := &BackfillImagePromptsResult{Errors: []string{}}
@@ -253,12 +260,17 @@ func (s *RolePlayQuestVisualService) GenerateImagePromptsForQuest(
 	questID uint,
 	input GenerateImagePromptsInput,
 ) (*RolePlayQuestPromptGenerationResult, error) {
+	sceneMode := normalizeSceneMode(input.SceneMode)
 	sceneCount := input.SceneCount
-	if sceneCount <= 0 {
-		sceneCount = 3
-	}
 	var quest models.RolePlayQuestTemplate
-	if err := s.db.WithContext(ctx).First(&quest, questID).Error; err != nil {
+	if err := s.db.WithContext(ctx).
+		Preload("Arcs", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("position ASC").Order("id ASC")
+		}).
+		Preload("Arcs.Chapters", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("position ASC").Order("id ASC")
+		}).
+		First(&quest, questID).Error; err != nil {
 		return nil, err
 	}
 	var scenes []models.RolePlayQuestScene
@@ -270,11 +282,11 @@ func (s *RolePlayQuestVisualService) GenerateImagePromptsForQuest(
 
 	result := &RolePlayQuestPromptGenerationResult{QuestID: questID}
 	if strings.TrimSpace(input.Provider) != "" && strings.TrimSpace(input.APIKey) != "" && strings.TrimSpace(input.Model) != "" {
-		if err := s.applyAIVisualsForQuest(ctx, quest, scenes, input, sceneCount, result); err == nil {
+		if err := s.applyAIVisualsForQuest(ctx, quest, scenes, input, sceneMode, sceneCount, result); err == nil {
 			return result, nil
 		}
 	}
-	return s.applyHeuristicVisualsForQuest(ctx, quest, scenes, input, sceneCount, result)
+	return s.applyHeuristicVisualsForQuest(ctx, quest, scenes, input, sceneMode, sceneCount, result)
 }
 
 func (s *RolePlayQuestVisualService) GenerateImagePromptForScene(
@@ -310,6 +322,10 @@ func (s *RolePlayQuestVisualService) GenerateImagePromptForScene(
 }
 
 func isQuestVisualComplete(quest models.RolePlayQuestTemplate, scenes []models.RolePlayQuestScene) bool {
+	expected := countQuestChapters(quest)
+	if expected > 0 && len(scenes) < expected {
+		return false
+	}
 	if strings.TrimSpace(quest.ImagePrompt) == "" ||
 		strings.TrimSpace(quest.ImageNegativePrompt) == "" ||
 		len(scenes) == 0 {
@@ -323,11 +339,88 @@ func isQuestVisualComplete(quest models.RolePlayQuestTemplate, scenes []models.R
 	return true
 }
 
+func (s *RolePlayQuestVisualService) CreateOrUpdateScenesForChapters(
+	ctx context.Context,
+	questID uint,
+	inputs []RolePlaySceneInput,
+) (int, error) {
+	if len(inputs) == 0 {
+		return 0, nil
+	}
+	var existing []models.RolePlayQuestScene
+	if err := s.db.WithContext(ctx).Where("quest_id = ?", questID).Find(&existing).Error; err != nil {
+		return 0, err
+	}
+	byChapterID := map[uint]uint{}
+	for _, scene := range existing {
+		if scene.ChapterID != nil && *scene.ChapterID > 0 {
+			byChapterID[*scene.ChapterID] = scene.Id
+		}
+	}
+
+	created := 0
+	for _, input := range inputs {
+		if input.ChapterID != nil {
+			if _, ok := byChapterID[*input.ChapterID]; ok {
+				continue
+			}
+		}
+		count, err := s.CreateScenes(ctx, questID, []RolePlaySceneInput{input})
+		if err != nil {
+			return created, err
+		}
+		created += count
+	}
+	return created, nil
+}
+
+func (s *RolePlayQuestVisualService) ResolveOrCreateSceneForChapter(
+	ctx context.Context,
+	questID uint,
+	chapterID uint,
+) (*models.RolePlayQuestScene, error) {
+	var scene models.RolePlayQuestScene
+	err := s.db.WithContext(ctx).
+		Where("quest_id = ? AND chapter_id = ?", questID, chapterID).
+		First(&scene).Error
+	if err == nil {
+		return &scene, nil
+	}
+
+	var quest models.RolePlayQuestTemplate
+	if err := s.db.WithContext(ctx).
+		Preload("Arcs", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("position ASC").Order("id ASC")
+		}).
+		Preload("Arcs.Chapters", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("position ASC").Order("id ASC")
+		}).
+		First(&quest, questID).Error; err != nil {
+		return nil, err
+	}
+
+	for _, input := range BuildScenesFromQuestStructure(quest) {
+		if input.ChapterID != nil && *input.ChapterID == chapterID {
+			if _, err := s.CreateScenes(ctx, questID, []RolePlaySceneInput{input}); err != nil {
+				return nil, err
+			}
+			if err := s.db.WithContext(ctx).
+				Where("quest_id = ? AND chapter_id = ?", questID, chapterID).
+				First(&scene).Error; err != nil {
+				return nil, err
+			}
+			return &scene, nil
+		}
+	}
+	return nil, fmt.Errorf("chapter %d not found for quest %d", chapterID, questID)
+}
+
 func (s *RolePlayQuestVisualService) applyHeuristicVisualsForQuest(
 	ctx context.Context,
 	quest models.RolePlayQuestTemplate,
 	scenes []models.RolePlayQuestScene,
 	input GenerateImagePromptsInput,
+	sceneMode string,
 	sceneCount int,
 	result *RolePlayQuestPromptGenerationResult,
 ) (*RolePlayQuestPromptGenerationResult, error) {
@@ -348,18 +441,24 @@ func (s *RolePlayQuestVisualService) applyHeuristicVisualsForQuest(
 		result.UpdatedPrompts++
 		updated = true
 	}
-	if len(scenes) == 0 {
-		defaultScenes := buildDefaultScenes(quest.Theme, quest.Level, quest.Title, quest.Summary)
-		if sceneCount < len(defaultScenes) {
-			defaultScenes = defaultScenes[:sceneCount]
-		}
-		count, err := s.CreateScenes(ctx, quest.Id, defaultScenes)
+	missingScenes := missingChapterSceneInputs(quest, scenes)
+	if len(missingScenes) == 0 && len(scenes) == 0 {
+		missingScenes = BuildScenesForQuestMode(quest, sceneMode, sceneCount)
+	}
+	if sceneCount > 0 && len(missingScenes) > sceneCount {
+		missingScenes = missingScenes[:sceneCount]
+	}
+	if len(missingScenes) > 0 {
+		count, err := s.CreateOrUpdateScenesForChapters(ctx, quest.Id, missingScenes)
 		if err != nil {
 			return nil, err
 		}
 		result.CreatedScenes += count
 		result.UpdatedPrompts += count
 		updated = true
+		if count > 0 {
+			_ = s.db.WithContext(ctx).Where("quest_id = ?", quest.Id).Order("chapter_index ASC").Find(&scenes).Error
+		}
 	} else if input.ForceRegenerate || !input.OnlyMissing {
 		for _, scene := range scenes {
 			if strings.TrimSpace(scene.ImagePrompt) != "" && !input.ForceRegenerate {
@@ -413,6 +512,7 @@ func (s *RolePlayQuestVisualService) applyAIVisualsForQuest(
 	quest models.RolePlayQuestTemplate,
 	existingScenes []models.RolePlayQuestScene,
 	input GenerateImagePromptsInput,
+	sceneMode string,
 	sceneCount int,
 	result *RolePlayQuestPromptGenerationResult,
 ) error {
@@ -433,8 +533,8 @@ Regles image:
 - prompts en anglais, utilisables directement dans un generateur d'image
 - pas de texte visible, pas de logo, pas de watermark
 - mobile game background, vertical ou cinematic
-- minimum %d scenes si absentes
-- coherence visuelle entre les scenes`, quest.Title, quest.Summary, quest.Theme, quest.Level, sceneCount)
+- une scene par chapitre si possible (%d chapitres)
+- coherence visuelle entre les scenes`, quest.Title, quest.Summary, quest.Theme, quest.Level, countQuestChapters(quest))
 
 	raw, err := s.callProvider(ctx, input.Provider, input.APIKey, input.Model, prompt)
 	if err != nil {
@@ -463,18 +563,15 @@ Regles image:
 		result.UpdatedPrompts++
 	}
 
-	if len(existingScenes) == 0 {
-		sceneInputs := make([]RolePlaySceneInput, 0)
-		scenes := visuals.Scenes
-		if len(scenes) == 0 {
-			sceneInputs = buildDefaultScenes(quest.Theme, quest.Level, quest.Title, quest.Summary)
-		} else {
-			for index, item := range scenes {
+	missingScenes := missingChapterSceneInputs(quest, existingScenes)
+	if len(missingScenes) == 0 && len(existingScenes) == 0 {
+		if len(visuals.Scenes) > 0 {
+			for index, item := range visuals.Scenes {
 				chapterIndex := item.ChapterIndex
 				if chapterIndex <= 0 {
 					chapterIndex = index + 1
 				}
-				sceneInputs = append(sceneInputs, RolePlaySceneInput{
+				missingScenes = append(missingScenes, RolePlaySceneInput{
 					SceneKey:       defaultString(item.SceneKey, fmt.Sprintf("scene_%02d", index+1)),
 					ChapterIndex:   chapterIndex,
 					Title:          item.Title,
@@ -488,11 +585,15 @@ Regles image:
 					VisualTags:     item.VisualTags,
 				})
 			}
+		} else {
+			missingScenes = BuildScenesForQuestMode(quest, sceneMode, sceneCount)
 		}
-		if sceneCount > 0 && sceneCount < len(sceneInputs) {
-			sceneInputs = sceneInputs[:sceneCount]
-		}
-		count, err := s.CreateScenes(ctx, quest.Id, sceneInputs)
+	}
+	if sceneCount > 0 && len(missingScenes) > sceneCount {
+		missingScenes = missingScenes[:sceneCount]
+	}
+	if len(missingScenes) > 0 {
+		count, err := s.CreateOrUpdateScenesForChapters(ctx, quest.Id, missingScenes)
 		if err != nil {
 			return err
 		}

@@ -271,6 +271,9 @@ type adminRolePlaySceneImageData struct {
 type adminRolePlaySceneData struct {
 	Id                  uint                          `json:"id"`
 	SceneKey            string                        `json:"sceneKey"`
+	ArcID               *uint                         `json:"arcId"`
+	ChapterID           *uint                         `json:"chapterId"`
+	ArcIndex            int                           `json:"arcIndex"`
 	ChapterIndex        int                           `json:"chapterIndex"`
 	Title               string                        `json:"title"`
 	Summary             string                        `json:"summary"`
@@ -401,16 +404,23 @@ type generatedRolePlayArc struct {
 }
 
 type generatedRolePlayChapter struct {
-	Title         string         `json:"title"`
-	Summary       string         `json:"summary"`
-	Objective     string         `json:"objective"`
-	IntroPrompt   string         `json:"introPrompt"`
-	SuccessPrompt string         `json:"successPrompt"`
-	FailurePrompt string         `json:"failurePrompt"`
-	IsBoss        bool           `json:"isBoss"`
-	Xp            int            `json:"xp"`
-	Coin          int            `json:"coin"`
-	Meta          map[string]any `json:"metadata"`
+	Title               string         `json:"title"`
+	Summary             string         `json:"summary"`
+	Objective           string         `json:"objective"`
+	IntroPrompt         string         `json:"introPrompt"`
+	SuccessPrompt       string         `json:"successPrompt"`
+	FailurePrompt       string         `json:"failurePrompt"`
+	IsBoss              bool           `json:"isBoss"`
+	Xp                  int            `json:"xp"`
+	Coin                int            `json:"coin"`
+	SceneType           string         `json:"sceneType"`
+	RoomType            string         `json:"roomType"`
+	Atmosphere          string         `json:"atmosphere"`
+	DangerLevel         string         `json:"dangerLevel"`
+	ImagePrompt         string         `json:"imagePrompt"`
+	ImageNegativePrompt string         `json:"imageNegativePrompt"`
+	VisualTags          []string       `json:"visualTags"`
+	Meta                map[string]any `json:"metadata"`
 }
 
 func Register(router *gin.Engine, db *gorm.DB) {
@@ -451,6 +461,10 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.POST("/roleplay/quests/backfill-image-prompts", server.backfillRolePlayImagePromptsAdminAPI)
 	api.POST("/roleplay/quests/:id/generate-image-prompts", server.generateRolePlayQuestImagePromptsAdminAPI)
 	api.POST("/roleplay/quests/:id/scenes/:sceneId/generate-image-prompt", server.generateRolePlaySceneImagePromptAdminAPI)
+	api.POST("/roleplay/quests/:id/chapters/:chapterId/generate-image-prompt", server.generateRolePlayChapterImagePromptAdminAPI)
+	api.POST("/roleplay/quests/:id/chapters/:chapterId/images", server.uploadRolePlayChapterImageAdminAPI)
+	api.DELETE("/roleplay/quests/:id/chapters/:chapterId/images/:imageId", server.deleteRolePlayChapterImageAdminAPI)
+	api.PATCH("/roleplay/quests/:id/chapters/:chapterId/images/:imageId/main", server.setMainRolePlayChapterImageAdminAPI)
 	api.POST("/roleplay/quests/image-prompts/jobs", server.startRolePlayImagePromptJobAdminAPI)
 	api.GET("/roleplay/quests/image-prompts/jobs", server.listRolePlayImagePromptJobsAdminAPI)
 	api.GET("/roleplay/quests/image-prompts/jobs/:jobId", server.getRolePlayImagePromptJobAdminAPI)
@@ -842,8 +856,8 @@ func (s *Server) unpublishAllRolePlayQuestsAdminAPI(c *gin.Context) {
 func (s *Server) backfillRolePlayImagePromptsAdminAPI(c *gin.Context) {
 	var input service.BackfillImagePromptsInput
 	_ = c.ShouldBindJSON(&input)
-	if input.SceneCount <= 0 {
-		input.SceneCount = 3
+	if strings.TrimSpace(input.SceneMode) == "" {
+		input.SceneMode = service.SceneModePerChapter
 	}
 	result, err := service.NewRolePlayQuestVisualService(s.db).BackfillImagePrompts(c.Request.Context(), input)
 	if err != nil {
@@ -1474,6 +1488,9 @@ func (s *Server) rolePlayQuestsAdminData(ctx context.Context) (adminRolePlayQues
 			sceneData := adminRolePlaySceneData{
 				Id:                  scene.Id,
 				SceneKey:            scene.SceneKey,
+				ArcID:               scene.ArcID,
+				ChapterID:           scene.ChapterID,
+				ArcIndex:            scene.ArcIndex,
 				ChapterIndex:        scene.ChapterIndex,
 				Title:               scene.Title,
 				Summary:             scene.Summary,
@@ -1961,9 +1978,10 @@ Pour chaque quete, ajoute aussi des visuels exploitables par un generateur d'ima
 - visualStyle (ex: dark fantasy mobile RPG)
 - visualTags (3 a 6 mots)
 - rpgMetadata (recommendedPartySize, supportsCoop, recommendedLevel, difficultyClass, mainThreat, mainLocation, rpgTags, suggestedSkills)
-- scenes: au minimum 3 scenes (entree, conflit, climax) avec sceneKey, chapterIndex, title, summary, sceneType, roomType, atmosphere, dangerLevel, imagePrompt, imageNegativePrompt, visualTags
+- chaque chapitre doit inclure sceneType, roomType, atmosphere, dangerLevel, imagePrompt, imageNegativePrompt, visualTags
+- scenes globales optionnelles seulement si completes; sinon les visuels seront derives des chapitres
 Format:
-[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"imagePrompt":"...","imageNegativePrompt":"...","visualStyle":"dark fantasy mobile RPG","visualTags":["crypt","fog"],"rpgMetadata":{"recommendedPartySize":1,"supportsCoop":true,"difficultyClass":12},"metadata":{"ton":"..."},"scenes":[{"sceneKey":"scene_01_entry","chapterIndex":1,"title":"Entree","summary":"...","sceneType":"exploration","roomType":"entrance","atmosphere":"mysterious","dangerLevel":"low","imagePrompt":"...","imageNegativePrompt":"...","visualTags":["statues"]}],"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, count)
+[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"imagePrompt":"...","imageNegativePrompt":"...","visualStyle":"dark fantasy mobile RPG","visualTags":["crypt","fog"],"rpgMetadata":{"recommendedPartySize":1,"supportsCoop":true,"difficultyClass":12},"metadata":{"ton":"..."},"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"sceneType":"exploration","roomType":"entrance","atmosphere":"mysterious","dangerLevel":"low","imagePrompt":"cinematic mobile RPG scene background...","imageNegativePrompt":"text, watermark, logo...","visualTags":["crypt","fog"],"metadata":{"stakes":"..."}}]}]}]`, count)
 	response, err := callAdminProvider(ctx, url, apiKey, model, prompt)
 	if err != nil {
 		return nil, err
@@ -2048,6 +2066,31 @@ func adminGeneratedRolePlayArcInputs(items []generatedRolePlayArc) []service.Rol
 func adminGeneratedRolePlayChapterInputs(items []generatedRolePlayChapter) []service.RolePlayQuestChapterInput {
 	chapters := make([]service.RolePlayQuestChapterInput, 0, len(items))
 	for index, item := range items {
+		meta := item.Meta
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		if strings.TrimSpace(item.SceneType) != "" {
+			meta["sceneType"] = item.SceneType
+		}
+		if strings.TrimSpace(item.RoomType) != "" {
+			meta["roomType"] = item.RoomType
+		}
+		if strings.TrimSpace(item.Atmosphere) != "" {
+			meta["atmosphere"] = item.Atmosphere
+		}
+		if strings.TrimSpace(item.DangerLevel) != "" {
+			meta["dangerLevel"] = item.DangerLevel
+		}
+		if strings.TrimSpace(item.ImagePrompt) != "" {
+			meta["imagePrompt"] = item.ImagePrompt
+		}
+		if strings.TrimSpace(item.ImageNegativePrompt) != "" {
+			meta["imageNegativePrompt"] = item.ImageNegativePrompt
+		}
+		if len(item.VisualTags) > 0 {
+			meta["visualTags"] = item.VisualTags
+		}
 		chapters = append(chapters, service.RolePlayQuestChapterInput{
 			Position:      index + 1,
 			Title:         item.Title,
@@ -2059,7 +2102,7 @@ func adminGeneratedRolePlayChapterInputs(items []generatedRolePlayChapter) []ser
 			IsBoss:        item.IsBoss,
 			Xp:            item.Xp,
 			Coin:          item.Coin,
-			Metadata:      item.Meta,
+			Metadata:      meta,
 		})
 	}
 	return chapters

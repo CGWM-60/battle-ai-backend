@@ -14,6 +14,7 @@ import (
 type generateImagePromptsRequest struct {
 	OnlyMissing     bool   `json:"onlyMissing"`
 	ForceRegenerate bool   `json:"forceRegenerate"`
+	SceneMode       string `json:"sceneMode"`
 	SceneCount      int    `json:"sceneCount"`
 	Provider        string `json:"provider"`
 	Model           string `json:"model"`
@@ -28,13 +29,11 @@ func (s *Server) generateRolePlayQuestImagePromptsAdminAPI(c *gin.Context) {
 	}
 	var req generateImagePromptsRequest
 	_ = c.ShouldBindJSON(&req)
-	if req.SceneCount <= 0 {
-		req.SceneCount = 3
-	}
 	visual := service.NewRolePlayQuestVisualService(s.db)
 	result, err := visual.GenerateImagePromptsForQuest(c.Request.Context(), uint(questID), service.GenerateImagePromptsInput{
 		OnlyMissing:     req.OnlyMissing,
 		ForceRegenerate: req.ForceRegenerate,
+		SceneMode:       req.SceneMode,
 		SceneCount:      req.SceneCount,
 		Provider:        req.Provider,
 		Model:           req.Model,
@@ -217,6 +216,100 @@ func collectRolePlayUploadFiles(c *gin.Context) []*multipart.FileHeader {
 		}
 	}
 	return out
+}
+
+func (s *Server) generateRolePlayChapterImagePromptAdminAPI(c *gin.Context) {
+	questID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	chapterID, _ := strconv.ParseUint(c.Param("chapterId"), 10, 64)
+	if questID == 0 || chapterID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ids"})
+		return
+	}
+	var req generateImagePromptsRequest
+	_ = c.ShouldBindJSON(&req)
+	visual := service.NewRolePlayQuestVisualService(s.db)
+	scene, err := visual.ResolveOrCreateSceneForChapter(c.Request.Context(), uint(questID), uint(chapterID))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	result, err := visual.GenerateImagePromptForScene(c.Request.Context(), uint(questID), scene.Id, service.GenerateImagePromptsInput{
+		ForceRegenerate: req.ForceRegenerate,
+		Provider:        req.Provider,
+		Model:           req.Model,
+		APIKey:          req.APIKey,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success":        true,
+		"questId":        questID,
+		"chapterId":      chapterID,
+		"sceneId":        scene.Id,
+		"updatedPrompts": result.UpdatedPrompts,
+		"skipped":        result.Skipped,
+	})
+}
+
+func (s *Server) uploadRolePlayChapterImageAdminAPI(c *gin.Context) {
+	questID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	chapterID, _ := strconv.ParseUint(c.Param("chapterId"), 10, 64)
+	if questID == 0 || chapterID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ids"})
+		return
+	}
+	visual := service.NewRolePlayQuestVisualService(s.db)
+	scene, err := visual.ResolveOrCreateSceneForChapter(c.Request.Context(), uint(questID), uint(chapterID))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.Params = append(c.Params, gin.Param{Key: "sceneId", Value: strconv.FormatUint(uint64(scene.Id), 10)})
+	s.uploadRolePlaySceneImageAdminAPI(c)
+}
+
+func (s *Server) deleteRolePlayChapterImageAdminAPI(c *gin.Context) {
+	questID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	chapterID, _ := strconv.ParseUint(c.Param("chapterId"), 10, 64)
+	imageID, _ := strconv.ParseUint(c.Param("imageId"), 10, 64)
+	if questID == 0 || chapterID == 0 || imageID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ids"})
+		return
+	}
+	visual := service.NewRolePlayQuestVisualService(s.db)
+	scene, err := visual.ResolveOrCreateSceneForChapter(c.Request.Context(), uint(questID), uint(chapterID))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := visual.DeleteSceneImage(c.Request.Context(), uint(questID), scene.Id, uint(imageID)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func (s *Server) setMainRolePlayChapterImageAdminAPI(c *gin.Context) {
+	questID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
+	chapterID, _ := strconv.ParseUint(c.Param("chapterId"), 10, 64)
+	imageID, _ := strconv.ParseUint(c.Param("imageId"), 10, 64)
+	if questID == 0 || chapterID == 0 || imageID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ids"})
+		return
+	}
+	visual := service.NewRolePlayQuestVisualService(s.db)
+	scene, err := visual.ResolveOrCreateSceneForChapter(c.Request.Context(), uint(questID), uint(chapterID))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := visual.SetMainSceneImage(c.Request.Context(), uint(questID), scene.Id, uint(imageID)); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 func (s *Server) loadRolePlayQuestAdminItem(c *gin.Context, questID uint) (any, error) {

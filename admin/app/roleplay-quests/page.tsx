@@ -22,7 +22,7 @@ export default function RolePlayQuestsPage() {
   const [activeJob, setActiveJob] = useState<RolePlayImagePromptJob | null>(null);
   const [batchOnlyMissing, setBatchOnlyMissing] = useState(true);
   const [batchForce, setBatchForce] = useState(false);
-  const [batchSceneCount, setBatchSceneCount] = useState(3);
+  const [batchSceneCount, setBatchSceneCount] = useState(0);
   const [batchSize, setBatchSize] = useState(5);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -169,6 +169,7 @@ export default function RolePlayQuestsPage() {
           scope: "all",
           onlyMissing: batchOnlyMissing,
           forceRegenerate: batchForce,
+          sceneMode: "per_chapter",
           sceneCount: batchSceneCount,
           batchSize,
         }),
@@ -217,7 +218,7 @@ export default function RolePlayQuestsPage() {
             <div className="rp-batch-controls">
               <label><input type="checkbox" checked={batchOnlyMissing} onChange={(e) => setBatchOnlyMissing(e.target.checked)} /> Seulement manquants</label>
               <label><input type="checkbox" checked={batchForce} onChange={(e) => setBatchForce(e.target.checked)} /> Forcer regeneration</label>
-              <label>Scenes <input type="number" min={1} max={6} value={batchSceneCount} onChange={(e) => setBatchSceneCount(Number(e.target.value))} /></label>
+              <label>Limite scenes (0 = tous chapitres) <input type="number" min={0} max={48} value={batchSceneCount} onChange={(e) => setBatchSceneCount(Number(e.target.value))} /></label>
               <label>Batch <input type="number" min={1} max={20} value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} /></label>
               <button type="button" onClick={startBatchJob}>Mettre a jour toutes les quetes</button>
               {activeJob && ["running", "pending"].includes(activeJob.status) ? (
@@ -309,7 +310,7 @@ function QuestDetail({
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ onlyMissing: !force, forceRegenerate: force, sceneCount: 3 }),
+        body: JSON.stringify({ onlyMissing: !force, forceRegenerate: force, sceneMode: "per_chapter", sceneCount: 0 }),
       });
       onReload();
     } finally {
@@ -366,26 +367,106 @@ function QuestDetail({
       </section>
 
       <section className="rp-read-block">
-        <h3>Scenes visuelles</h3>
-        <div className="rp-arc-list">
-          {(quest.scenes ?? []).map((scene) => (
-            <SceneCard key={scene.id} questId={quest.id} scene={scene} onReload={onReload} busy={sceneBusy} setBusy={setSceneBusy} />
-          ))}
-        </div>
-      </section>
-
-      <section className="rp-read-block">
         <h3>Structure narrative</h3>
         <div className="rp-arc-list">
           {quest.arcs.map((arc) => (
             <article key={arc.id} className="rp-arc">
               <h4>Arc {arc.position}: {arc.title}</h4>
               <p>{arc.objective || arc.summary || "Sans objectif."}</p>
+              <ul>
+                {arc.chapters.map((chapter) => (
+                  <li key={chapter.id}>
+                    <strong>Ch. {chapter.position}: {chapter.title}</strong>
+                    {chapter.isBoss ? " [BOSS]" : ""} — {chapter.objective || chapter.summary || "Sans objectif."}
+                    {" "}(+{chapter.xp} XP / {chapter.coin} coins)
+                  </li>
+                ))}
+              </ul>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="rp-read-block">
+        <h3>Visuels par chapitre</h3>
+        <small>{formatNumber(quest.scenes?.length ?? 0)} scenes pour {formatNumber(quest.chapterCount)} chapitres</small>
+        <div className="rp-arc-list">
+          {quest.arcs.map((arc) => (
+            <article key={`visual-${arc.id}`} className="rp-arc">
+              <h4>Arc {arc.position}: {arc.title}</h4>
+              {arc.chapters.map((chapter) => {
+                const scene =
+                  quest.scenes?.find((item) => item.chapterId === chapter.id) ??
+                  quest.scenes?.find((item) => item.arcIndex === arc.position && item.chapterIndex === chapter.position) ??
+                  null;
+                return (
+                  <div key={`chapter-visual-${chapter.id}`} className="rp-chapter-visual">
+                    <h5>Chapitre {chapter.position}: {chapter.title}</h5>
+                    <p>{chapter.objective || chapter.summary || "Sans objectif."}</p>
+                    {scene ? (
+                      <SceneCard
+                        questId={quest.id}
+                        scene={scene}
+                        onReload={onReload}
+                        busy={sceneBusy}
+                        setBusy={setSceneBusy}
+                        chapterId={chapter.id}
+                      />
+                    ) : (
+                      <ChapterScenePending
+                        questId={quest.id}
+                        chapterId={chapter.id}
+                        onReload={onReload}
+                        busy={sceneBusy}
+                        setBusy={setSceneBusy}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </article>
           ))}
         </div>
       </section>
     </aside>
+  );
+}
+
+function ChapterScenePending({
+  questId,
+  chapterId,
+  onReload,
+  busy,
+  setBusy,
+}: {
+  questId: number;
+  chapterId: number;
+  onReload: () => void;
+  busy: boolean;
+  setBusy: (value: boolean) => void;
+}) {
+  async function createScenePrompt() {
+    setBusy(true);
+    try {
+      await fetch(`/admin/api/roleplay/quests/${questId}/chapters/${chapterId}/generate-image-prompt`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ forceRegenerate: true }),
+      });
+      onReload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rp-chapter-pending">
+      <p>Aucune scene visuelle liee a ce chapitre.</p>
+      <button type="button" onClick={createScenePrompt} disabled={busy}>
+        <RefreshCw size={14} /> Creer scene + prompt
+      </button>
+    </div>
   );
 }
 
@@ -395,12 +476,14 @@ function SceneCard({
   onReload,
   busy,
   setBusy,
+  chapterId,
 }: {
   questId: number;
   scene: AdminRolePlayScene;
   onReload: () => void;
   busy: boolean;
   setBusy: (value: boolean) => void;
+  chapterId?: number;
 }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -416,7 +499,10 @@ function SceneCard({
       } else {
         list.forEach((file) => form.append("images[]", file));
       }
-      const response = await fetch(`/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images`, {
+      const uploadPath = chapterId
+        ? `/admin/api/roleplay/quests/${questId}/chapters/${chapterId}/images`
+        : `/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images`;
+      const response = await fetch(uploadPath, {
         method: "POST",
         credentials: "same-origin",
         body: form,
@@ -435,7 +521,10 @@ function SceneCard({
     if (!window.confirm("Supprimer cette image ?")) return;
     setBusy(true);
     try {
-      await fetch(`/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images/${imageId}`, {
+      const deletePath = chapterId
+        ? `/admin/api/roleplay/quests/${questId}/chapters/${chapterId}/images/${imageId}`
+        : `/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images/${imageId}`;
+      await fetch(deletePath, {
         method: "DELETE",
         credentials: "same-origin",
       });
@@ -448,7 +537,10 @@ function SceneCard({
   async function setMain(imageId: number) {
     setBusy(true);
     try {
-      await fetch(`/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images/${imageId}/main`, {
+      const mainPath = chapterId
+        ? `/admin/api/roleplay/quests/${questId}/chapters/${chapterId}/images/${imageId}/main`
+        : `/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images/${imageId}/main`;
+      await fetch(mainPath, {
         method: "PATCH",
         credentials: "same-origin",
       });
@@ -461,7 +553,10 @@ function SceneCard({
   async function regenerateScenePrompt() {
     setBusy(true);
     try {
-      await fetch(`/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/generate-image-prompt`, {
+      const promptPath = chapterId
+        ? `/admin/api/roleplay/quests/${questId}/chapters/${chapterId}/generate-image-prompt`
+        : `/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/generate-image-prompt`;
+      await fetch(promptPath, {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/json", Accept: "application/json" },

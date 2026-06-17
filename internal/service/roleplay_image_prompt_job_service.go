@@ -40,6 +40,7 @@ type StartImagePromptJobInput struct {
 	QuestIDs        []uint `json:"questIds"`
 	OnlyMissing     bool   `json:"onlyMissing"`
 	ForceRegenerate bool   `json:"forceRegenerate"`
+	SceneMode       string `json:"sceneMode"`
 	SceneCount      int    `json:"sceneCount"`
 	BatchSize       int    `json:"batchSize"`
 	Provider        string `json:"provider"`
@@ -89,8 +90,8 @@ func (s *RolePlayImagePromptJobService) RecoverInterruptedJobs(ctx context.Conte
 }
 
 func (s *RolePlayImagePromptJobService) StartJob(ctx context.Context, input StartImagePromptJobInput) (*ImagePromptJobStatus, error) {
-	if input.SceneCount <= 0 {
-		input.SceneCount = 3
+	if strings.TrimSpace(input.SceneMode) == "" {
+		input.SceneMode = SceneModePerChapter
 	}
 	if input.BatchSize <= 0 {
 		input.BatchSize = 5
@@ -182,6 +183,7 @@ func (s *RolePlayImagePromptJobService) runJob(jobID uint, input StartImagePromp
 	genInput := GenerateImagePromptsInput{
 		OnlyMissing:     input.OnlyMissing,
 		ForceRegenerate: input.ForceRegenerate,
+		SceneMode:       input.SceneMode,
 		SceneCount:      input.SceneCount,
 		Provider:        input.Provider,
 		Model:           input.Model,

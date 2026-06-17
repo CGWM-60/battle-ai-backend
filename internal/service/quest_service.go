@@ -202,7 +202,7 @@ func (s *QuestService) CreateRolePlay(ctx context.Context, input RolePlayQuestIn
 	if err := s.quests.CreateRolePlayQuest(ctx, quest); err != nil {
 		return nil, err
 	}
-	if len(input.Scenes) > 0 || strings.TrimSpace(input.ImagePrompt) != "" {
+	if strings.TrimSpace(input.ImagePrompt) != "" || len(input.VisualTags) > 0 || input.RpgMetadata != nil {
 		visual := NewRolePlayQuestVisualService(s.quests.DB())
 		_ = visual.ApplyGeneratedVisuals(ctx, quest.Id, quest.Theme, quest.Level, quest.Title, quest.Summary,
 			defaultString(input.ImagePrompt, buildQuestImagePrompt(quest.Theme, quest.Level, quest.Title, quest.Summary)),
@@ -210,10 +210,19 @@ func (s *QuestService) CreateRolePlay(ctx context.Context, input RolePlayQuestIn
 			quest.VisualStyle,
 			input.VisualTags,
 			input.RpgMetadata,
-			input.Scenes,
+			nil,
 		)
 	}
 	quest, _ = s.quests.GetRolePlayQuestByID(ctx, quest.Id)
+	if quest != nil {
+		visual := NewRolePlayQuestVisualService(s.quests.DB())
+		scenes := input.Scenes
+		if len(scenes) == 0 || !scenesCoverAllChapters(scenes, quest) {
+			scenes = BuildScenesFromQuestStructure(*quest)
+		}
+		_, _ = visual.CreateOrUpdateScenesForChapters(ctx, quest.Id, scenes)
+		quest, _ = s.quests.GetRolePlayQuestByID(ctx, quest.Id)
+	}
 	return quest, nil
 }
 

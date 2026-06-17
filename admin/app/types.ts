@@ -301,6 +301,9 @@ export type AdminRolePlaySceneImage = {
 export type AdminRolePlayScene = {
   id: number;
   sceneKey: string;
+  arcId?: number | null;
+  chapterId?: number | null;
+  arcIndex: number;
   chapterIndex: number;
   title: string;
   summary: string;
