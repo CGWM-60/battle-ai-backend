@@ -290,6 +290,32 @@ export type AdminRolePlayArc = {
   chapters: AdminRolePlayChapter[];
 };
 
+export type AdminRolePlaySceneImage = {
+  id: number;
+  url: string;
+  filename: string;
+  isMain: boolean;
+  alt: string;
+};
+
+export type AdminRolePlayScene = {
+  id: number;
+  sceneKey: string;
+  chapterIndex: number;
+  title: string;
+  summary: string;
+  sceneType: string;
+  roomType: string;
+  atmosphere: string;
+  dangerLevel: string;
+  imagePrompt: string;
+  imageNegativePrompt: string;
+  imageUrl: string;
+  imageStatus: string;
+  visualTags: string[];
+  images: AdminRolePlaySceneImage[];
+};
+
 export type AdminRolePlayQuest = {
   id: number;
   createdAt: string;
@@ -304,8 +330,16 @@ export type AdminRolePlayQuest = {
   coin: number;
   source: string;
   status: string;
+  isPublished: boolean;
+  imagePrompt: string;
+  imageNegativePrompt: string;
+  visualStyle: string;
+  imageUrl: string;
+  visualTags: string[];
+  rpgMetadata: Record<string, unknown>;
   arcCount: number;
   chapterCount: number;
+  scenes: AdminRolePlayScene[];
   arcs: AdminRolePlayArc[];
 };
 

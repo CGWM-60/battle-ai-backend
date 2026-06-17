@@ -114,6 +114,12 @@ func DbConnect() *gorm.DB {
 		&models.TranslationMissingLog{},
 		&models.UserLocalePreference{},
 	)
+	_ = db.Exec(`
+		UPDATE role_play_quest_templates
+		SET is_published = 1
+		WHERE status = 'published' AND (is_published = 0 OR is_published IS NULL)
+	`).Error
+
 	if err := seedDefaultBuildingDefinitions(db); err != nil {
 		panic(fmt.Sprintf("failed to seed default building catalog: %v", err))
 	}
