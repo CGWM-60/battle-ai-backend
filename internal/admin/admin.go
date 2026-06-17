@@ -444,9 +444,9 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.POST("/roleplay/quests/:id/unpublish", server.unpublishRolePlayQuestAdminAPI)
 	api.POST("/roleplay/quests/unpublish-all", server.unpublishAllRolePlayQuestsAdminAPI)
 	api.POST("/roleplay/quests/backfill-image-prompts", server.backfillRolePlayImagePromptsAdminAPI)
-	api.POST("/roleplay/quests/:questId/scenes/:sceneId/images", server.uploadRolePlaySceneImageAdminAPI)
-	api.DELETE("/roleplay/quests/:questId/scenes/:sceneId/images/:imageId", server.deleteRolePlaySceneImageAdminAPI)
-	api.PATCH("/roleplay/quests/:questId/scenes/:sceneId/images/:imageId/main", server.setMainRolePlaySceneImageAdminAPI)
+	api.POST("/roleplay/quests/:id/scenes/:sceneId/images", server.uploadRolePlaySceneImageAdminAPI)
+	api.DELETE("/roleplay/quests/:id/scenes/:sceneId/images/:imageId", server.deleteRolePlaySceneImageAdminAPI)
+	api.PATCH("/roleplay/quests/:id/scenes/:sceneId/images/:imageId/main", server.setMainRolePlaySceneImageAdminAPI)
 	api.GET("/roleplay-hero-images", server.rolePlayHeroImagesAdminAPI)
 	api.POST("/roleplay-hero-images", server.createRolePlayHeroImageAdminAPI)
 	api.PATCH("/roleplay-hero-images/:id", server.updateRolePlayHeroImageAdminAPI)
@@ -843,7 +843,7 @@ func (s *Server) backfillRolePlayImagePromptsAdminAPI(c *gin.Context) {
 }
 
 func (s *Server) uploadRolePlaySceneImageAdminAPI(c *gin.Context) {
-	questID, err := strconv.ParseUint(c.Param("questId"), 10, 64)
+	questID, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil || questID == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
 		return
@@ -875,7 +875,7 @@ func (s *Server) uploadRolePlaySceneImageAdminAPI(c *gin.Context) {
 }
 
 func (s *Server) deleteRolePlaySceneImageAdminAPI(c *gin.Context) {
-	questID, _ := strconv.ParseUint(c.Param("questId"), 10, 64)
+	questID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	sceneID, _ := strconv.ParseUint(c.Param("sceneId"), 10, 64)
 	imageID, _ := strconv.ParseUint(c.Param("imageId"), 10, 64)
 	if questID == 0 || sceneID == 0 || imageID == 0 {
@@ -890,7 +890,7 @@ func (s *Server) deleteRolePlaySceneImageAdminAPI(c *gin.Context) {
 }
 
 func (s *Server) setMainRolePlaySceneImageAdminAPI(c *gin.Context) {
-	questID, _ := strconv.ParseUint(c.Param("questId"), 10, 64)
+	questID, _ := strconv.ParseUint(c.Param("id"), 10, 64)
 	sceneID, _ := strconv.ParseUint(c.Param("sceneId"), 10, 64)
 	imageID, _ := strconv.ParseUint(c.Param("imageId"), 10, 64)
 	if questID == 0 || sceneID == 0 || imageID == 0 {
