@@ -48,6 +48,9 @@ func RouterApp(database *gorm.DB) {
 	heroImageDir := service.HeroImagePublicDir()
 	_ = os.MkdirAll(heroImageDir, 0o755)
 	router.Static("/assets/heroes", heroImageDir)
+	rolePlaySceneDir := service.RolePlayScenePublicDir()
+	_ = os.MkdirAll(rolePlaySceneDir, 0o755)
+	router.Static("/uploads/roleplay/quests", rolePlaySceneDir)
 
 	router.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "pong"})

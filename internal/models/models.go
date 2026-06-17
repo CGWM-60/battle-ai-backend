@@ -320,6 +320,53 @@ type RolePlayQuestScene struct {
 	Images []RolePlayQuestSceneImage `gorm:"foreignKey:SceneID" json:"images"`
 }
 
+// RolePlayImagePromptJob = job batch admin pour generer les prompts image RP.
+type RolePlayImagePromptJob struct {
+	Id        uint `gorm:"primaryKey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	StartedAt  *time.Time
+	FinishedAt *time.Time
+
+	Status string `gorm:"size:32;index"` // pending/running/completed/failed/cancelled/interrupted
+	Scope  string `gorm:"size:32"`
+
+	TotalQuests      int
+	ProcessedQuests  int
+	UpdatedQuests    int
+	CreatedScenes    int
+	UpdatedPrompts   int
+	FailedQuests     int
+	CurrentQuestID   *uint
+	CurrentQuestTitle string `gorm:"size:160"`
+
+	OnlyMissing       bool
+	ForceRegenerate   bool
+	SceneCount        int
+	BatchSize         int
+	Provider          string `gorm:"size:80"`
+	Model             string `gorm:"size:160"`
+	QuestIDs          datatypes.JSON `gorm:"type:json"`
+
+	Errors datatypes.JSON `gorm:"type:json"`
+}
+
+// RolePlayImagePromptJobItem = progression par quete dans un job batch.
+type RolePlayImagePromptJobItem struct {
+	Id        uint `gorm:"primaryKey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	JobID    uint   `gorm:"index"`
+	QuestID  uint   `gorm:"index"`
+	QuestTitle string `gorm:"size:160"`
+	Status   string `gorm:"size:32;index"` // pending/running/completed/failed/skipped
+
+	CreatedScenes  int
+	UpdatedPrompts int
+	Error          string `gorm:"type:text"`
+}
+
 // RolePlayQuestSceneImage = image uploadee pour une scene RP.
 type RolePlayQuestSceneImage struct {
 	Id        uint `gorm:"primaryKey" json:"id"`

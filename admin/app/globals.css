@@ -1438,3 +1438,117 @@ a {
     grid-template-columns: 1fr;
   }
 }
+
+.rp-batch-panel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.rp-batch-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.rp-batch-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.rp-batch-controls input[type="number"] {
+  width: 72px;
+  margin-bottom: 0;
+}
+
+.rp-progress {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.rp-progress > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2dd4bf, #38bdf8);
+}
+
+.rp-scene-preview {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+}
+
+.rp-scene-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.rp-scene-gallery-item {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.rp-scene-gallery-item img {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  display: block;
+}
+
+.rp-scene-gallery-item.main {
+  border-color: #2dd4bf;
+}
+
+.rp-scene-gallery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+}
+
+.rp-scene-gallery-actions button {
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+.rp-dropzone {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  text-align: center;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.rp-dropzone.dragging {
+  border-color: #2dd4bf;
+  color: #d9fffb;
+}
+
+.rp-copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.rp-backfill-result {
+  margin-bottom: 12px;
+  color: var(--muted);
+}

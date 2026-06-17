@@ -415,7 +415,12 @@ type generatedRolePlayChapter struct {
 
 func Register(router *gin.Engine, db *gorm.DB) {
 	if db != nil {
-		_ = db.AutoMigrate(&models.RolePlayHeroImage{})
+		_ = db.AutoMigrate(
+			&models.RolePlayHeroImage{},
+			&models.RolePlayImagePromptJob{},
+			&models.RolePlayImagePromptJobItem{},
+		)
+		_ = service.NewRolePlayImagePromptJobService(db).RecoverInterruptedJobs(context.Background())
 	}
 	server := &Server{
 		db:        db,
@@ -444,6 +449,12 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.POST("/roleplay/quests/:id/unpublish", server.unpublishRolePlayQuestAdminAPI)
 	api.POST("/roleplay/quests/unpublish-all", server.unpublishAllRolePlayQuestsAdminAPI)
 	api.POST("/roleplay/quests/backfill-image-prompts", server.backfillRolePlayImagePromptsAdminAPI)
+	api.POST("/roleplay/quests/:id/generate-image-prompts", server.generateRolePlayQuestImagePromptsAdminAPI)
+	api.POST("/roleplay/quests/:id/scenes/:sceneId/generate-image-prompt", server.generateRolePlaySceneImagePromptAdminAPI)
+	api.POST("/roleplay/quests/image-prompts/jobs", server.startRolePlayImagePromptJobAdminAPI)
+	api.GET("/roleplay/quests/image-prompts/jobs", server.listRolePlayImagePromptJobsAdminAPI)
+	api.GET("/roleplay/quests/image-prompts/jobs/:jobId", server.getRolePlayImagePromptJobAdminAPI)
+	api.POST("/roleplay/quests/image-prompts/jobs/:jobId/cancel", server.cancelRolePlayImagePromptJobAdminAPI)
 	api.POST("/roleplay/quests/:id/scenes/:sceneId/images", server.uploadRolePlaySceneImageAdminAPI)
 	api.DELETE("/roleplay/quests/:id/scenes/:sceneId/images/:imageId", server.deleteRolePlaySceneImageAdminAPI)
 	api.PATCH("/roleplay/quests/:id/scenes/:sceneId/images/:imageId/main", server.setMainRolePlaySceneImageAdminAPI)
@@ -840,38 +851,6 @@ func (s *Server) backfillRolePlayImagePromptsAdminAPI(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, result)
-}
-
-func (s *Server) uploadRolePlaySceneImageAdminAPI(c *gin.Context) {
-	questID, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || questID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
-		return
-	}
-	sceneID, err := strconv.ParseUint(c.Param("sceneId"), 10, 64)
-	if err != nil || sceneID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid scene id"})
-		return
-	}
-	file, header, err := c.Request.FormFile("image")
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
-		return
-	}
-	defer file.Close()
-	image, err := service.NewRolePlayQuestVisualService(s.db).SaveSceneImageUpload(
-		c.Request.Context(),
-		uint(questID),
-		uint(sceneID),
-		header.Filename,
-		file,
-		c.PostForm("alt"),
-	)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusCreated, gin.H{"image": image})
 }
 
 func (s *Server) deleteRolePlaySceneImageAdminAPI(c *gin.Context) {
@@ -1569,7 +1548,10 @@ func (s *Server) deleteRolePlayQuestTemplate(ctx context.Context, id uint) error
 		if err := tx.Where("template_id = ?", id).Delete(&models.RolePlayQuestArc{}).Error; err != nil {
 			return err
 		}
-		return tx.Delete(&models.RolePlayQuestTemplate{}, id).Error
+		if err := tx.Delete(&models.RolePlayQuestTemplate{}, id).Error; err != nil {
+			return err
+		}
+		return service.DeleteQuestUploadDir(id)
 	})
 }
 
@@ -1974,8 +1956,14 @@ Regles de structure obligatoires:
 Ne genere pas toujours la structure minimale. Dans un meme batch, alterne le nombre d'arcs et de chapitres.
 Ajoute exactement un chapitre boss pour les quetes difficiles, et zero ou un chapitre boss pour les autres.
 Les arcs et chapitres doivent etre clairement identifies et ordonnes dans le JSON.
+Pour chaque quete, ajoute aussi des visuels exploitables par un generateur d'image:
+- imagePrompt et imageNegativePrompt globaux (anglais, detailles, sans texte visible)
+- visualStyle (ex: dark fantasy mobile RPG)
+- visualTags (3 a 6 mots)
+- rpgMetadata (recommendedPartySize, supportsCoop, recommendedLevel, difficultyClass, mainThreat, mainLocation, rpgTags, suggestedSkills)
+- scenes: au minimum 3 scenes (entree, conflit, climax) avec sceneKey, chapterIndex, title, summary, sceneType, roomType, atmosphere, dangerLevel, imagePrompt, imageNegativePrompt, visualTags
 Format:
-[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"metadata":{"ton":"..."},"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, count)
+[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"imagePrompt":"...","imageNegativePrompt":"...","visualStyle":"dark fantasy mobile RPG","visualTags":["crypt","fog"],"rpgMetadata":{"recommendedPartySize":1,"supportsCoop":true,"difficultyClass":12},"metadata":{"ton":"..."},"scenes":[{"sceneKey":"scene_01_entry","chapterIndex":1,"title":"Entree","summary":"...","sceneType":"exploration","roomType":"entrance","atmosphere":"mysterious","dangerLevel":"low","imagePrompt":"...","imageNegativePrompt":"...","visualTags":["statues"]}],"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, count)
 	response, err := callAdminProvider(ctx, url, apiKey, model, prompt)
 	if err != nil {
 		return nil, err

@@ -1,20 +1,30 @@
 "use client";
 
-import { BookOpen, Save, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BookOpen, Copy, RefreshCw, Save, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AdminShell } from "../components/AdminShell";
 import { ErrorState, LoadingState } from "../components/LoadState";
 import { MetricGrid } from "../components/MetricGrid";
 import { formatDate, formatNumber, loadAdminData } from "../components/api";
-import type { AdminRolePlayQuest, AdminRolePlayQuestsResponse } from "../types";
+import type {
+  AdminRolePlayQuest,
+  AdminRolePlayScene,
+  AdminRolePlayQuestsResponse,
+  RolePlayImagePromptJob,
+} from "../types";
 
 export default function RolePlayQuestsPage() {
   const [data, setData] = useState<AdminRolePlayQuestsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [busyId, setBusyId] = useState<number | "all" | "backfill" | "unpublish-all" | null>(null);
-  const [backfillResult, setBackfillResult] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<number | "all" | "unpublish-all" | null>(null);
+  const [activeJob, setActiveJob] = useState<RolePlayImagePromptJob | null>(null);
+  const [batchOnlyMissing, setBatchOnlyMissing] = useState(true);
+  const [batchForce, setBatchForce] = useState(false);
+  const [batchSceneCount, setBatchSceneCount] = useState(3);
+  const [batchSize, setBatchSize] = useState(5);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const reload = () => {
     loadAdminData<AdminRolePlayQuestsResponse>("roleplay-quests").then((payload) => {
@@ -25,14 +35,15 @@ export default function RolePlayQuestsPage() {
 
   useEffect(() => {
     reload();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   const quests = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const list = data?.quests ?? [];
-    if (!needle) {
-      return list;
-    }
+    if (!needle) return list;
     return list.filter((quest) =>
       [quest.title, quest.slug, quest.theme, quest.level, quest.status, String(quest.id)].some((value) =>
         value.toLowerCase().includes(needle),
@@ -43,9 +54,7 @@ export default function RolePlayQuestsPage() {
   const selectedQuest = quests.find((quest) => quest.id === selectedId) ?? quests[0] ?? null;
 
   function patchQuest(id: number, patch: Partial<AdminRolePlayQuest>) {
-    if (!data) {
-      return;
-    }
+    if (!data) return;
     setData({
       ...data,
       quests: data.quests.map((quest) => (quest.id === id ? { ...quest, ...patch } : quest)),
@@ -75,19 +84,14 @@ export default function RolePlayQuestsPage() {
   }
 
   async function deleteQuest(quest: AdminRolePlayQuest) {
-    if (!window.confirm(`Supprimer la quete RP "${quest.title}" ?`)) {
-      return;
-    }
+    if (!window.confirm(`Supprimer la quete RP "${quest.title}" ?`)) return;
     setBusyId(quest.id);
-    setError(null);
     try {
       const response = await fetch(`/admin/api/roleplay-quests/${quest.id}`, {
         method: "DELETE",
         credentials: "same-origin",
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setSelectedId(null);
       reload();
     } catch (err) {
@@ -98,21 +102,15 @@ export default function RolePlayQuestsPage() {
   }
 
   async function unpublishAll() {
-    if (!window.confirm("Cette action va retirer toutes les quetes RP du catalogue public. Continuer ?")) {
-      return;
-    }
+    if (!window.confirm("Retirer toutes les quetes RP du catalogue public ?")) return;
     setBusyId("unpublish-all");
-    setError(null);
     try {
       const response = await fetch("/admin/api/roleplay/quests/unpublish-all", {
         method: "POST",
         credentials: "same-origin",
         headers: { Accept: "application/json" },
       });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error ?? `HTTP ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "unpublish-all failed");
@@ -121,46 +119,15 @@ export default function RolePlayQuestsPage() {
     }
   }
 
-  async function backfillImagePrompts() {
-    setBusyId("backfill");
-    setError(null);
-    setBackfillResult(null);
-    try {
-      const response = await fetch("/admin/api/roleplay/quests/backfill-image-prompts", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({ onlyMissing: true, sceneCount: 3 }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error ?? `HTTP ${response.status}`);
-      }
-      setBackfillResult(
-        `Mises a jour: ${payload.updatedQuests ?? 0} quetes, ${payload.createdScenes ?? 0} scenes, ${payload.updatedPrompts ?? 0} prompts`,
-      );
-      reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "backfill failed");
-    } finally {
-      setBusyId(null);
-    }
-  }
-
   async function clearAll() {
-    if (!window.confirm("Effacer toutes les quetes RP du systeme ? Les sessions existantes gardent leur historique mais ne seront plus liees a un template.")) {
-      return;
-    }
+    if (!window.confirm("Effacer toutes les quetes RP ?")) return;
     setBusyId("all");
-    setError(null);
     try {
       const response = await fetch("/admin/api/roleplay-quests", {
         method: "DELETE",
         credentials: "same-origin",
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       setSelectedId(null);
       reload();
     } catch (err) {
@@ -170,8 +137,66 @@ export default function RolePlayQuestsPage() {
     }
   }
 
+  function stopJobPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  async function pollJob(jobId: number) {
+    const response = await fetch(`/admin/api/roleplay/quests/image-prompts/jobs/${jobId}`, {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return;
+    const payload = (await response.json()) as RolePlayImagePromptJob;
+    setActiveJob(payload);
+    if (["completed", "failed", "cancelled", "interrupted"].includes(payload.status)) {
+      stopJobPolling();
+      reload();
+    }
+  }
+
+  async function startBatchJob() {
+    setError(null);
+    try {
+      const response = await fetch("/admin/api/roleplay/quests/image-prompts/jobs", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          scope: "all",
+          onlyMissing: batchOnlyMissing,
+          forceRegenerate: batchForce,
+          sceneCount: batchSceneCount,
+          batchSize,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error ?? `HTTP ${response.status}`);
+      setActiveJob(payload as RolePlayImagePromptJob);
+      stopJobPolling();
+      pollRef.current = setInterval(() => {
+        void pollJob((payload as RolePlayImagePromptJob).jobId);
+      }, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "batch job failed");
+    }
+  }
+
+  async function cancelBatchJob() {
+    if (!activeJob) return;
+    await fetch(`/admin/api/roleplay/quests/image-prompts/jobs/${activeJob.jobId}/cancel`, {
+      method: "POST",
+      credentials: "same-origin",
+    });
+    await pollJob(activeJob.jobId);
+    stopJobPolling();
+  }
+
   return (
-    <AdminShell title="Quetes RP" description="Catalogue roleplay, recompenses, arcs et chapitres.">
+    <AdminShell title="Quetes RP" description="Catalogue roleplay, visuels, prompts image et upload scenes.">
       {error ? <ErrorState message={error} /> : null}
       {!data && !error ? <LoadingState /> : null}
       {data ? (
@@ -187,52 +212,52 @@ export default function RolePlayQuestsPage() {
             ]}
           />
 
-          <section className="rp-toolbar">
-            <div>
-              <BookOpen size={18} aria-hidden />
-              <strong>{formatNumber(quests.length)} quetes affichees</strong>
+          <section className="rp-batch-panel">
+            <strong>Generation prompts images (batch)</strong>
+            <div className="rp-batch-controls">
+              <label><input type="checkbox" checked={batchOnlyMissing} onChange={(e) => setBatchOnlyMissing(e.target.checked)} /> Seulement manquants</label>
+              <label><input type="checkbox" checked={batchForce} onChange={(e) => setBatchForce(e.target.checked)} /> Forcer regeneration</label>
+              <label>Scenes <input type="number" min={1} max={6} value={batchSceneCount} onChange={(e) => setBatchSceneCount(Number(e.target.value))} /></label>
+              <label>Batch <input type="number" min={1} max={20} value={batchSize} onChange={(e) => setBatchSize(Number(e.target.value))} /></label>
+              <button type="button" onClick={startBatchJob}>Mettre a jour toutes les quetes</button>
+              {activeJob && ["running", "pending"].includes(activeJob.status) ? (
+                <button type="button" className="danger" onClick={cancelBatchJob}>Annuler</button>
+              ) : null}
             </div>
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrer par id, titre, theme, niveau ou statut" />
-            <button type="button" onClick={backfillImagePrompts} disabled={busyId === "backfill"}>
-              {busyId === "backfill" ? "Backfill..." : "Mettre a jour prompts images"}
-            </button>
-            <button className="danger" type="button" onClick={unpublishAll} disabled={busyId === "unpublish-all"}>
-              Depublier toutes les quetes RP
-            </button>
-            <button className="danger" type="button" onClick={clearAll} disabled={busyId === "all" || data.stats.totalQuests === 0}>
-              <Trash2 size={16} aria-hidden />
-              Clear all
-            </button>
+            {activeJob ? (
+              <>
+                <div className="rp-progress"><span style={{ width: `${activeJob.percent}%` }} /></div>
+                <small>
+                  {activeJob.status} — {activeJob.processedQuests}/{activeJob.totalQuests} —
+                  maj {activeJob.updatedQuests}, scenes {activeJob.createdScenes}, prompts {activeJob.updatedPrompts}, erreurs {activeJob.failedQuests}
+                  {activeJob.currentQuestTitle ? ` — en cours: ${activeJob.currentQuestTitle}` : ""}
+                </small>
+                {activeJob.errors?.length ? (
+                  <ul>{activeJob.errors.map((item) => <li key={item.questId}>#{item.questId} {item.title}: {item.error}</li>)}</ul>
+                ) : null}
+              </>
+            ) : null}
           </section>
-          {backfillResult ? <p className="rp-backfill-result">{backfillResult}</p> : null}
+
+          <section className="rp-toolbar">
+            <div><BookOpen size={18} aria-hidden /><strong>{formatNumber(quests.length)} quetes</strong></div>
+            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrer..." />
+            <button className="danger" type="button" onClick={unpublishAll} disabled={busyId === "unpublish-all"}>Depublier tout</button>
+            <button className="danger" type="button" onClick={clearAll} disabled={busyId === "all"}><Trash2 size={16} /> Clear all</button>
+          </section>
 
           <section className="rp-admin-layout">
             <div className="panel rp-table-panel">
               <div className="table-wrap">
                 <table className="rp-table">
                   <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Titre</th>
-                      <th>Statut</th>
-                      <th>Arc</th>
-                      <th>Chap.</th>
-                      <th>XP</th>
-                      <th>Coin</th>
-                    </tr>
+                    <tr><th>ID</th><th>Titre</th><th>Statut</th><th>Arc</th><th>Chap.</th><th>XP</th><th>Coin</th></tr>
                   </thead>
                   <tbody>
                     {quests.map((quest) => (
-                      <tr
-                        key={quest.id}
-                        className={selectedQuest?.id === quest.id ? "selected" : ""}
-                        onClick={() => setSelectedId(quest.id)}
-                      >
+                      <tr key={quest.id} className={selectedQuest?.id === quest.id ? "selected" : ""} onClick={() => setSelectedId(quest.id)}>
                         <td>#{quest.id}</td>
-                        <td>
-                          <strong>{quest.title}</strong>
-                          <small>{quest.theme || "-"} / {quest.level || "-"}</small>
-                        </td>
+                        <td><strong>{quest.title}</strong><small>{quest.theme || "-"} / {quest.level || "-"}</small></td>
                         <td><span className={`status ${quest.status}`}>{quest.status}</span></td>
                         <td>{formatNumber(quest.arcCount)}</td>
                         <td>{formatNumber(quest.chapterCount)}</td>
@@ -240,24 +265,12 @@ export default function RolePlayQuestsPage() {
                         <td>{formatNumber(quest.coin)}</td>
                       </tr>
                     ))}
-                    {!quests.length ? (
-                      <tr>
-                        <td colSpan={7}>Aucune quete RP.</td>
-                      </tr>
-                    ) : null}
                   </tbody>
                 </table>
               </div>
             </div>
 
-            <QuestDetail
-              quest={selectedQuest}
-              busy={busyId}
-              onPatch={patchQuest}
-              onSave={saveQuest}
-              onDelete={deleteQuest}
-              onReload={reload}
-            />
+            <QuestDetail quest={selectedQuest} busy={busyId} onPatch={patchQuest} onSave={saveQuest} onDelete={deleteQuest} onReload={reload} />
           </section>
         </>
       ) : null}
@@ -274,15 +287,39 @@ function QuestDetail({
   onReload,
 }: {
   quest: AdminRolePlayQuest | null;
-  busy: number | "all" | "backfill" | "unpublish-all" | null;
+  busy: number | "all" | "unpublish-all" | null;
   onPatch: (id: number, patch: Partial<AdminRolePlayQuest>) => void;
   onSave: (quest: AdminRolePlayQuest) => void;
   onDelete: (quest: AdminRolePlayQuest) => void;
   onReload: () => void;
 }) {
+  const [sceneBusy, setSceneBusy] = useState(false);
+
   if (!quest) {
     return <aside className="panel rp-detail empty">Selectionne une quete RP.</aside>;
   }
+
+  const questId = quest.id;
+
+  async function generateQuestPrompts(force: boolean) {
+    if (force && !window.confirm("Regenerer tous les prompts image de cette quete ?")) return;
+    setSceneBusy(true);
+    try {
+      await fetch(`/admin/api/roleplay/quests/${questId}/generate-image-prompts`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ onlyMissing: !force, forceRegenerate: force, sceneCount: 3 }),
+      });
+      onReload();
+    } finally {
+      setSceneBusy(false);
+    }
+  }
+
+  const allScenePrompts = (quest.scenes ?? [])
+    .map((scene) => `# ${scene.sceneKey}\n${scene.imagePrompt}\n${scene.imageNegativePrompt}`)
+    .join("\n\n");
 
   return (
     <aside className="panel rp-detail">
@@ -293,17 +330,10 @@ function QuestDetail({
       </header>
 
       <div className="rp-edit-strip">
-        <label>
-          XP
-          <input type="number" value={quest.xp} onChange={(event) => onPatch(quest.id, { xp: Number(event.target.value) })} />
-        </label>
-        <label>
-          Coins
-          <input type="number" value={quest.coin} onChange={(event) => onPatch(quest.id, { coin: Number(event.target.value) })} />
-        </label>
-        <label>
-          Statut
-          <select value={quest.status} onChange={(event) => onPatch(quest.id, { status: event.target.value })}>
+        <label>XP <input type="number" value={quest.xp} onChange={(e) => onPatch(quest.id, { xp: Number(e.target.value) })} /></label>
+        <label>Coins <input type="number" value={quest.coin} onChange={(e) => onPatch(quest.id, { coin: Number(e.target.value) })} /></label>
+        <label>Statut
+          <select value={quest.status} onChange={(e) => onPatch(quest.id, { status: e.target.value })}>
             <option value="published">published</option>
             <option value="draft">draft</option>
             <option value="archived">archived</option>
@@ -312,86 +342,45 @@ function QuestDetail({
       </div>
 
       <div className="rp-detail-actions">
-        <button className="primary" type="button" onClick={() => onSave(quest)} disabled={busy === quest.id}>
-          <Save size={16} aria-hidden />
-          Enregistrer
-        </button>
-        <button type="button" onClick={() => publishQuest(quest.id, onReload)} disabled={busy === quest.id}>
-          Publier
-        </button>
-        <button type="button" onClick={() => unpublishQuest(quest.id, onReload)} disabled={busy === quest.id}>
-          Depublier
-        </button>
-        <button className="danger" type="button" onClick={() => onDelete(quest)} disabled={busy === quest.id}>
-          <Trash2 size={16} aria-hidden />
-          Supprimer
-        </button>
+        <button className="primary" type="button" onClick={() => onSave(quest)} disabled={busy === quest.id}><Save size={16} /> Enregistrer</button>
+        <button type="button" onClick={() => publishQuest(quest.id, onReload)}>Publier</button>
+        <button type="button" onClick={() => unpublishQuest(quest.id, onReload)}>Depublier</button>
+        <button className="danger" type="button" onClick={() => onDelete(quest)}><Trash2 size={16} /> Supprimer</button>
       </div>
 
-      <dl className="rp-facts">
-        <dt>Slug</dt>
-        <dd>{quest.slug}</dd>
-        <dt>Theme</dt>
-        <dd>{quest.theme || "-"}</dd>
-        <dt>Niveau</dt>
-        <dd>{quest.level || "-"}</dd>
-        <dt>Arcs / chapitres</dt>
-        <dd>{quest.arcCount} / {quest.chapterCount}</dd>
-        <dt>Creation</dt>
-        <dd>{formatDate(quest.createdAt)}</dd>
-      </dl>
-
       <section className="rp-read-block">
-        <h3>Prompt</h3>
-        <p className="prewrap">{quest.prompt}</p>
+        <h3>Prompts image quete</h3>
+        <div className="rp-copy-row">
+          <button type="button" onClick={() => generateQuestPrompts(false)} disabled={sceneBusy}>Generer prompts image</button>
+          <button type="button" onClick={() => generateQuestPrompts(true)} disabled={sceneBusy}>Regenerer prompts image</button>
+          <CopyButton label="Copier prompt global" text={quest.imagePrompt} />
+          <CopyButton label="Copier negative prompt" text={quest.imageNegativePrompt} />
+          <CopyButton label="Copier tous prompts scenes" text={allScenePrompts} />
+        </div>
+        <dl className="rp-facts">
+          <dt>Image prompt</dt><dd className="prewrap">{quest.imagePrompt || "-"}</dd>
+          <dt>Negative prompt</dt><dd className="prewrap">{quest.imageNegativePrompt || "-"}</dd>
+          <dt>Style</dt><dd>{quest.visualStyle || "-"}</dd>
+          <dt>Tags</dt><dd>{quest.visualTags?.join(", ") || "-"}</dd>
+        </dl>
       </section>
 
       <section className="rp-read-block">
-        <h3>Visuels de quete</h3>
-        <dl className="rp-facts">
-          <dt>Image prompt</dt>
-          <dd className="prewrap">{quest.imagePrompt || "-"}</dd>
-          <dt>Negative prompt</dt>
-          <dd className="prewrap">{quest.imageNegativePrompt || "-"}</dd>
-          <dt>Style</dt>
-          <dd>{quest.visualStyle || "-"}</dd>
-          <dt>Tags</dt>
-          <dd>{quest.visualTags?.join(", ") || "-"}</dd>
-        </dl>
+        <h3>Scenes visuelles</h3>
         <div className="rp-arc-list">
           {(quest.scenes ?? []).map((scene) => (
-            <article key={scene.id} className="rp-arc">
-              <h4>{scene.sceneKey}: {scene.title}</h4>
-              <p>{scene.summary || "Sans resume."}</p>
-              <small>{scene.sceneType} / {scene.roomType} / {scene.atmosphere} / danger {scene.dangerLevel}</small>
-              <details>
-                <summary>Prompts image</summary>
-                <p className="prewrap">{scene.imagePrompt || "-"}</p>
-                <p className="prewrap">{scene.imageNegativePrompt || "-"}</p>
-              </details>
-              {scene.imageUrl ? <img src={scene.imageUrl} alt={scene.title} className="rp-scene-preview" /> : null}
-              <SceneImageUpload questId={quest.id} sceneId={scene.id} onDone={onReload} />
-            </article>
+            <SceneCard key={scene.id} questId={quest.id} scene={scene} onReload={onReload} busy={sceneBusy} setBusy={setSceneBusy} />
           ))}
         </div>
       </section>
 
       <section className="rp-read-block">
-        <h3>Structure</h3>
+        <h3>Structure narrative</h3>
         <div className="rp-arc-list">
           {quest.arcs.map((arc) => (
             <article key={arc.id} className="rp-arc">
               <h4>Arc {arc.position}: {arc.title}</h4>
               <p>{arc.objective || arc.summary || "Sans objectif."}</p>
-              <ul>
-                {arc.chapters.map((chapter) => (
-                  <li key={chapter.id}>
-                    <strong>Chapitre {chapter.position}: {chapter.title}</strong>
-                    <span>{chapter.objective || chapter.summary || "Sans objectif."}</span>
-                    <small>{chapter.isBoss ? "Boss" : "Standard"} - XP {chapter.xp} - Coins {chapter.coin}</small>
-                  </li>
-                ))}
-              </ul>
             </article>
           ))}
         </div>
@@ -400,50 +389,154 @@ function QuestDetail({
   );
 }
 
+function SceneCard({
+  questId,
+  scene,
+  onReload,
+  busy,
+  setBusy,
+}: {
+  questId: number;
+  scene: AdminRolePlayScene;
+  onReload: () => void;
+  busy: boolean;
+  setBusy: (value: boolean) => void;
+}) {
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function uploadFiles(files: FileList | File[]) {
+    const list = Array.from(files);
+    if (!list.length) return;
+    setBusy(true);
+    try {
+      const form = new FormData();
+      if (list.length === 1) {
+        form.append("image", list[0]);
+      } else {
+        list.forEach((file) => form.append("images[]", file));
+      }
+      const response = await fetch(`/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images`, {
+        method: "POST",
+        credentials: "same-origin",
+        body: form,
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+      onReload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteImage(imageId: number) {
+    if (!window.confirm("Supprimer cette image ?")) return;
+    setBusy(true);
+    try {
+      await fetch(`/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images/${imageId}`, {
+        method: "DELETE",
+        credentials: "same-origin",
+      });
+      onReload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setMain(imageId: number) {
+    setBusy(true);
+    try {
+      await fetch(`/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/images/${imageId}/main`, {
+        method: "PATCH",
+        credentials: "same-origin",
+      });
+      onReload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function regenerateScenePrompt() {
+    setBusy(true);
+    try {
+      await fetch(`/admin/api/roleplay/quests/${questId}/scenes/${scene.id}/generate-image-prompt`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ forceRegenerate: true }),
+      });
+      onReload();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <article className="rp-arc">
+      <h4>{scene.sceneKey}: {scene.title}</h4>
+      <p>{scene.summary || "Sans resume."}</p>
+      <small>{scene.sceneType} / {scene.roomType} / {scene.atmosphere} / danger {scene.dangerLevel}</small>
+      <div className="rp-copy-row">
+        <CopyButton label="Copier prompt" text={scene.imagePrompt} />
+        <CopyButton label="Copier negative" text={scene.imageNegativePrompt} />
+        <button type="button" onClick={regenerateScenePrompt} disabled={busy}><RefreshCw size={14} /> Regenerer prompt scene</button>
+      </div>
+      <details>
+        <summary>Prompts image complets</summary>
+        <p className="prewrap">{scene.imagePrompt || "-"}</p>
+        <p className="prewrap">{scene.imageNegativePrompt || "-"}</p>
+      </details>
+
+      {scene.imageUrl ? <img src={scene.imageUrl} alt={scene.title} className="rp-scene-preview" /> : null}
+
+      <div
+        className={`rp-dropzone ${dragging ? "dragging" : ""}`}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); void uploadFiles(e.dataTransfer.files); }}
+      >
+        <Upload size={16} /> Glisser-deposer ou
+        <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}>Uploader image(s)</button>
+        <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void uploadFiles(e.target.files); e.target.value = ""; }} />
+      </div>
+
+      <div className="rp-scene-gallery">
+        {(scene.images ?? []).map((image) => (
+          <div key={image.id} className={`rp-scene-gallery-item ${image.isMain ? "main" : ""}`}>
+            <img src={image.url} alt={image.alt || scene.title} />
+            {image.isMain ? <small>Principale</small> : null}
+            <div className="rp-scene-gallery-actions">
+              {!image.isMain ? <button type="button" onClick={() => setMain(image.id)} disabled={busy}>Principale</button> : null}
+              <CopyButton label="URL" text={image.url} />
+              <button type="button" className="danger" onClick={() => deleteImage(image.id)} disabled={busy}><Trash2 size={12} /></button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function CopyButton({ label, text }: { label: string; text: string }) {
+  return (
+    <button
+      type="button"
+      onClick={() => navigator.clipboard.writeText(text || "")}
+      disabled={!text}
+    >
+      <Copy size={14} /> {label}
+    </button>
+  );
+}
+
 async function publishQuest(id: number, onReload: () => void) {
-  const response = await fetch(`/admin/api/roleplay/quests/${id}/publish`, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-  });
+  const response = await fetch(`/admin/api/roleplay/quests/${id}/publish`, { method: "POST", credentials: "same-origin" });
   if (response.ok) onReload();
 }
 
 async function unpublishQuest(id: number, onReload: () => void) {
-  const response = await fetch(`/admin/api/roleplay/quests/${id}/unpublish`, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-  });
+  const response = await fetch(`/admin/api/roleplay/quests/${id}/unpublish`, { method: "POST", credentials: "same-origin" });
   if (response.ok) onReload();
-}
-
-function SceneImageUpload({
-  questId,
-  sceneId,
-  onDone,
-}: {
-  questId: number;
-  sceneId: number;
-  onDone: () => void;
-}) {
-  async function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const form = new FormData();
-    form.append("image", file);
-    const response = await fetch(
-      `/admin/api/roleplay/quests/${questId}/scenes/${sceneId}/images`,
-      { method: "POST", credentials: "same-origin", body: form },
-    );
-    if (response.ok) onDone();
-    event.target.value = "";
-  }
-
-  return (
-    <label className="rp-upload-btn">
-      Uploader image
-      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={onFileChange} hidden />
-    </label>
-  );
 }

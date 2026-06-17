@@ -54,6 +54,8 @@ func DbConnect() *gorm.DB {
 		&models.RolePlayQuestChapter{},
 		&models.RolePlayQuestScene{},
 		&models.RolePlayQuestSceneImage{},
+		&models.RolePlayImagePromptJob{},
+		&models.RolePlayImagePromptJobItem{},
 		&models.RolePlayQuestRun{},
 		&models.RolePlayCharacter{},
 		&models.RolePlayHeroImage{},

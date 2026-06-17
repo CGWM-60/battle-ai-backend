@@ -355,6 +355,40 @@ export type AdminRolePlayQuestsResponse = {
   quests: AdminRolePlayQuest[];
 };
 
+export type RolePlayImagePromptJobError = {
+  questId: number;
+  title: string;
+  error: string;
+};
+
+export type RolePlayImagePromptJob = {
+  jobId: number;
+  status: string;
+  totalQuests: number;
+  processedQuests: number;
+  updatedQuests: number;
+  createdScenes: number;
+  updatedPrompts: number;
+  failedQuests: number;
+  percent: number;
+  currentQuestId?: number;
+  currentQuestTitle?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  errors: RolePlayImagePromptJobError[];
+};
+
+export type RolePlayImagePromptJobItem = {
+  id: number;
+  jobId: number;
+  questId: number;
+  questTitle: string;
+  status: string;
+  createdScenes: number;
+  updatedPrompts: number;
+  error?: string;
+};
+
 export type AdminRolePlayHeroImage = {
   id: number;
   createdAt: string;
