@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
+	"log"
 	"fmt"
 	"io"
 	"net/http"
@@ -661,17 +661,11 @@ func (s *RolePlayQuestVisualService) SaveSceneImageUpload(
 	if err != nil {
 		return nil, err
 	}
-	size := int64(len(data))
-	maxSize := int64(8 * 1024 * 1024)
-	if v := strings.TrimSpace(os.Getenv("ROLEPLAY_SCENE_MAX_BYTES")); v != "" {
-		if parsed, parseErr := parseInt64(v); parseErr == nil && parsed > 0 {
-			maxSize = parsed
-		}
-	}
-	if size > maxSize {
+	maxSize := RolePlaySceneMaxUploadBytes()
+	if int64(len(data)) > maxSize {
 		return nil, fmt.Errorf("image file is too large")
 	}
-	ext, mimeType, err := validateRolePlayImageUpload(originalName, data)
+	converted, originalExt, originalMime, err := ConvertUploadedImageBytesToWebP(data, originalName)
 	if err != nil {
 		return nil, err
 	}
@@ -682,11 +676,9 @@ func (s *RolePlayQuestVisualService) SaveSceneImageUpload(
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		return nil, err
 	}
-	hasher := sha256.New()
-	_, _ = hasher.Write(data)
-	filename := fmt.Sprintf("scene_%d_%d%s", sceneID, time.Now().UnixNano(), ext)
+	filename := fmt.Sprintf("scene_%d_%d.webp", sceneID, time.Now().UnixNano())
 	fullPath := filepath.Join(fullDir, filename)
-	if err := os.WriteFile(fullPath, data, 0o644); err != nil {
+	if err := os.WriteFile(fullPath, converted.Data, 0o644); err != nil {
 		return nil, err
 	}
 	relURL := filepath.ToSlash(filepath.Join(relDir, filename))
@@ -696,17 +688,22 @@ func (s *RolePlayQuestVisualService) SaveSceneImageUpload(
 	isMain := existingCount == 0
 
 	image := &models.RolePlayQuestSceneImage{
-		SceneID:    sceneID,
-		QuestID:    questID,
-		URL:        url,
-		StorageKey: relURL,
-		Filename:   filename,
-		MimeType:   mimeType,
-		Size:       size,
-		IsMain:     isMain,
-		Alt:        defaultString(alt, scene.Title),
-		Source:     "admin_upload",
+		SceneID:          sceneID,
+		QuestID:          questID,
+		URL:              url,
+		StorageKey:       relURL,
+		Filename:         filename,
+		MimeType:         rolePlayImageWebPMime,
+		Size:             int64(len(converted.Data)),
+		Width:            converted.Width,
+		Height:           converted.Height,
+		IsMain:           isMain,
+		Alt:              defaultString(alt, scene.Title),
+		Source:           "admin_upload",
+		OriginalFilename: strings.TrimSpace(originalName),
+		OriginalMimeType: strings.TrimSpace(originalMime),
 	}
+	_ = originalExt
 	return image, s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if isMain {
 			if err := tx.Model(&models.RolePlayQuestSceneImage{}).
@@ -743,7 +740,9 @@ func (s *RolePlayQuestVisualService) DeleteSceneImage(ctx context.Context, quest
 		if err := tx.Delete(&image).Error; err != nil {
 			return err
 		}
-		_ = removeRolePlaySceneImageFile(storageKey)
+		if err := removeRolePlaySceneImageFile(storageKey); err != nil {
+			log.Printf("roleplay scene image delete warning quest=%d scene=%d image=%d: %v", questID, sceneID, imageID, err)
+		}
 		if image.IsMain {
 			var next models.RolePlayQuestSceneImage
 			err := tx.Where("scene_id = ?", sceneID).Order("id DESC").First(&next).Error
@@ -897,7 +896,7 @@ func validateRolePlayImageUpload(originalName string, data []byte) (string, stri
 		return "", "", fmt.Errorf("empty image file")
 	}
 	ext := strings.ToLower(filepath.Ext(originalName))
-	if !allowedAssetExt(ext) {
+	if !rolePlayAllowedUploadExt(ext) {
 		return "", "", fmt.Errorf("unsupported image format")
 	}
 	mimeType := http.DetectContentType(data)
@@ -915,7 +914,10 @@ func removeRolePlaySceneImageFile(storageKey string) error {
 		return nil
 	}
 	fullPath := filepath.Join(RolePlayScenePublicDir(), filepath.FromSlash(key))
-	return os.Remove(fullPath)
+	if err := os.Remove(fullPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func DeleteQuestUploadDir(questID uint) error {

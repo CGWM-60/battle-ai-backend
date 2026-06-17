@@ -190,10 +190,10 @@ func (s *Server) uploadRolePlaySceneImageAdminAPI(c *gin.Context) {
 	}
 
 	if len(images) == 1 {
-		c.JSON(http.StatusCreated, gin.H{"image": images[0], "images": images, "count": 1})
+		c.JSON(http.StatusCreated, gin.H{"success": true, "image": images[0], "images": images, "count": 1})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"images": images, "count": len(images)})
+	c.JSON(http.StatusCreated, gin.H{"success": true, "images": images, "count": len(images)})
 }
 
 func collectRolePlayUploadFiles(c *gin.Context) []*multipart.FileHeader {
@@ -310,6 +310,16 @@ func (s *Server) setMainRolePlayChapterImageAdminAPI(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true})
+}
+
+func (s *Server) convertExistingRolePlayImagesToWebPAdminAPI(c *gin.Context) {
+	visual := service.NewRolePlayQuestVisualService(s.db)
+	result, err := visual.ConvertExistingImagesToWebP(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "result": result})
 }
 
 func (s *Server) loadRolePlayQuestAdminItem(c *gin.Context, questID uint) (any, error) {

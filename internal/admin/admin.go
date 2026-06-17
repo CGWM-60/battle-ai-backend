@@ -264,6 +264,10 @@ type adminRolePlaySceneImageData struct {
 	Id       uint   `json:"id"`
 	URL      string `json:"url"`
 	Filename string `json:"filename"`
+	MimeType string `json:"mimeType"`
+	Size     int64  `json:"size"`
+	Width    int    `json:"width"`
+	Height   int    `json:"height"`
 	IsMain   bool   `json:"isMain"`
 	Alt      string `json:"alt"`
 }
@@ -465,6 +469,7 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.POST("/roleplay/quests/:id/chapters/:chapterId/images", server.uploadRolePlayChapterImageAdminAPI)
 	api.DELETE("/roleplay/quests/:id/chapters/:chapterId/images/:imageId", server.deleteRolePlayChapterImageAdminAPI)
 	api.PATCH("/roleplay/quests/:id/chapters/:chapterId/images/:imageId/main", server.setMainRolePlayChapterImageAdminAPI)
+	api.POST("/roleplay/quests/images/convert-existing-to-webp", server.convertExistingRolePlayImagesToWebPAdminAPI)
 	api.POST("/roleplay/quests/image-prompts/jobs", server.startRolePlayImagePromptJobAdminAPI)
 	api.GET("/roleplay/quests/image-prompts/jobs", server.listRolePlayImagePromptJobsAdminAPI)
 	api.GET("/roleplay/quests/image-prompts/jobs/:jobId", server.getRolePlayImagePromptJobAdminAPI)
@@ -1510,6 +1515,10 @@ func (s *Server) rolePlayQuestsAdminData(ctx context.Context) (adminRolePlayQues
 					Id:       image.Id,
 					URL:      image.URL,
 					Filename: image.Filename,
+					MimeType: image.MimeType,
+					Size:     image.Size,
+					Width:    image.Width,
+					Height:   image.Height,
 					IsMain:   image.IsMain,
 					Alt:      image.Alt,
 				})

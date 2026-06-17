@@ -381,16 +381,18 @@ type RolePlayQuestSceneImage struct {
 	Scene   RolePlayQuestScene `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 	QuestID uint               `gorm:"index" json:"questId"`
 
-	URL         string `gorm:"size:512" json:"url"`
-	StorageKey  string `gorm:"size:512" json:"storageKey"`
-	Filename    string `gorm:"size:255" json:"filename"`
-	MimeType    string `gorm:"size:64" json:"mimeType"`
-	Size        int64  `json:"size"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	IsMain      bool   `gorm:"index" json:"isMain"`
-	Alt         string `gorm:"size:255" json:"alt"`
-	Source      string `gorm:"size:32" json:"source"`
+	URL              string `gorm:"size:512" json:"url"`
+	StorageKey       string `gorm:"size:512" json:"storageKey"`
+	Filename         string `gorm:"size:255" json:"filename"`
+	MimeType         string `gorm:"size:64" json:"mimeType"`
+	Size             int64  `json:"size"`
+	Width            int    `json:"width"`
+	Height           int    `json:"height"`
+	IsMain           bool   `gorm:"index" json:"isMain"`
+	Alt              string `gorm:"size:255" json:"alt"`
+	Source           string `gorm:"size:32" json:"source"`
+	OriginalFilename string `gorm:"size:255" json:"originalFilename,omitempty"`
+	OriginalMimeType string `gorm:"size:64" json:"originalMimeType,omitempty"`
 }
 
 // RolePlayQuestArc = grande partie narrative d'une quete RP.

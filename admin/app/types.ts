@@ -294,6 +294,10 @@ export type AdminRolePlaySceneImage = {
   id: number;
   url: string;
   filename: string;
+  mimeType: string;
+  size: number;
+  width: number;
+  height: number;
   isMain: boolean;
   alt: string;
 };

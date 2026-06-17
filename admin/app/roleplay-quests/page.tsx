@@ -509,9 +509,12 @@ function SceneCard({
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.error ?? `HTTP ${response.status}`);
+        const message = payload.error ?? `HTTP ${response.status}`;
+        throw new Error(message);
       }
       onReload();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Upload impossible (format invalide, fichier trop lourd ou conversion WebP echouee).");
     } finally {
       setBusy(false);
     }
@@ -595,12 +598,14 @@ function SceneCard({
         <Upload size={16} /> Glisser-deposer ou
         <button type="button" onClick={() => inputRef.current?.click()} disabled={busy}>Uploader image(s)</button>
         <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden onChange={(e) => { if (e.target.files) void uploadFiles(e.target.files); e.target.value = ""; }} />
+        <small>Les images uploadées sont automatiquement optimisées et converties en WebP.</small>
       </div>
 
       <div className="rp-scene-gallery">
         {(scene.images ?? []).map((image) => (
           <div key={image.id} className={`rp-scene-gallery-item ${image.isMain ? "main" : ""}`}>
             <img src={image.url} alt={image.alt || scene.title} />
+            <small>{image.filename} · {image.mimeType || "image/webp"} · {Math.round((image.size || 0) / 1024)} KB</small>
             {image.isMain ? <small>Principale</small> : null}
             <div className="rp-scene-gallery-actions">
               {!image.isMain ? <button type="button" onClick={() => setMain(image.id)} disabled={busy}>Principale</button> : null}
