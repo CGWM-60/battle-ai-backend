@@ -268,8 +268,79 @@ type RolePlayQuestTemplate struct {
 	Status   string         `gorm:"size:32;index"`
 	Metadata datatypes.JSON `gorm:"type:json"`
 
-	Arcs []RolePlayQuestArc `gorm:"foreignKey:TemplateID"`
-	Runs []RolePlayQuestRun `gorm:"foreignKey:TemplateID"`
+	// Publication explicite (sync avec Status pour retrocompat).
+	IsPublished   bool       `gorm:"index;default:false" json:"isPublished"`
+	PublishedAt   *time.Time `json:"publishedAt"`
+	UnpublishedAt *time.Time `json:"unpublishedAt"`
+
+	// Visuels globaux de quete.
+	ImagePrompt         string         `gorm:"type:text" json:"imagePrompt"`
+	ImageNegativePrompt string         `gorm:"type:text" json:"imageNegativePrompt"`
+	VisualStyle         string         `gorm:"size:120" json:"visualStyle"`
+	ImageURL            string         `gorm:"size:512" json:"imageUrl"`
+	ImageStorageKey     string         `gorm:"size:512" json:"imageStorageKey"`
+	VisualTags          datatypes.JSON `gorm:"type:json" json:"visualTags"`
+	RpgMetadata         datatypes.JSON `gorm:"type:json" json:"rpgMetadata"`
+
+	Arcs   []RolePlayQuestArc   `gorm:"foreignKey:TemplateID"`
+	Scenes []RolePlayQuestScene `gorm:"foreignKey:QuestID"`
+	Runs   []RolePlayQuestRun   `gorm:"foreignKey:TemplateID"`
+}
+
+// RolePlayQuestScene = scene visuelle / salle narrative d'une quete RP.
+type RolePlayQuestScene struct {
+	Id        uint `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	QuestID uint                  `gorm:"index" json:"questId"`
+	Quest   RolePlayQuestTemplate `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+
+	SceneKey     string `gorm:"size:120;index" json:"sceneKey"`
+	ChapterIndex int    `gorm:"index" json:"chapterIndex"`
+	ArcIndex     int    `gorm:"index" json:"arcIndex"`
+	Title        string `gorm:"size:160" json:"title"`
+	Summary      string `gorm:"type:text" json:"summary"`
+	Prompt       string `gorm:"type:text" json:"prompt"`
+
+	ImagePrompt         string `gorm:"type:text" json:"imagePrompt"`
+	NegativePrompt      string `gorm:"type:text" json:"imageNegativePrompt"`
+	ImageURL            string `gorm:"size:512" json:"imageUrl"`
+	ImageAlt            string `gorm:"size:255" json:"imageAlt"`
+	ImageStatus         string `gorm:"size:32" json:"imageStatus"`
+	ImageStorageKey     string `gorm:"size:512" json:"imageStorageKey"`
+	SceneType           string `gorm:"size:64" json:"sceneType"`
+	RoomType            string `gorm:"size:64" json:"roomType"`
+	Atmosphere          string `gorm:"size:64" json:"atmosphere"`
+	DangerLevel         string `gorm:"size:32" json:"dangerLevel"`
+	VisualTags          datatypes.JSON `gorm:"type:json" json:"visualTags"`
+	RpgMetadata         datatypes.JSON `gorm:"type:json" json:"rpgMetadata"`
+
+	Images []RolePlayQuestSceneImage `gorm:"foreignKey:SceneID" json:"images"`
+}
+
+// RolePlayQuestSceneImage = image uploadee pour une scene RP.
+type RolePlayQuestSceneImage struct {
+	Id        uint `gorm:"primaryKey" json:"id"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	SceneID uint               `gorm:"index" json:"sceneId"`
+	Scene   RolePlayQuestScene `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
+	QuestID uint               `gorm:"index" json:"questId"`
+
+	URL         string `gorm:"size:512" json:"url"`
+	StorageKey  string `gorm:"size:512" json:"storageKey"`
+	Filename    string `gorm:"size:255" json:"filename"`
+	MimeType    string `gorm:"size:64" json:"mimeType"`
+	Size        int64  `json:"size"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	IsMain      bool   `gorm:"index" json:"isMain"`
+	Alt         string `gorm:"size:255" json:"alt"`
+	Source      string `gorm:"size:32" json:"source"`
 }
 
 // RolePlayQuestArc = grande partie narrative d'une quete RP.

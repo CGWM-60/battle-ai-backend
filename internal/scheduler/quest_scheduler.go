@@ -164,16 +164,36 @@ type generatedBattleQuest struct {
 	Meta    map[string]any `json:"metadata"`
 }
 
+type generatedRolePlayScene struct {
+	SceneKey            string   `json:"sceneKey"`
+	ChapterIndex        int      `json:"chapterIndex"`
+	Title               string   `json:"title"`
+	Summary             string   `json:"summary"`
+	SceneType           string   `json:"sceneType"`
+	RoomType            string   `json:"roomType"`
+	Atmosphere          string   `json:"atmosphere"`
+	DangerLevel         string   `json:"dangerLevel"`
+	ImagePrompt         string   `json:"imagePrompt"`
+	ImageNegativePrompt string   `json:"imageNegativePrompt"`
+	VisualTags          []string `json:"visualTags"`
+}
+
 type generatedRolePlayQuest struct {
-	Title   string                 `json:"title"`
-	Summary string                 `json:"summary"`
-	Prompt  string                 `json:"prompt"`
-	Theme   string                 `json:"theme"`
-	Level   string                 `json:"level"`
-	Xp      int                    `json:"xp"`
-	Coin    int                    `json:"coin"`
-	Meta    map[string]any         `json:"metadata"`
-	Arcs    []generatedRolePlayArc `json:"arcs"`
+	Title               string                   `json:"title"`
+	Summary             string                   `json:"summary"`
+	Prompt              string                   `json:"prompt"`
+	Theme               string                   `json:"theme"`
+	Level               string                   `json:"level"`
+	Xp                  int                      `json:"xp"`
+	Coin                int                      `json:"coin"`
+	ImagePrompt         string                   `json:"imagePrompt"`
+	ImageNegativePrompt string                   `json:"imageNegativePrompt"`
+	VisualStyle         string                   `json:"visualStyle"`
+	VisualTags          []string                 `json:"visualTags"`
+	RpgMetadata         map[string]any           `json:"rpgMetadata"`
+	Meta                map[string]any           `json:"metadata"`
+	Arcs                []generatedRolePlayArc   `json:"arcs"`
+	Scenes              []generatedRolePlayScene `json:"scenes"`
 }
 
 type generatedRolePlayArc struct {
@@ -476,8 +496,14 @@ Regles de structure obligatoires:
 Ne genere pas toujours la structure minimale. Dans un meme batch, alterne le nombre d'arcs et de chapitres.
 Ajoute exactement un chapitre boss pour les quetes difficiles, et zero ou un chapitre boss pour les autres.
 Les arcs et chapitres doivent etre clairement identifies et ordonnes par leur position dans le tableau JSON.
+Pour chaque quete, ajoute aussi des visuels exploitables par un generateur d'image:
+- imagePrompt et imageNegativePrompt globaux (anglais, detailles, sans texte visible)
+- visualStyle (ex: dark fantasy mobile RPG)
+- visualTags (3 a 6 mots)
+- rpgMetadata (recommendedPartySize, supportsCoop, difficultyClass, mainThreat, mainLocation, rpgTags, suggestedSkills)
+- scenes: au minimum 3 scenes (entree, conflit, climax) avec sceneKey, chapterIndex, title, summary, sceneType, roomType, atmosphere, dangerLevel, imagePrompt, imageNegativePrompt, visualTags
 Format:
-[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"metadata":{"ton":"..."},"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, count)
+[{"title":"...","summary":"resume court","prompt":"prompt global de la quete","theme":"fantasy|sf|horreur|steampunk|modern","level":"facile|moyen|difficile","xp":80,"coin":30,"imagePrompt":"...","imageNegativePrompt":"...","visualStyle":"dark fantasy mobile RPG","visualTags":["crypt","fog"],"rpgMetadata":{"recommendedPartySize":1,"supportsCoop":true,"difficultyClass":12},"metadata":{"ton":"..."},"scenes":[{"sceneKey":"scene_01_entry","chapterIndex":1,"title":"Entree","summary":"...","sceneType":"exploration","roomType":"entrance","atmosphere":"mysterious","dangerLevel":"low","imagePrompt":"...","imageNegativePrompt":"...","visualTags":["statues"]}],"arcs":[{"title":"Arc 1","summary":"...","objective":"...","prompt":"brief de l'arc","metadata":{"tone":"..."},"chapters":[{"title":"Chapitre 1","summary":"...","objective":"objectif jouable","introPrompt":"situation initiale du chapitre","successPrompt":"consequence en cas de reussite","failurePrompt":"consequence en cas d'echec","isBoss":false,"xp":20,"coin":8,"metadata":{"stakes":"..."}}]}]}]`, count)
 
 	response, usedProvider, err := callProviderWithFallbacks(ctx, cfg, prompt, trace)
 	if err != nil {
@@ -500,19 +526,57 @@ Format:
 
 func generatedRolePlayQuestInput(item generatedRolePlayQuest, cfg aiProviderConfig, runAt time.Time, slug string, source string) service.RolePlayQuestInput {
 	return service.RolePlayQuestInput{
-		Slug:     slug,
-		Title:    item.Title,
-		Summary:  item.Summary,
-		Prompt:   item.Prompt,
-		Theme:    item.Theme,
-		Level:    item.Level,
-		Xp:       item.Xp,
-		Coin:     item.Coin,
-		Source:   source,
-		Status:   constants.QuestStatusPublished,
-		Metadata: ensureMetadata(item.Meta, cfg, runAt),
-		Arcs:     generatedRolePlayArcInputs(item.Arcs, item.Level),
+		Slug:                slug,
+		Title:               item.Title,
+		Summary:             item.Summary,
+		Prompt:              item.Prompt,
+		Theme:               item.Theme,
+		Level:               item.Level,
+		Xp:                  item.Xp,
+		Coin:                item.Coin,
+		Source:              source,
+		Status:              constants.QuestStatusDraft,
+		Metadata:            ensureMetadata(item.Meta, cfg, runAt),
+		Arcs:                generatedRolePlayArcInputs(item.Arcs, item.Level),
+		ImagePrompt:         item.ImagePrompt,
+		ImageNegativePrompt: item.ImageNegativePrompt,
+		VisualStyle:         item.VisualStyle,
+		VisualTags:          item.VisualTags,
+		RpgMetadata:         item.RpgMetadata,
+		Scenes:              generatedRolePlaySceneInputs(item.Scenes),
 	}
+}
+
+func generatedRolePlaySceneInputs(items []generatedRolePlayScene) []service.RolePlaySceneInput {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]service.RolePlaySceneInput, 0, len(items))
+	for index, item := range items {
+		chapterIndex := item.ChapterIndex
+		if chapterIndex <= 0 {
+			chapterIndex = index + 1
+		}
+		sceneKey := strings.TrimSpace(item.SceneKey)
+		if sceneKey == "" {
+			sceneKey = fmt.Sprintf("scene_%02d", index+1)
+		}
+		out = append(out, service.RolePlaySceneInput{
+			SceneKey:       sceneKey,
+			ChapterIndex:   chapterIndex,
+			ArcIndex:       1,
+			Title:          item.Title,
+			Summary:        item.Summary,
+			SceneType:      item.SceneType,
+			RoomType:       item.RoomType,
+			Atmosphere:     item.Atmosphere,
+			DangerLevel:    item.DangerLevel,
+			ImagePrompt:    item.ImagePrompt,
+			NegativePrompt: item.ImageNegativePrompt,
+			VisualTags:     item.VisualTags,
+		})
+	}
+	return out
 }
 
 func generatedRolePlayArcInputs(items []generatedRolePlayArc, level string) []service.RolePlayQuestArcInput {

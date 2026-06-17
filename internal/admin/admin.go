@@ -260,23 +260,59 @@ type adminRolePlayQuestStats struct {
 	TotalChapters int64 `json:"totalChapters"`
 }
 
+type adminRolePlaySceneImageData struct {
+	Id       uint   `json:"id"`
+	URL      string `json:"url"`
+	Filename string `json:"filename"`
+	IsMain   bool   `json:"isMain"`
+	Alt      string `json:"alt"`
+}
+
+type adminRolePlaySceneData struct {
+	Id                  uint                          `json:"id"`
+	SceneKey            string                        `json:"sceneKey"`
+	ChapterIndex        int                           `json:"chapterIndex"`
+	Title               string                        `json:"title"`
+	Summary             string                        `json:"summary"`
+	SceneType           string                        `json:"sceneType"`
+	RoomType            string                        `json:"roomType"`
+	Atmosphere          string                        `json:"atmosphere"`
+	DangerLevel         string                        `json:"dangerLevel"`
+	ImagePrompt         string                        `json:"imagePrompt"`
+	ImageNegativePrompt string                        `json:"imageNegativePrompt"`
+	ImageURL            string                        `json:"imageUrl"`
+	ImageStatus         string                        `json:"imageStatus"`
+	VisualTags          []string                      `json:"visualTags"`
+	Images              []adminRolePlaySceneImageData `json:"images"`
+}
+
 type adminRolePlayQuestData struct {
-	Id           uint                   `json:"id"`
-	CreatedAt    time.Time              `json:"createdAt"`
-	UpdatedAt    time.Time              `json:"updatedAt"`
-	Slug         string                 `json:"slug"`
-	Title        string                 `json:"title"`
-	Summary      string                 `json:"summary"`
-	Prompt       string                 `json:"prompt"`
-	Theme        string                 `json:"theme"`
-	Level        string                 `json:"level"`
-	Xp           int                    `json:"xp"`
-	Coin         int                    `json:"coin"`
-	Source       string                 `json:"source"`
-	Status       string                 `json:"status"`
-	ArcCount     int                    `json:"arcCount"`
-	ChapterCount int                    `json:"chapterCount"`
-	Arcs         []adminRolePlayArcData `json:"arcs"`
+	Id                  uint                     `json:"id"`
+	CreatedAt           time.Time                `json:"createdAt"`
+	UpdatedAt           time.Time                `json:"updatedAt"`
+	Slug                string                   `json:"slug"`
+	Title               string                   `json:"title"`
+	Summary             string                   `json:"summary"`
+	Prompt              string                   `json:"prompt"`
+	Theme               string                   `json:"theme"`
+	Level               string                   `json:"level"`
+	Xp                  int                      `json:"xp"`
+	Coin                int                      `json:"coin"`
+	Source              string                   `json:"source"`
+	Status              string                   `json:"status"`
+	IsPublished         bool                     `json:"isPublished"`
+	PublishedAt         *time.Time               `json:"publishedAt"`
+	UnpublishedAt       *time.Time               `json:"unpublishedAt"`
+	ImagePrompt         string                   `json:"imagePrompt"`
+	ImageNegativePrompt string                   `json:"imageNegativePrompt"`
+	VisualStyle         string                   `json:"visualStyle"`
+	ImageURL            string                   `json:"imageUrl"`
+	VisualTags          []string                 `json:"visualTags"`
+	RpgMetadata         map[string]any           `json:"rpgMetadata"`
+	ArcCount            int                      `json:"arcCount"`
+	ChapterCount        int                      `json:"chapterCount"`
+	Scenes              []adminRolePlaySceneData `json:"scenes"`
+	Arcs                []adminRolePlayArcData   `json:"arcs"`
 }
 
 type adminRolePlayArcData struct {
@@ -323,16 +359,36 @@ type generatedBattleQuest struct {
 	Meta    map[string]any `json:"metadata"`
 }
 
+type generatedRolePlayScene struct {
+	SceneKey            string   `json:"sceneKey"`
+	ChapterIndex        int      `json:"chapterIndex"`
+	Title               string   `json:"title"`
+	Summary             string   `json:"summary"`
+	SceneType           string   `json:"sceneType"`
+	RoomType            string   `json:"roomType"`
+	Atmosphere          string   `json:"atmosphere"`
+	DangerLevel         string   `json:"dangerLevel"`
+	ImagePrompt         string   `json:"imagePrompt"`
+	ImageNegativePrompt string   `json:"imageNegativePrompt"`
+	VisualTags          []string `json:"visualTags"`
+}
+
 type generatedRolePlayQuest struct {
-	Title   string                 `json:"title"`
-	Summary string                 `json:"summary"`
-	Prompt  string                 `json:"prompt"`
-	Theme   string                 `json:"theme"`
-	Level   string                 `json:"level"`
-	Xp      int                    `json:"xp"`
-	Coin    int                    `json:"coin"`
-	Meta    map[string]any         `json:"metadata"`
-	Arcs    []generatedRolePlayArc `json:"arcs"`
+	Title               string                   `json:"title"`
+	Summary             string                   `json:"summary"`
+	Prompt              string                   `json:"prompt"`
+	Theme               string                   `json:"theme"`
+	Level               string                   `json:"level"`
+	Xp                  int                      `json:"xp"`
+	Coin                int                      `json:"coin"`
+	ImagePrompt         string                   `json:"imagePrompt"`
+	ImageNegativePrompt string                   `json:"imageNegativePrompt"`
+	VisualStyle         string                   `json:"visualStyle"`
+	VisualTags          []string                 `json:"visualTags"`
+	RpgMetadata         map[string]any           `json:"rpgMetadata"`
+	Meta                map[string]any           `json:"metadata"`
+	Arcs                []generatedRolePlayArc   `json:"arcs"`
+	Scenes              []generatedRolePlayScene `json:"scenes"`
 }
 
 type generatedRolePlayArc struct {
@@ -384,6 +440,13 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	api.PUT("/roleplay-quests/:id", server.updateRolePlayQuestAdminAPI)
 	api.DELETE("/roleplay-quests", server.clearRolePlayQuestsAdminAPI)
 	api.DELETE("/roleplay-quests/:id", server.deleteRolePlayQuestAdminAPI)
+	api.POST("/roleplay/quests/:id/publish", server.publishRolePlayQuestAdminAPI)
+	api.POST("/roleplay/quests/:id/unpublish", server.unpublishRolePlayQuestAdminAPI)
+	api.POST("/roleplay/quests/unpublish-all", server.unpublishAllRolePlayQuestsAdminAPI)
+	api.POST("/roleplay/quests/backfill-image-prompts", server.backfillRolePlayImagePromptsAdminAPI)
+	api.POST("/roleplay/quests/:questId/scenes/:sceneId/images", server.uploadRolePlaySceneImageAdminAPI)
+	api.DELETE("/roleplay/quests/:questId/scenes/:sceneId/images/:imageId", server.deleteRolePlaySceneImageAdminAPI)
+	api.PATCH("/roleplay/quests/:questId/scenes/:sceneId/images/:imageId/main", server.setMainRolePlaySceneImageAdminAPI)
 	api.GET("/roleplay-hero-images", server.rolePlayHeroImagesAdminAPI)
 	api.POST("/roleplay-hero-images", server.createRolePlayHeroImageAdminAPI)
 	api.PATCH("/roleplay-hero-images/:id", server.updateRolePlayHeroImageAdminAPI)
@@ -728,6 +791,150 @@ func (s *Server) clearRolePlayQuestsAdminAPI(c *gin.Context) {
 	c.Status(http.StatusNoContent)
 }
 
+func (s *Server) publishRolePlayQuestAdminAPI(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay quest id"})
+		return
+	}
+	result, err := service.NewRolePlayQuestVisualService(s.db).PublishQuest(c.Request.Context(), uint(id), adminActorFromContext(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (s *Server) unpublishRolePlayQuestAdminAPI(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roleplay quest id"})
+		return
+	}
+	result, err := service.NewRolePlayQuestVisualService(s.db).UnpublishQuest(c.Request.Context(), uint(id), adminActorFromContext(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (s *Server) unpublishAllRolePlayQuestsAdminAPI(c *gin.Context) {
+	result, err := service.NewRolePlayQuestVisualService(s.db).UnpublishAllQuests(c.Request.Context(), adminActorFromContext(c))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (s *Server) backfillRolePlayImagePromptsAdminAPI(c *gin.Context) {
+	var input service.BackfillImagePromptsInput
+	_ = c.ShouldBindJSON(&input)
+	if input.SceneCount <= 0 {
+		input.SceneCount = 3
+	}
+	result, err := service.NewRolePlayQuestVisualService(s.db).BackfillImagePrompts(c.Request.Context(), input)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+func (s *Server) uploadRolePlaySceneImageAdminAPI(c *gin.Context) {
+	questID, err := strconv.ParseUint(c.Param("questId"), 10, 64)
+	if err != nil || questID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid quest id"})
+		return
+	}
+	sceneID, err := strconv.ParseUint(c.Param("sceneId"), 10, 64)
+	if err != nil || sceneID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid scene id"})
+		return
+	}
+	file, header, err := c.Request.FormFile("image")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "image file is required"})
+		return
+	}
+	defer file.Close()
+	image, err := service.NewRolePlayQuestVisualService(s.db).SaveSceneImageUpload(
+		c.Request.Context(),
+		uint(questID),
+		uint(sceneID),
+		header.Filename,
+		file,
+		c.PostForm("alt"),
+	)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"image": image})
+}
+
+func (s *Server) deleteRolePlaySceneImageAdminAPI(c *gin.Context) {
+	questID, _ := strconv.ParseUint(c.Param("questId"), 10, 64)
+	sceneID, _ := strconv.ParseUint(c.Param("sceneId"), 10, 64)
+	imageID, _ := strconv.ParseUint(c.Param("imageId"), 10, 64)
+	if questID == 0 || sceneID == 0 || imageID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ids"})
+		return
+	}
+	if err := service.NewRolePlayQuestVisualService(s.db).DeleteSceneImage(c.Request.Context(), uint(questID), uint(sceneID), uint(imageID)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (s *Server) setMainRolePlaySceneImageAdminAPI(c *gin.Context) {
+	questID, _ := strconv.ParseUint(c.Param("questId"), 10, 64)
+	sceneID, _ := strconv.ParseUint(c.Param("sceneId"), 10, 64)
+	imageID, _ := strconv.ParseUint(c.Param("imageId"), 10, 64)
+	if questID == 0 || sceneID == 0 || imageID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid ids"})
+		return
+	}
+	if err := service.NewRolePlayQuestVisualService(s.db).SetMainSceneImage(c.Request.Context(), uint(questID), uint(sceneID), uint(imageID)); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"updated": true})
+}
+
+func adminActorFromContext(c *gin.Context) string {
+	if value, ok := c.Get("admin_username"); ok {
+		if username, ok := value.(string); ok {
+			return username
+		}
+	}
+	return adminUsername()
+}
+
+func decodeStringSliceJSON(raw datatypes.JSON) []string {
+	if len(raw) == 0 {
+		return []string{}
+	}
+	var out []string
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return []string{}
+	}
+	return out
+}
+
+func decodeMapJSON(raw datatypes.JSON) map[string]any {
+	if len(raw) == 0 {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
 func (s *Server) rolePlayHeroImagesAdminAPI(c *gin.Context) {
 	var images []models.RolePlayHeroImage
 	query := s.db.WithContext(c.Request.Context()).Model(&models.RolePlayHeroImage{})
@@ -930,8 +1137,9 @@ func (s *Server) createRolePlayQuest(c *gin.Context) {
 		Xp:       formInt(c, "xp"),
 		Coin:     formInt(c, "coin"),
 		Source:   "admin",
-		Status:   defaultValue(c.PostForm("status"), constants.QuestStatusPublished),
-		Metadata: datatypes.JSON(metadata),
+		Status:      defaultValue(c.PostForm("status"), constants.QuestStatusDraft),
+		IsPublished: false,
+		Metadata:    datatypes.JSON(metadata),
 	}
 	if quest.Title == "" || quest.Prompt == "" {
 		s.redirectError(c, "Titre et prompt requis pour la quete RP.")
@@ -1242,6 +1450,12 @@ func (s *Server) rolePlayQuestsAdminData(ctx context.Context) (adminRolePlayQues
 		Preload("Arcs.Chapters", func(tx *gorm.DB) *gorm.DB {
 			return tx.Order("position ASC").Order("id ASC")
 		}).
+		Preload("Scenes", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("chapter_index ASC").Order("id ASC")
+		}).
+		Preload("Scenes.Images", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("is_main DESC").Order("id ASC")
+		}).
 		Order("created_at DESC").
 		Limit(200).
 		Find(&quests).Error; err != nil {
@@ -1251,21 +1465,60 @@ func (s *Server) rolePlayQuestsAdminData(ctx context.Context) (adminRolePlayQues
 	response.Quests = make([]adminRolePlayQuestData, 0, len(quests))
 	for _, quest := range quests {
 		item := adminRolePlayQuestData{
-			Id:        quest.Id,
-			CreatedAt: quest.CreatedAt,
-			UpdatedAt: quest.UpdatedAt,
-			Slug:      quest.Slug,
-			Title:     quest.Title,
-			Summary:   quest.Summary,
-			Prompt:    quest.Prompt,
-			Theme:     quest.Theme,
-			Level:     quest.Level,
-			Xp:        quest.Xp,
-			Coin:      quest.Coin,
-			Source:    quest.Source,
-			Status:    quest.Status,
-			ArcCount:  len(quest.Arcs),
-			Arcs:      make([]adminRolePlayArcData, 0, len(quest.Arcs)),
+			Id:                  quest.Id,
+			CreatedAt:           quest.CreatedAt,
+			UpdatedAt:           quest.UpdatedAt,
+			Slug:                quest.Slug,
+			Title:               quest.Title,
+			Summary:             quest.Summary,
+			Prompt:              quest.Prompt,
+			Theme:               quest.Theme,
+			Level:               quest.Level,
+			Xp:                  quest.Xp,
+			Coin:                quest.Coin,
+			Source:              quest.Source,
+			Status:              quest.Status,
+			IsPublished:         quest.IsPublished,
+			PublishedAt:         quest.PublishedAt,
+			UnpublishedAt:       quest.UnpublishedAt,
+			ImagePrompt:         quest.ImagePrompt,
+			ImageNegativePrompt: quest.ImageNegativePrompt,
+			VisualStyle:         quest.VisualStyle,
+			ImageURL:            quest.ImageURL,
+			VisualTags:          decodeStringSliceJSON(quest.VisualTags),
+			RpgMetadata:         decodeMapJSON(quest.RpgMetadata),
+			ArcCount:            len(quest.Arcs),
+			Scenes:              make([]adminRolePlaySceneData, 0, len(quest.Scenes)),
+			Arcs:                make([]adminRolePlayArcData, 0, len(quest.Arcs)),
+		}
+		for _, scene := range quest.Scenes {
+			sceneData := adminRolePlaySceneData{
+				Id:                  scene.Id,
+				SceneKey:            scene.SceneKey,
+				ChapterIndex:        scene.ChapterIndex,
+				Title:               scene.Title,
+				Summary:             scene.Summary,
+				SceneType:           scene.SceneType,
+				RoomType:            scene.RoomType,
+				Atmosphere:          scene.Atmosphere,
+				DangerLevel:         scene.DangerLevel,
+				ImagePrompt:         scene.ImagePrompt,
+				ImageNegativePrompt: scene.NegativePrompt,
+				ImageURL:            scene.ImageURL,
+				ImageStatus:         scene.ImageStatus,
+				VisualTags:          decodeStringSliceJSON(scene.VisualTags),
+				Images:              make([]adminRolePlaySceneImageData, 0, len(scene.Images)),
+			}
+			for _, image := range scene.Images {
+				sceneData.Images = append(sceneData.Images, adminRolePlaySceneImageData{
+					Id:       image.Id,
+					URL:      image.URL,
+					Filename: image.Filename,
+					IsMain:   image.IsMain,
+					Alt:      image.Alt,
+				})
+			}
+			item.Scenes = append(item.Scenes, sceneData)
 		}
 		for _, arc := range quest.Arcs {
 			arcData := adminRolePlayArcData{
@@ -1304,6 +1557,12 @@ func (s *Server) deleteRolePlayQuestTemplate(ctx context.Context, id uint) error
 			Update("template_id", nil).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("quest_id = ?", id).Delete(&models.RolePlayQuestSceneImage{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("quest_id = ?", id).Delete(&models.RolePlayQuestScene{}).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("template_id = ?", id).Delete(&models.RolePlayQuestChapter{}).Error; err != nil {
 			return err
 		}
@@ -1319,6 +1578,12 @@ func (s *Server) clearRolePlayQuestTemplates(ctx context.Context) error {
 		if err := tx.Model(&models.RolePlayQuestRun{}).
 			Where("template_id IS NOT NULL").
 			Update("template_id", nil).Error; err != nil {
+			return err
+		}
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.RolePlayQuestSceneImage{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.RolePlayQuestScene{}).Error; err != nil {
 			return err
 		}
 		if err := tx.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&models.RolePlayQuestChapter{}).Error; err != nil {
@@ -1724,19 +1989,56 @@ Format:
 
 func adminGeneratedRolePlayQuestInput(item generatedRolePlayQuest, slug string) service.RolePlayQuestInput {
 	return service.RolePlayQuestInput{
-		Slug:     slug,
-		Title:    item.Title,
-		Summary:  item.Summary,
-		Prompt:   item.Prompt,
-		Theme:    item.Theme,
-		Level:    item.Level,
-		Xp:       item.Xp,
-		Coin:     item.Coin,
-		Source:   "admin_ai",
-		Status:   constants.QuestStatusPublished,
-		Metadata: item.Meta,
-		Arcs:     adminGeneratedRolePlayArcInputs(item.Arcs),
+		Slug:                slug,
+		Title:               item.Title,
+		Summary:             item.Summary,
+		Prompt:              item.Prompt,
+		Theme:               item.Theme,
+		Level:               item.Level,
+		Xp:                  item.Xp,
+		Coin:                item.Coin,
+		Source:              "admin_ai",
+		Status:              constants.QuestStatusDraft,
+		Metadata:            item.Meta,
+		Arcs:                adminGeneratedRolePlayArcInputs(item.Arcs),
+		ImagePrompt:         item.ImagePrompt,
+		ImageNegativePrompt: item.ImageNegativePrompt,
+		VisualStyle:         item.VisualStyle,
+		VisualTags:          item.VisualTags,
+		RpgMetadata:         item.RpgMetadata,
+		Scenes:              adminGeneratedRolePlaySceneInputs(item.Scenes),
 	}
+}
+
+func adminGeneratedRolePlaySceneInputs(items []generatedRolePlayScene) []service.RolePlaySceneInput {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]service.RolePlaySceneInput, 0, len(items))
+	for index, item := range items {
+		chapterIndex := item.ChapterIndex
+		if chapterIndex <= 0 {
+			chapterIndex = index + 1
+		}
+		sceneKey := strings.TrimSpace(item.SceneKey)
+		if sceneKey == "" {
+			sceneKey = fmt.Sprintf("scene_%02d", index+1)
+		}
+		out = append(out, service.RolePlaySceneInput{
+			SceneKey:       sceneKey,
+			ChapterIndex:   chapterIndex,
+			Title:          item.Title,
+			Summary:        item.Summary,
+			SceneType:      item.SceneType,
+			RoomType:       item.RoomType,
+			Atmosphere:     item.Atmosphere,
+			DangerLevel:    item.DangerLevel,
+			ImagePrompt:    item.ImagePrompt,
+			NegativePrompt: item.ImageNegativePrompt,
+			VisualTags:     item.VisualTags,
+		})
+	}
+	return out
 }
 
 func adminGeneratedRolePlayArcInputs(items []generatedRolePlayArc) []service.RolePlayQuestArcInput {

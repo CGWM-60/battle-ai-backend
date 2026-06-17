@@ -17,6 +17,10 @@ func NewQuestRepository(db *gorm.DB) *QuestRepository {
 	return &QuestRepository{db: db}
 }
 
+func (r *QuestRepository) DB() *gorm.DB {
+	return r.db
+}
+
 func (r *QuestRepository) GetPublishedBattleQuestByID(ctx context.Context, id uint) (*models.QuestIaBattle, error) {
 	var quest models.QuestIaBattle
 	err := r.db.WithContext(ctx).
@@ -148,6 +152,12 @@ func (r *QuestRepository) rolePlayQuestScope(ctx context.Context) *gorm.DB {
 		}).
 		Preload("Arcs.Chapters", func(tx *gorm.DB) *gorm.DB {
 			return tx.Order("position ASC").Order("id ASC")
+		}).
+		Preload("Scenes", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("chapter_index ASC").Order("id ASC")
+		}).
+		Preload("Scenes.Images", func(tx *gorm.DB) *gorm.DB {
+			return tx.Order("is_main DESC").Order("id ASC")
 		})
 }
 
@@ -205,6 +215,9 @@ func applyQuestQuery(query *gorm.DB, status string, theme string, level string) 
 	}
 	if status != "all" {
 		query = query.Where("status = ?", status)
+		if status == constants.QuestStatusPublished {
+			query = query.Where("is_published = ?", true)
+		}
 	}
 	if theme != "" {
 		query = query.Where("theme = ?", theme)

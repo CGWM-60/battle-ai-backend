@@ -42,6 +42,13 @@ type RolePlayQuestInput struct {
 	Status   string
 	Metadata map[string]any
 	Arcs     []RolePlayQuestArcInput
+
+	ImagePrompt         string
+	ImageNegativePrompt string
+	VisualStyle         string
+	VisualTags          []string
+	RpgMetadata         map[string]any
+	Scenes              []RolePlaySceneInput
 }
 
 type RolePlayQuestArcInput struct {
@@ -168,22 +175,43 @@ func (s *QuestService) CreateRolePlay(ctx context.Context, input RolePlayQuestIn
 		return nil, fmt.Errorf("title and prompt are required")
 	}
 	metadata, _ := json.Marshal(input.Metadata)
+	visualTags, _ := json.Marshal(input.VisualTags)
+	rpgMeta, _ := json.Marshal(input.RpgMetadata)
+	status := defaultString(input.Status, constants.QuestStatusDraft)
+	isPublished := status == constants.QuestStatusPublished
 	quest := &models.RolePlayQuestTemplate{
-		Slug:     defaultSlug(input.Slug, input.Title),
-		Title:    input.Title,
-		Summary:  input.Summary,
-		Prompt:   input.Prompt,
-		Theme:    input.Theme,
-		Level:    input.Level,
-		Xp:       input.Xp,
-		Coin:     input.Coin,
-		Source:   defaultString(input.Source, "manual"),
-		Status:   defaultString(input.Status, constants.QuestStatusPublished),
-		Metadata: datatypes.JSON(metadata),
-		Arcs:     buildRolePlayQuestArcs(input.Arcs),
+		Slug:                defaultSlug(input.Slug, input.Title),
+		Title:               input.Title,
+		Summary:             input.Summary,
+		Prompt:              input.Prompt,
+		Theme:               input.Theme,
+		Level:               input.Level,
+		Xp:                  input.Xp,
+		Coin:                input.Coin,
+		Source:              defaultString(input.Source, "manual"),
+		Status:              status,
+		IsPublished:         isPublished,
+		Metadata:            datatypes.JSON(metadata),
+		ImagePrompt:         input.ImagePrompt,
+		ImageNegativePrompt: input.ImageNegativePrompt,
+		VisualStyle:         defaultString(input.VisualStyle, "dark fantasy mobile RPG"),
+		VisualTags:          datatypes.JSON(visualTags),
+		RpgMetadata:         datatypes.JSON(rpgMeta),
+		Arcs:                buildRolePlayQuestArcs(input.Arcs),
 	}
 	if err := s.quests.CreateRolePlayQuest(ctx, quest); err != nil {
 		return nil, err
+	}
+	if len(input.Scenes) > 0 || strings.TrimSpace(input.ImagePrompt) != "" {
+		visual := NewRolePlayQuestVisualService(s.quests.DB())
+		_ = visual.ApplyGeneratedVisuals(ctx, quest.Id, quest.Theme, quest.Level, quest.Title, quest.Summary,
+			defaultString(input.ImagePrompt, buildQuestImagePrompt(quest.Theme, quest.Level, quest.Title, quest.Summary)),
+			defaultString(input.ImageNegativePrompt, buildDefaultNegativePrompt()),
+			quest.VisualStyle,
+			input.VisualTags,
+			input.RpgMetadata,
+			input.Scenes,
+		)
 	}
 	quest, _ = s.quests.GetRolePlayQuestByID(ctx, quest.Id)
 	return quest, nil
