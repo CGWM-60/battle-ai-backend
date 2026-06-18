@@ -258,6 +258,22 @@ func newMemorySubscriptionRepo() *memorySubscriptionRepo {
 	}
 }
 
+func (r *memorySubscriptionRepo) Save(_ context.Context, subscription *models.UserSubscription) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ref := subscription.ProviderSubscriptionID
+	if ref == "" {
+		ref = subscription.StoreSubscriptionID
+	}
+	provider := subscription.Provider
+	if provider == "" {
+		provider = subscription.Platform
+	}
+	r.byRef[provider+":"+ref] = subscription
+	r.byUser[subscription.UserID] = subscription
+	return nil
+}
+
 func (r *memorySubscriptionRepo) Create(_ context.Context, subscription *models.UserSubscription) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -489,12 +505,41 @@ func TestAIOrchestratorModes(t *testing.T) {
 	if orchestrator.ResolveMode("byok", "key") != AIOrchestratorModeBYOK {
 		t.Fatal("expected byok")
 	}
-	if orchestrator.ResolveMode("platform", "") != AIOrchestratorModeMock {
-		t.Fatal("expected mock when platform mode is mock and no client key")
+	if orchestrator.ResolveMode("platform", "") != AIOrchestratorModePlatform {
+		t.Fatal("expected platform billing even when AI provider is mock")
 	}
-	plan := orchestrator.BuildExecutionPlan("platform", "client-key", "openai", "gpt-test", 1200, 800, "usage:test")
-	if !plan.RequiresWallet {
+	plan := orchestrator.BuildExecutionPlan("platform", "", "openai", "gpt-test", 1200, 800, "usage:test")
+	if !plan.RequiresWallet || !plan.UsesMockProvider {
 		t.Fatalf("unexpected plan: %+v", plan)
+	}
+}
+
+func TestBillingServiceGetSubscriptionEmpty(t *testing.T) {
+	billing := newTestBillingStack(t)
+	subscription, err := billing.GetSubscription(context.Background(), 99)
+	if err != nil {
+		t.Fatalf("get subscription: %v", err)
+	}
+	if subscription == nil || subscription.Active {
+		t.Fatalf("expected inactive subscription, got %+v", subscription)
+	}
+}
+
+func TestBillingServiceCancelSubscriptionMock(t *testing.T) {
+	billing := newTestBillingStack(t)
+	_, err := billing.MockSubscribe(context.Background(), MockSubscribeInput{
+		UserID: 12, ProductID: "nexus_light_monthly", ReceiptID: "sub-cancel-001",
+	})
+	if err != nil {
+		t.Fatalf("mock subscribe: %v", err)
+	}
+
+	result, err := billing.CancelSubscription(context.Background(), 12, true)
+	if err != nil {
+		t.Fatalf("cancel subscription: %v", err)
+	}
+	if success, ok := result["success"].(bool); !ok || !success {
+		t.Fatalf("expected success=true, got %+v", result)
 	}
 }
 

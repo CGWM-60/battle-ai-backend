@@ -45,12 +45,18 @@ type billingModeRequest struct {
 	BillingMode string `json:"billingMode"`
 }
 
+type billingCancelSubscriptionRequest struct {
+	AtPeriodEnd bool `json:"atPeriodEnd"`
+}
+
 func registerBillingRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	billing := private.Group("/billing")
 	billing.GET("/products", listBillingProducts(database))
 	billing.GET("/wallet", getBillingWallet(database))
 	billing.GET("/ledger", getBillingLedger(database))
 	billing.GET("/entitlements", getBillingEntitlements(database))
+	billing.GET("/subscription", getBillingSubscription(database))
+	billing.POST("/subscription/cancel", cancelBillingSubscription(database))
 	billing.GET("/access/:tier", getBillingTierAccess(database))
 	billing.POST("/mock/purchase", mockBillingPurchase(database))
 	billing.POST("/mock/subscribe", mockBillingSubscribe(database))
@@ -157,6 +163,47 @@ func getBillingTierAccess(database *gorm.DB) gin.HandlerFunc {
 			"requiredTier": tier,
 			"currentTier":  currentTier,
 		})
+	}
+}
+
+func getBillingSubscription(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		subscription, err := newBillingService(database).GetSubscription(
+			c.Request.Context(),
+			currentUserID(c),
+		)
+		if err != nil {
+			writeBillingError(c, err)
+			return
+		}
+		if subscription == nil || !subscription.Active {
+			c.JSON(http.StatusOK, gin.H{
+				"subscription": gin.H{
+					"active": false,
+				},
+			})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"subscription": subscription})
+	}
+}
+
+func cancelBillingSubscription(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req billingCancelSubscriptionRequest
+		if err := bindPayload(c, &req); err != nil {
+			req.AtPeriodEnd = true
+		}
+		result, err := newBillingService(database).CancelSubscription(
+			c.Request.Context(),
+			currentUserID(c),
+			req.AtPeriodEnd,
+		)
+		if err != nil {
+			writeBillingError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
 	}
 }
 

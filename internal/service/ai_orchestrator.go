@@ -52,11 +52,12 @@ func NewAIOrchestrator(wallets *WalletService, estimator *AICreditEstimator, ent
 	}
 }
 
+func usesMockAIProvider() bool {
+	return AIMockEnabled() && strings.EqualFold(AIPlatformMode(), "mock")
+}
+
 func (o *AIOrchestrator) ResolveMode(requestedMode string, clientAPIKey string) AIOrchestratorMode {
 	if strings.EqualFold(strings.TrimSpace(requestedMode), string(AIOrchestratorModeMock)) {
-		return AIOrchestratorModeMock
-	}
-	if AIMockEnabled() && strings.EqualFold(AIPlatformMode(), "mock") && strings.TrimSpace(clientAPIKey) == "" {
 		return AIOrchestratorModeMock
 	}
 	if strings.TrimSpace(clientAPIKey) != "" {
@@ -93,6 +94,8 @@ func (o *AIOrchestrator) BuildExecutionPlan(
 		ModelName:        modelName,
 	}
 
+	mockProvider := usesMockAIProvider()
+
 	switch mode {
 	case AIOrchestratorModeBYOK:
 		plan.BillingSource = billingSourceClientKey
@@ -103,7 +106,8 @@ func (o *AIOrchestrator) BuildExecutionPlan(
 	default:
 		plan.BillingSource = billingSourcePlatformKey
 		plan.RequiresWallet = estimate.NexusCoins > 0
-		plan.UsesPlatformKey = true
+		plan.UsesMockProvider = mockProvider
+		plan.UsesPlatformKey = !mockProvider
 	}
 	return plan
 }
@@ -185,6 +189,9 @@ func (o *AIOrchestrator) ResolveAPIKey(plan AIExecutionPlan, clientAPIKey string
 	case AIOrchestratorModeMock:
 		return "", nil
 	default:
+		if plan.UsesMockProvider {
+			return "", nil
+		}
 		key := strings.TrimSpace(platformAPIKey(providerName))
 		if key == "" {
 			return "", PaymentRequiredError("platform api key unavailable", map[string]any{"provider": providerName})
@@ -197,7 +204,7 @@ func (o *AIOrchestrator) AttachProvider(plan AIExecutionPlan, base *provider.Pro
 	if base == nil {
 		return nil
 	}
-	if plan.Mode == AIOrchestratorModeMock {
+	if plan.Mode == AIOrchestratorModeMock || plan.UsesMockProvider {
 		return provider.NewMockProvider(defaultString(plan.ProviderName, "mock"), defaultString(plan.ModelName, "mock-model"))
 	}
 	return base

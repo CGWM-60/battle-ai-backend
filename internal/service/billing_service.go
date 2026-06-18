@@ -65,8 +65,20 @@ type billingTransactionRepo interface {
 	ListByUserID(ctx context.Context, userID uint, limit int) ([]models.StoreTransaction, error)
 }
 
+type BillingSubscriptionView struct {
+	Active            bool       `json:"active"`
+	Tier              string     `json:"tier"`
+	ProductID         string     `json:"productId"`
+	ProductSKU        string     `json:"productSku,omitempty"`
+	RenewsAt          *time.Time `json:"renewsAt,omitempty"`
+	CancelAtPeriodEnd bool       `json:"cancelAtPeriodEnd"`
+	MonthlyCredits    int64      `json:"monthlyCredits"`
+	Status            string     `json:"status,omitempty"`
+}
+
 type billingSubscriptionRepo interface {
 	Create(ctx context.Context, subscription *models.UserSubscription) error
+	Save(ctx context.Context, subscription *models.UserSubscription) error
 	GetByProviderRef(ctx context.Context, provider string, providerRef string) (*models.UserSubscription, error)
 	GetActiveByUserID(ctx context.Context, userID uint) (*models.UserSubscription, error)
 }
@@ -493,6 +505,94 @@ func (s *BillingService) MockRestore(ctx context.Context, input MockRestoreInput
 		Entitlements: entitlements,
 		Transactions: transactions,
 	}, nil
+}
+
+func (s *BillingService) GetSubscription(ctx context.Context, userID uint) (*BillingSubscriptionView, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user id is required")
+	}
+	if s.subscriptions == nil {
+		return &BillingSubscriptionView{Active: false}, nil
+	}
+
+	subscription, err := s.subscriptions.GetActiveByUserID(ctx, userID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return &BillingSubscriptionView{Active: false}, nil
+		}
+		return nil, err
+	}
+	return subscriptionViewFromModel(subscription), nil
+}
+
+func (s *BillingService) CancelSubscription(ctx context.Context, userID uint, atPeriodEnd bool) (map[string]any, error) {
+	if userID == 0 {
+		return nil, fmt.Errorf("user id is required")
+	}
+	if s.subscriptions == nil {
+		return map[string]any{
+			"success": true,
+			"message": "no active subscription",
+		}, nil
+	}
+
+	subscription, err := s.subscriptions.GetActiveByUserID(ctx, userID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return map[string]any{
+				"success": true,
+				"message": "no active subscription",
+			}, nil
+		}
+		return nil, err
+	}
+
+	subscription.CancelAtPeriodEnd = atPeriodEnd
+	subscription.AutoRenew = false
+	if !atPeriodEnd {
+		subscription.Status = models.SubscriptionStatusCancelled
+		now := time.Now()
+		subscription.CurrentPeriodEnd = &now
+		subscription.RenewsAt = nil
+	}
+
+	if err := s.subscriptions.Save(ctx, subscription); err != nil {
+		return nil, err
+	}
+
+	message := "subscription cancellation scheduled"
+	if !atPeriodEnd {
+		message = "subscription cancelled"
+	}
+
+	return map[string]any{
+		"success":      true,
+		"message":      message,
+		"subscription": subscriptionViewFromModel(subscription),
+	}, nil
+}
+
+func subscriptionViewFromModel(subscription *models.UserSubscription) *BillingSubscriptionView {
+	if subscription == nil {
+		return &BillingSubscriptionView{Active: false}
+	}
+
+	active := subscription.Status == models.SubscriptionStatusActive
+	renewsAt := subscription.RenewsAt
+	if renewsAt == nil {
+		renewsAt = subscription.CurrentPeriodEnd
+	}
+
+	return &BillingSubscriptionView{
+		Active:            active,
+		Tier:              subscription.Tier,
+		ProductID:         subscription.ProductSKU,
+		ProductSKU:        subscription.ProductSKU,
+		RenewsAt:          renewsAt,
+		CancelAtPeriodEnd: subscription.CancelAtPeriodEnd,
+		MonthlyCredits:    subscription.MonthlyCredits,
+		Status:            subscription.Status,
+	}
 }
 
 func (s *BillingService) UpdateBillingMode(ctx context.Context, userID uint, mode string) (*AIWalletView, error) {
