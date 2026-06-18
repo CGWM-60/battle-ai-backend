@@ -23,9 +23,9 @@ func (r *QuestRepository) DB() *gorm.DB {
 
 func (r *QuestRepository) GetPublishedBattleQuestByID(ctx context.Context, id uint) (*models.QuestIaBattle, error) {
 	var quest models.QuestIaBattle
-	err := r.db.WithContext(ctx).
-		Where("id = ? AND status = ?", id, constants.QuestStatusPublished).
-		First(&quest).Error
+	query := r.db.WithContext(ctx).Model(&models.QuestIaBattle{}).Where("id = ?", id)
+	query = applyBattleQuestStatusFilter(r.db, query, constants.QuestStatusPublished)
+	err := query.First(&quest).Error
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (r *QuestRepository) ListBattleQuests(ctx context.Context, status string, t
 func (r *QuestRepository) ListBattleQuestsPage(ctx context.Context, status string, theme string, level string, limit int, offset int) ([]models.QuestIaBattle, int64, error) {
 	var quests []models.QuestIaBattle
 	query := r.db.WithContext(ctx).Model(&models.QuestIaBattle{})
-	query = applyQuestQuery(query, status, theme, level)
+	query = applyBattleQuestQuery(r.db, query, status, theme, level)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -73,13 +73,8 @@ func (r *QuestRepository) DeleteBattleQuest(ctx context.Context, id uint) error 
 
 func (r *QuestRepository) RandomBattleQuest(ctx context.Context, theme string, level string) (*models.QuestIaBattle, error) {
 	var quest models.QuestIaBattle
-	query := r.db.WithContext(ctx).Where("status = ?", constants.QuestStatusPublished)
-	if theme != "" {
-		query = query.Where("theme = ?", theme)
-	}
-	if level != "" {
-		query = query.Where("level = ?", level)
-	}
+	query := r.db.WithContext(ctx).Model(&models.QuestIaBattle{})
+	query = applyBattleQuestQuery(r.db, query, constants.QuestStatusPublished, theme, level)
 	err := query.Order("RAND()").First(&quest).Error
 	if err != nil {
 		return nil, err
@@ -95,7 +90,7 @@ func (r *QuestRepository) ListRolePlayQuests(ctx context.Context, status string,
 func (r *QuestRepository) ListRolePlayQuestsPage(ctx context.Context, status string, theme string, level string, limit int, offset int) ([]models.RolePlayQuestTemplate, int64, error) {
 	var quests []models.RolePlayQuestTemplate
 	query := r.db.WithContext(ctx).Model(&models.RolePlayQuestTemplate{})
-	query = applyQuestQuery(query, status, theme, level)
+	query = applyRolePlayQuestQuery(r.db, query, status, theme, level)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -224,23 +219,4 @@ func createRolePlayQuestStructure(tx *gorm.DB, templateID uint, arcs []models.Ro
 	}
 
 	return nil
-}
-
-func applyQuestQuery(query *gorm.DB, status string, theme string, level string) *gorm.DB {
-	if status == "" {
-		status = constants.QuestStatusPublished
-	}
-	if status != "all" {
-		query = query.Where("status = ?", status)
-		if status == constants.QuestStatusPublished {
-			query = query.Where("is_published = ?", true)
-		}
-	}
-	if theme != "" {
-		query = query.Where("theme = ?", theme)
-	}
-	if level != "" {
-		query = query.Where("level = ?", level)
-	}
-	return query
 }
