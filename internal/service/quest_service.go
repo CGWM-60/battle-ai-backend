@@ -169,7 +169,7 @@ func (s *QuestService) ListRolePlay(ctx context.Context, status, theme, level st
 }
 
 func (s *QuestService) ListRolePlayPage(ctx context.Context, status, theme, level string, limit int, offset int) ([]models.RolePlayQuestTemplate, int64, error) {
-	key := fmt.Sprintf("list:status=%s:theme=%s:level=%s:limit=%d:offset=%d", status, theme, level, limit, offset)
+	key := fmt.Sprintf("list:visuals=1:status=%s:theme=%s:level=%s:limit=%d:offset=%d", status, theme, level, limit, offset)
 	var cached struct {
 		Quests []models.RolePlayQuestTemplate `json:"quests"`
 		Total  int64                          `json:"total"`

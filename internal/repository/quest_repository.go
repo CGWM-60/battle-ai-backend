@@ -102,6 +102,18 @@ func (r *QuestRepository) ListRolePlayQuestsPage(ctx context.Context, status str
 	}
 	err := query.
 		Select("id", "created_at", "updated_at", "slug", "title", "summary", "theme", "level", "xp", "coin", "source", "status", "metadata", "is_published", "published_at", "unpublished_at", "image_url", "visual_style", "visual_tags", "rpg_metadata").
+		Preload("Scenes", func(tx *gorm.DB) *gorm.DB {
+			return tx.
+				Select("id", "quest_id", "arc_id", "chapter_id", "scene_key", "chapter_index", "arc_index", "title", "summary", "image_url", "image_alt", "image_status", "image_storage_key", "scene_type", "room_type", "atmosphere", "danger_level", "visual_tags", "rpg_metadata").
+				Order("chapter_index ASC").
+				Order("id ASC")
+		}).
+		Preload("Scenes.Images", func(tx *gorm.DB) *gorm.DB {
+			return tx.
+				Select("id", "scene_id", "quest_id", "url", "storage_key", "filename", "mime_type", "size", "width", "height", "is_main", "alt", "source").
+				Order("is_main DESC").
+				Order("id ASC")
+		}).
 		Order("created_at DESC, id DESC").
 		Limit(limit).
 		Offset(offset).
