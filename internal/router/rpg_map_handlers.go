@@ -436,6 +436,63 @@ func coopRPGMapAction(database *gorm.DB) gin.HandlerFunc {
 	}
 }
 
+func coopRPGMapRoll(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		code := c.Param("code")
+		var req rpgMapRollRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid roll payload"})
+			return
+		}
+		if req.Difficulty <= 0 {
+			req.Difficulty = 12
+		}
+		resp, err := newRPGMapService(database).CoopRoll(
+			c.Request.Context(),
+			code,
+			req.ActionID,
+			req.Attribute,
+			req.Skill,
+			req.Difficulty,
+		)
+		if err != nil {
+			if err.Error() == "party not found" {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
+func coopRPGMapResolveAction(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		code := c.Param("code")
+		var req rpgMapResolveRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid resolve payload"})
+			return
+		}
+		resp, err := newRPGMapService(database).CoopResolveAction(
+			c.Request.Context(),
+			code,
+			req.ActionID,
+			req.RollSuccess,
+		)
+		if err != nil {
+			if err.Error() == "party not found" {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, resp)
+	}
+}
+
 func coopRPGMapCombatAction(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		code := c.Param("code")

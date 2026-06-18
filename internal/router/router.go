@@ -197,6 +197,8 @@ func RouterApp(database *gorm.DB) {
 	private.POST("/coop/parties/:code/map/regroup", coopRPGMapRegroup(database))
 	private.POST("/coop/parties/:code/map/lever", coopRPGMapLever(database))
 	private.POST("/coop/parties/:code/map/action", coopRPGMapAction(database))
+	private.POST("/coop/parties/:code/map/roll", coopRPGMapRoll(database))
+	private.POST("/coop/parties/:code/map/resolve-action", coopRPGMapResolveAction(database))
 	private.POST("/coop/parties/:code/map/combat/action", coopRPGMapCombatAction(database))
 
 	private.GET("/arenas", listArenas(database))

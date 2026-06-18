@@ -247,16 +247,26 @@ func (s *RPGMapService) RunAction(ctx context.Context, sessionID uint, ownerID u
 	return s.buildMapResponse(arcMap, state, narration)
 }
 
-func (s *RPGMapService) Roll(ctx context.Context, sessionID uint, ownerID uint, actionID, attribute, skill string, difficulty int) (*models.RPGMapResponse, error) {
-	arcMap, state, err := s.GetOrCreateArcMapForSession(ctx, sessionID, ownerID)
-	if err != nil {
-		return nil, err
+func normalizeRollDifficulty(difficulty int) int {
+	if difficulty < 5 {
+		return 12
 	}
+	if difficulty > 30 {
+		return 30
+	}
+	return difficulty
+}
 
-	modifier := 2
+func rollModifierForAttribute(attribute string) int {
 	if attribute == "dexterity" {
-		modifier = 3
+		return 3
 	}
+	return 2
+}
+
+func computeRollResult(actionID, attribute, skill string, difficulty int) *models.RPGMapRollResult {
+	difficulty = normalizeRollDifficulty(difficulty)
+	modifier := rollModifierForAttribute(attribute)
 	roll := rand.Intn(20) + 1
 	total := roll + modifier
 	success := total >= difficulty
@@ -267,12 +277,22 @@ func (s *RPGMapService) Roll(ctx context.Context, sessionID uint, ownerID uint, 
 		Difficulty: difficulty, Success: success,
 	}
 	if success {
-		result.Message = "Succès !"
+		result.Message = "Réussite"
 	} else {
-		result.Message = "Échec."
+		result.Message = "Échec"
+	}
+	return result
+}
+
+func (s *RPGMapService) Roll(ctx context.Context, sessionID uint, ownerID uint, actionID, attribute, skill string, difficulty int) (*models.RPGMapResponse, error) {
+	arcMap, state, err := s.GetOrCreateArcMapForSession(ctx, sessionID, ownerID)
+	if err != nil {
+		return nil, err
 	}
 
-	resp, err := s.buildMapResponse(arcMap, state, result.Message)
+	result := computeRollResult(actionID, attribute, skill, difficulty)
+
+	resp, err := s.buildMapResponse(arcMap, state, "Le dé est lancé.")
 	if err != nil {
 		return nil, err
 	}

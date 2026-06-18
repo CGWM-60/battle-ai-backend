@@ -57,6 +57,126 @@ func (s *RPGMapService) GetOrCreateCoopMap(ctx context.Context, partyCode string
 	return s.buildCoopMapResponse(ctx, party, state, "")
 }
 
+func (s *RPGMapService) CoopRoll(ctx context.Context, partyCode string, actionID, attribute, skill string, difficulty int) (*models.RPGCoopMapResponse, error) {
+	party, err := s.coop.GetByCode(ctx, partyCode)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("party not found")
+		}
+		return nil, err
+	}
+	state, err := s.maps.GetCoopMapState(ctx, party.Id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("coop map not initialized")
+		}
+		return nil, err
+	}
+
+	result := computeRollResult(actionID, attribute, skill, difficulty)
+	resp, err := s.buildCoopMapResponse(ctx, party, state, "Le dé coop est lancé. L'équipe retient son souffle.")
+	if err != nil {
+		return nil, err
+	}
+	resp.RollResult = result
+	return resp, nil
+}
+
+func (s *RPGMapService) CoopResolveAction(ctx context.Context, partyCode string, actionID string, rollSuccess bool) (*models.RPGCoopMapResponse, error) {
+	party, err := s.coop.GetByCode(ctx, partyCode)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("party not found")
+		}
+		return nil, err
+	}
+	state, err := s.maps.GetCoopMapState(ctx, party.Id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, fmt.Errorf("coop map not initialized")
+		}
+		return nil, err
+	}
+	arcMap, err := s.maps.GetArcMapByID(ctx, state.ArcMapID)
+	if err != nil {
+		return nil, err
+	}
+
+	nodes, _, _ := parseArcMap(arcMap)
+	currentNode := findNode(nodes, state.CurrentNodeID)
+	flags := decodeFlags(state.FlagsJSON)
+	flags["lastResolvedActionId"] = actionID
+	flags["lastCoopRollSuccess"] = rollSuccess
+
+	narration := ""
+	switch actionID {
+	case "disable_trap", "disarm_trap":
+		if rollSuccess {
+			sessionState := s.coopStateAsSession(state)
+			narration = s.disarmTraps(sessionState, currentNode)
+			state.TrapStateJSON = sessionState.TrapStateJSON
+			flags["trap_disarmed"] = true
+		} else {
+			narration = "Le piège se déclenche ! L'équipe subit des dégâts."
+		}
+	case "collect_loot_pass", "loot_chest":
+		if rollSuccess {
+			flags["loot_chest_opened"] = true
+			narration = "L'équipe ouvre le coffre avec succès."
+		} else {
+			narration = "Le coffre résiste aux efforts du groupe."
+		}
+	default:
+		if rollSuccess {
+			narration = fmt.Sprintf("L'équipe réussit l'action %s.", actionID)
+		} else {
+			narration = fmt.Sprintf("L'équipe échoue sur l'action %s.", actionID)
+		}
+	}
+
+	state.FlagsJSON = rpgMustJSON(flags)
+	sessionState := s.coopStateAsSession(state)
+	s.checkObjectiveProgress(sessionState, arcMap, flags)
+	s.syncSessionToCoop(state, sessionState)
+	_ = s.maps.UpdateCoopMapState(ctx, state)
+	_ = s.patchCoopSharedDungeonFlags(ctx, party.Id, party.SharedState, actionID, rollSuccess, flags)
+
+	return s.buildCoopMapResponse(ctx, party, state, narration)
+}
+
+func (s *RPGMapService) patchCoopSharedDungeonFlags(
+	ctx context.Context,
+	partyID uint,
+	rawState datatypes.JSON,
+	actionID string,
+	rollSuccess bool,
+	flags map[string]any,
+) error {
+	shared := decodeCoopSharedState(rawState)
+	dungeonState, _ := shared["dungeonState"].(map[string]any)
+	if dungeonState == nil {
+		dungeonState = map[string]any{}
+	}
+	dungeonFlags, _ := dungeonState["flags"].(map[string]any)
+	if dungeonFlags == nil {
+		dungeonFlags = map[string]any{}
+	}
+	dungeonFlags["lastResolvedActionId"] = actionID
+	dungeonFlags["lastCoopRollSuccess"] = rollSuccess
+	for k, v := range flags {
+		if k == "trap_disarmed" || k == "loot_chest_opened" {
+			dungeonFlags[k] = v
+		}
+	}
+	dungeonState["flags"] = dungeonFlags
+	shared["dungeonState"] = dungeonState
+	payload, err := json.Marshal(shared)
+	if err != nil {
+		return err
+	}
+	return s.coop.UpdateSharedState(ctx, partyID, datatypes.JSON(payload))
+}
+
 func (s *RPGMapService) EnterCoopMap(ctx context.Context, partyCode string) (*models.RPGCoopMapResponse, error) {
 	resp, err := s.GetOrCreateCoopMap(ctx, partyCode)
 	if err != nil {
