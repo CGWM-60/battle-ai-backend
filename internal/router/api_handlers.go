@@ -3,6 +3,7 @@ package router
 import (
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
+	nexuscache "cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/provider"
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/scenarios"
@@ -20,6 +21,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -27,6 +29,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+)
+
+var (
+	responseCacheOnce sync.Once
+	responseCache     *nexuscache.ResponseCache
 )
 
 type battleRequest struct {
@@ -1864,37 +1871,47 @@ func updateCoopState(database *gorm.DB) gin.HandlerFunc {
 
 func listLiveSessions(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Cache-Control", "no-store")
-
+		limit := limitFromQuery(c)
+		cacheKey := fmt.Sprintf("sessions:owner:%d:limit:%d", currentUserID(c), limit)
 		var sessions []models.LiveSession
+		if appResponseCache().GetJSON(c.Request.Context(), "live", cacheKey, &sessions) {
+			c.JSON(http.StatusOK, gin.H{"sessions": sessions})
+			return
+		}
 		err := database.WithContext(c.Request.Context()).
 			Where("owner_id = ?", currentUserID(c)).
 			Order("updated_at DESC").
-			Limit(limitFromQuery(c)).
+			Limit(limit).
 			Find(&sessions).Error
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list live sessions"})
 			return
 		}
 
+		appResponseCache().SetJSON(c.Request.Context(), "live", cacheKey, sessions, 2*time.Second)
 		c.JSON(http.StatusOK, gin.H{"sessions": sessions})
 	}
 }
 
 func listPublicLiveSessions(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Cache-Control", "no-store")
-
+		limit := limitFromQuery(c)
+		cacheKey := fmt.Sprintf("sessions:public:limit:%d", limit)
 		var sessions []models.LiveSession
+		if appResponseCache().GetJSON(c.Request.Context(), "live", cacheKey, &sessions) {
+			c.JSON(http.StatusOK, gin.H{"sessions": sessions})
+			return
+		}
 		err := publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{})).
 			Order("updated_at DESC").
-			Limit(limitFromQuery(c)).
+			Limit(limit).
 			Find(&sessions).Error
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list public live sessions"})
 			return
 		}
 
+		appResponseCache().SetJSON(c.Request.Context(), "live", cacheKey, sessions, 2*time.Second)
 		c.JSON(http.StatusOK, gin.H{"sessions": sessions})
 	}
 }
@@ -1959,6 +1976,7 @@ func createLiveSession(database *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		appResponseCache().InvalidateNamespace(c.Request.Context(), "live")
 		c.JSON(http.StatusCreated, gin.H{"session": live})
 	}
 }
@@ -1982,7 +2000,7 @@ func createCoopLiveSession(ctx context.Context, database *gorm.DB, ownerID uint,
 		AllowReplay: true,
 	}
 
-	return database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(&live).Error; err != nil {
 			return err
 		}
@@ -2003,6 +2021,11 @@ func createCoopLiveSession(ctx context.Context, database *gorm.DB, ownerID uint,
 		}
 		return tx.Create(&event).Error
 	})
+	if err != nil {
+		return err
+	}
+	appResponseCache().InvalidateNamespace(ctx, "live")
+	return nil
 }
 
 func coopPartyCarriesRolePlay(party *models.CoopParty) bool {
@@ -2063,6 +2086,7 @@ func endLiveSessionsByCoopParty(ctx context.Context, database *gorm.DB, coopPart
 		ended++
 	}
 
+	appResponseCache().InvalidateNamespace(ctx, "live")
 	return ended, nil
 }
 
@@ -2096,12 +2120,7 @@ func getLiveSessionEvents(database *gorm.DB) gin.HandlerFunc {
 		}
 
 		after, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
-		var events []models.LiveEvent
-		err := database.WithContext(c.Request.Context()).
-			Where("live_session_id = ? AND sequence > ?", session.Id, after).
-			Order("sequence ASC").
-			Limit(limitFromQuery(c)).
-			Find(&events).Error
+		events, err := liveEventsAfter(c, database, session.Id, after, limitFromQuery(c))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list live events"})
 			return
@@ -2119,12 +2138,7 @@ func getPublicLiveSessionEvents(database *gorm.DB) gin.HandlerFunc {
 		}
 
 		after, _ := strconv.Atoi(c.DefaultQuery("after", "0"))
-		var events []models.LiveEvent
-		err := database.WithContext(c.Request.Context()).
-			Where("live_session_id = ? AND sequence > ?", session.Id, after).
-			Order("sequence ASC").
-			Limit(limitFromQuery(c)).
-			Find(&events).Error
+		events, err := liveEventsAfter(c, database, session.Id, after, limitFromQuery(c))
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list public live events"})
 			return
@@ -2530,6 +2544,7 @@ func endLiveSession(database *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		appResponseCache().InvalidateNamespace(c.Request.Context(), "live")
 		session.Status = "ended"
 		session.EndedAt = &now
 		session.LastEventAt = &now
@@ -2809,13 +2824,13 @@ func newBattleService(database *gorm.DB) *service.BattleService {
 		repository.NewBattleRepository(database),
 		repository.NewQuestRepository(database),
 		repository.NewIAProfileRepository(database),
-		service.NewLiveService(repository.NewLiveRepository(database)),
+		service.NewLiveServiceWithCache(repository.NewLiveRepository(database), appResponseCache()),
 		repository.NewAIUsageRepository(database),
 	)
 }
 
 func newQuestService(database *gorm.DB) *service.QuestService {
-	return service.NewQuestService(repository.NewQuestRepository(database))
+	return service.NewQuestServiceWithCache(repository.NewQuestRepository(database), appResponseCache())
 }
 
 func newArenaService(database *gorm.DB) *service.ArenaService {
@@ -2842,14 +2857,22 @@ func newRolePlayCharacterService(database *gorm.DB) *service.RolePlayCharacterSe
 }
 
 func newCoopService(database *gorm.DB) *service.CoopService {
-	return service.NewCoopService(
+	return service.NewCoopServiceWithCache(
 		repository.NewCoopRepository(database),
 		repository.NewRolePlayCharacterRepository(database),
+		appResponseCache(),
 	)
 }
 
 func newLiveService(database *gorm.DB) *service.LiveService {
-	return service.NewLiveService(repository.NewLiveRepository(database))
+	return service.NewLiveServiceWithCache(repository.NewLiveRepository(database), appResponseCache())
+}
+
+func appResponseCache() *nexuscache.ResponseCache {
+	responseCacheOnce.Do(func() {
+		responseCache = nexuscache.NewResponseCache(nexuscache.NewRedisServiceFromEnv(), "battleia")
+	})
+	return responseCache
 }
 
 func toServiceBattleRequest(req battleRequest) service.BattleRequest {
@@ -3176,12 +3199,19 @@ func validateLiveAttachments(c *gin.Context, database *gorm.DB, userID uint, req
 }
 
 func liveEventsAfter(c *gin.Context, database *gorm.DB, sessionID uint, after int, limit int) ([]models.LiveEvent, error) {
+	cacheKey := fmt.Sprintf("events:session:%d:after:%d:limit:%d", sessionID, after, limit)
 	var events []models.LiveEvent
+	if appResponseCache().GetJSON(c.Request.Context(), "live", cacheKey, &events) {
+		return events, nil
+	}
 	err := database.WithContext(c.Request.Context()).
 		Where("live_session_id = ? AND sequence > ?", sessionID, after).
 		Order("sequence ASC").
 		Limit(limit).
 		Find(&events).Error
+	if err == nil {
+		appResponseCache().SetJSON(c.Request.Context(), "live", cacheKey, events, time.Second)
+	}
 	return events, err
 }
 

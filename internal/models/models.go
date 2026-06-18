@@ -244,8 +244,8 @@ type BattleArenaMember struct {
 // RolePlayQuestTemplate = quete roleplay generee pour le systeme.
 // Elle sert de modele reutilisable pour lancer des parties roleplay IA.
 type RolePlayQuestTemplate struct {
-	Id        uint `gorm:"primaryKey"`
-	CreatedAt time.Time
+	Id        uint      `gorm:"primaryKey"`
+	CreatedAt time.Time `gorm:"index:idx_rpq_catalog,priority:5"`
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 
@@ -257,19 +257,19 @@ type RolePlayQuestTemplate struct {
 	// Prompt = texte complet servant a initialiser le roleplay.
 	Prompt string `gorm:"type:longtext"`
 	// Theme / Level = filtres de catalogue.
-	Theme string `gorm:"size:80;index"`
-	Level string `gorm:"size:32;index"`
+	Theme string `gorm:"size:80;index;index:idx_rpq_catalog,priority:3"`
+	Level string `gorm:"size:32;index;index:idx_rpq_catalog,priority:4"`
 	// Xp / Coin = recompenses si la quete est finie.
 	Xp   int
 	Coin int
 	// Source = system / manuel / event.
 	Source string `gorm:"size:32;index"`
 	// Status = draft / published / archived.
-	Status   string         `gorm:"size:32;index"`
+	Status   string         `gorm:"size:32;index;index:idx_rpq_catalog,priority:1"`
 	Metadata datatypes.JSON `gorm:"type:json"`
 
 	// Publication explicite (sync avec Status pour retrocompat).
-	IsPublished   bool       `gorm:"index;default:false" json:"isPublished"`
+	IsPublished   bool       `gorm:"index;index:idx_rpq_catalog,priority:2;default:false" json:"isPublished"`
 	PublishedAt   *time.Time `json:"publishedAt"`
 	UnpublishedAt *time.Time `json:"unpublishedAt"`
 
@@ -294,62 +294,62 @@ type RolePlayQuestScene struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
-	QuestID uint                  `gorm:"index" json:"questId"`
+	QuestID uint                  `gorm:"index;index:idx_rpq_scene_order,priority:1" json:"questId"`
 	Quest   RolePlayQuestTemplate `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 
 	ArcID     *uint `gorm:"index" json:"arcId"`
 	ChapterID *uint `gorm:"index" json:"chapterId"`
 
 	SceneKey     string `gorm:"size:120;index" json:"sceneKey"`
-	ChapterIndex int    `gorm:"index" json:"chapterIndex"`
-	ArcIndex     int    `gorm:"index" json:"arcIndex"`
+	ChapterIndex int    `gorm:"index;index:idx_rpq_scene_order,priority:3" json:"chapterIndex"`
+	ArcIndex     int    `gorm:"index;index:idx_rpq_scene_order,priority:2" json:"arcIndex"`
 	Title        string `gorm:"size:160" json:"title"`
 	Summary      string `gorm:"type:text" json:"summary"`
 	Prompt       string `gorm:"type:text" json:"prompt"`
 
-	ImagePrompt         string `gorm:"type:text" json:"imagePrompt"`
-	NegativePrompt      string `gorm:"type:text" json:"imageNegativePrompt"`
-	ImageURL            string `gorm:"size:512" json:"imageUrl"`
-	ImageAlt            string `gorm:"size:255" json:"imageAlt"`
-	ImageStatus         string `gorm:"size:32" json:"imageStatus"`
-	ImageStorageKey     string `gorm:"size:512" json:"imageStorageKey"`
-	SceneType           string `gorm:"size:64" json:"sceneType"`
-	RoomType            string `gorm:"size:64" json:"roomType"`
-	Atmosphere          string `gorm:"size:64" json:"atmosphere"`
-	DangerLevel         string `gorm:"size:32" json:"dangerLevel"`
-	VisualTags          datatypes.JSON `gorm:"type:json" json:"visualTags"`
-	RpgMetadata         datatypes.JSON `gorm:"type:json" json:"rpgMetadata"`
+	ImagePrompt     string         `gorm:"type:text" json:"imagePrompt"`
+	NegativePrompt  string         `gorm:"type:text" json:"imageNegativePrompt"`
+	ImageURL        string         `gorm:"size:512" json:"imageUrl"`
+	ImageAlt        string         `gorm:"size:255" json:"imageAlt"`
+	ImageStatus     string         `gorm:"size:32" json:"imageStatus"`
+	ImageStorageKey string         `gorm:"size:512" json:"imageStorageKey"`
+	SceneType       string         `gorm:"size:64" json:"sceneType"`
+	RoomType        string         `gorm:"size:64" json:"roomType"`
+	Atmosphere      string         `gorm:"size:64" json:"atmosphere"`
+	DangerLevel     string         `gorm:"size:32" json:"dangerLevel"`
+	VisualTags      datatypes.JSON `gorm:"type:json" json:"visualTags"`
+	RpgMetadata     datatypes.JSON `gorm:"type:json" json:"rpgMetadata"`
 
 	Images []RolePlayQuestSceneImage `gorm:"foreignKey:SceneID" json:"images"`
 }
 
 // RolePlayImagePromptJob = job batch admin pour generer les prompts image RP.
 type RolePlayImagePromptJob struct {
-	Id        uint `gorm:"primaryKey"`
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Id         uint `gorm:"primaryKey"`
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 	StartedAt  *time.Time
 	FinishedAt *time.Time
 
 	Status string `gorm:"size:32;index"` // pending/running/completed/failed/cancelled/interrupted
 	Scope  string `gorm:"size:32"`
 
-	TotalQuests      int
-	ProcessedQuests  int
-	UpdatedQuests    int
-	CreatedScenes    int
-	UpdatedPrompts   int
-	FailedQuests     int
-	CurrentQuestID   *uint
+	TotalQuests       int
+	ProcessedQuests   int
+	UpdatedQuests     int
+	CreatedScenes     int
+	UpdatedPrompts    int
+	FailedQuests      int
+	CurrentQuestID    *uint
 	CurrentQuestTitle string `gorm:"size:160"`
 
-	OnlyMissing       bool
-	ForceRegenerate   bool
-	SceneCount        int
-	BatchSize         int
-	Provider          string `gorm:"size:80"`
-	Model             string `gorm:"size:160"`
-	QuestIDs          datatypes.JSON `gorm:"type:json"`
+	OnlyMissing     bool
+	ForceRegenerate bool
+	SceneCount      int
+	BatchSize       int
+	Provider        string         `gorm:"size:80"`
+	Model           string         `gorm:"size:160"`
+	QuestIDs        datatypes.JSON `gorm:"type:json"`
 
 	Errors datatypes.JSON `gorm:"type:json"`
 }
@@ -360,10 +360,10 @@ type RolePlayImagePromptJobItem struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	JobID    uint   `gorm:"index"`
-	QuestID  uint   `gorm:"index"`
+	JobID      uint   `gorm:"index"`
+	QuestID    uint   `gorm:"index"`
 	QuestTitle string `gorm:"size:160"`
-	Status   string `gorm:"size:32;index"` // pending/running/completed/failed/skipped
+	Status     string `gorm:"size:32;index"` // pending/running/completed/failed/skipped
 
 	CreatedScenes  int
 	UpdatedPrompts int
@@ -377,7 +377,7 @@ type RolePlayQuestSceneImage struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
-	SceneID uint               `gorm:"index" json:"sceneId"`
+	SceneID uint               `gorm:"index;index:idx_rpq_scene_image_order,priority:1" json:"sceneId"`
 	Scene   RolePlayQuestScene `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 	QuestID uint               `gorm:"index" json:"questId"`
 
@@ -388,7 +388,7 @@ type RolePlayQuestSceneImage struct {
 	Size             int64  `json:"size"`
 	Width            int    `json:"width"`
 	Height           int    `json:"height"`
-	IsMain           bool   `gorm:"index" json:"isMain"`
+	IsMain           bool   `gorm:"index;index:idx_rpq_scene_image_order,priority:2" json:"isMain"`
 	Alt              string `gorm:"size:255" json:"alt"`
 	Source           string `gorm:"size:32" json:"source"`
 	OriginalFilename string `gorm:"size:255" json:"originalFilename,omitempty"`
@@ -403,10 +403,10 @@ type RolePlayQuestArc struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
-	TemplateID uint                  `gorm:"index" json:"templateId"`
+	TemplateID uint                  `gorm:"index;index:idx_rpq_arc_order,priority:1" json:"templateId"`
 	Template   RolePlayQuestTemplate `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 
-	Position  int            `gorm:"index" json:"position"`
+	Position  int            `gorm:"index;index:idx_rpq_arc_order,priority:2" json:"position"`
 	Slug      string         `gorm:"size:120;index" json:"slug"`
 	Title     string         `gorm:"size:160;index" json:"title"`
 	Summary   string         `gorm:"type:text" json:"summary"`
@@ -425,12 +425,12 @@ type RolePlayQuestChapter struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
-	TemplateID uint                  `gorm:"index" json:"templateId"`
+	TemplateID uint                  `gorm:"index;index:idx_rpq_chapter_template_order,priority:1" json:"templateId"`
 	Template   RolePlayQuestTemplate `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
-	ArcID      uint                  `gorm:"index" json:"arcId"`
+	ArcID      uint                  `gorm:"index;index:idx_rpq_chapter_arc_order,priority:1" json:"arcId"`
 	Arc        RolePlayQuestArc      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"-"`
 
-	Position      int            `gorm:"index" json:"position"`
+	Position      int            `gorm:"index;index:idx_rpq_chapter_template_order,priority:2;index:idx_rpq_chapter_arc_order,priority:2" json:"position"`
 	Slug          string         `gorm:"size:120;index" json:"slug"`
 	Title         string         `gorm:"size:160;index" json:"title"`
 	Summary       string         `gorm:"type:text" json:"summary"`
@@ -555,7 +555,7 @@ type RolePlaySession struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 
-	OwnerID uint  `gorm:"index"`
+	OwnerID uint  `gorm:"index;index:idx_roleplay_owner_updated,priority:1"`
 	Owner   Users `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
 	// Mode = solo / coop / live.
@@ -583,7 +583,7 @@ type RolePlaySession struct {
 	ActiveCharacter   *RolePlayCharacter `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 
 	StartedAt      *time.Time `gorm:"index"`
-	LastActivityAt *time.Time `gorm:"index"`
+	LastActivityAt *time.Time `gorm:"index;index:idx_roleplay_owner_updated,priority:2"`
 	FinishedAt     *time.Time `gorm:"index"`
 
 	Turns        []RolePlaySessionTurn `gorm:"foreignKey:SessionID"`
@@ -629,9 +629,9 @@ type CoopParty struct {
 	// Mode = battle_ia / roleplay_ia.
 	Mode string `gorm:"size:32;index"`
 	// Status = waiting / running / paused / finished / closed.
-	Status string `gorm:"size:32;index"`
+	Status string `gorm:"size:32;index;index:idx_coop_host_updated,priority:2"`
 
-	HostUserID uint  `gorm:"index"`
+	HostUserID uint  `gorm:"index;index:idx_coop_host_updated,priority:1"`
 	HostUser   Users `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
 	// BattleSaveID = rempli si la coop porte une battle IA.
@@ -643,7 +643,7 @@ type CoopParty struct {
 
 	MaxMembers     int
 	SharedState    datatypes.JSON `gorm:"type:json"`
-	LastActivityAt *time.Time     `gorm:"index"`
+	LastActivityAt *time.Time     `gorm:"index;index:idx_coop_host_updated,priority:3"`
 
 	Members      []CoopPartyMember `gorm:"foreignKey:CoopPartyID"`
 	LiveSessions []LiveSession     `gorm:"foreignKey:CoopPartyID"`
@@ -657,7 +657,7 @@ type CoopPartyMember struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 
-	CoopPartyID uint      `gorm:"index:idx_coop_user,unique"`
+	CoopPartyID uint      `gorm:"index:idx_coop_user,unique;index:idx_coop_members_status,priority:1"`
 	CoopParty   CoopParty `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
 	UserID uint  `gorm:"index:idx_coop_user,unique"`
@@ -666,7 +666,7 @@ type CoopPartyMember struct {
 	// Role = host / player / spectator.
 	Role string `gorm:"size:32;index"`
 	// Status = invited / joined / ready / left / disconnected.
-	Status     string     `gorm:"size:32;index"`
+	Status     string     `gorm:"size:32;index;index:idx_coop_members_status,priority:2"`
 	JoinedAt   *time.Time `gorm:"index"`
 	LastSeenAt *time.Time `gorm:"index"`
 
@@ -682,15 +682,15 @@ type LiveSession struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
 
-	OwnerID uint  `gorm:"index"`
+	OwnerID uint  `gorm:"index;index:idx_live_owner_updated,priority:1"`
 	Owner   Users `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
 	// ChannelKey = identifiant de stream / SSE / websocket.
-	ChannelKey string `gorm:"size:120;uniqueIndex"`
+	ChannelKey string `gorm:"size:120;uniqueIndex;index:idx_live_channel_owner,priority:1"`
 	// Mode = battle_ia / roleplay_ia.
 	Mode string `gorm:"size:32;index"`
 	// Status = waiting / streaming / paused / ended.
-	Status string `gorm:"size:32;index"`
+	Status string `gorm:"size:32;index;index:idx_live_owner_updated,priority:2"`
 
 	// Ces FK permettent de rattacher le live a la bonne source.
 	BattleSaveID      *uint            `gorm:"index"`
@@ -703,7 +703,7 @@ type LiveSession struct {
 	CoopParty         *CoopParty       `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"`
 
 	ViewerCount int
-	LastEventAt *time.Time `gorm:"index"`
+	LastEventAt *time.Time `gorm:"index;index:idx_live_owner_updated,priority:3"`
 	StartedAt   *time.Time `gorm:"index"`
 	EndedAt     *time.Time `gorm:"index"`
 	AllowReplay bool

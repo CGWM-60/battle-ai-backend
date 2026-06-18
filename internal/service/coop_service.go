@@ -8,6 +8,7 @@ import (
 
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
+	nexuscache "cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/repository"
 
 	"gorm.io/datatypes"
@@ -25,10 +26,15 @@ type CoopPartyInput struct {
 type CoopService struct {
 	coop       *repository.CoopRepository
 	characters *repository.RolePlayCharacterRepository
+	cache      *nexuscache.ResponseCache
 }
 
 func NewCoopService(coop *repository.CoopRepository, characters *repository.RolePlayCharacterRepository) *CoopService {
 	return &CoopService{coop: coop, characters: characters}
+}
+
+func NewCoopServiceWithCache(coop *repository.CoopRepository, characters *repository.RolePlayCharacterRepository, cache *nexuscache.ResponseCache) *CoopService {
+	return &CoopService{coop: coop, characters: characters, cache: cache}
 }
 
 func (s *CoopService) Create(ctx context.Context, hostUserID uint, input CoopPartyInput) (*models.CoopParty, error) {
@@ -74,15 +80,36 @@ func (s *CoopService) Create(ctx context.Context, hostUserID uint, input CoopPar
 			"coop_party_id": party.Id,
 		})
 	}
+	s.invalidateParty(ctx, party.Code, hostUserID)
 	return party, nil
 }
 
 func (s *CoopService) ListByHost(ctx context.Context, hostUserID uint, limit int) ([]models.CoopParty, error) {
-	return s.coop.ListPartiesByHost(ctx, hostUserID, limit)
+	key := fmt.Sprintf("host:%d:limit:%d", hostUserID, limit)
+	var cached []models.CoopParty
+	if s.cache.GetJSON(ctx, "coop", key, &cached) {
+		return cached, nil
+	}
+	parties, err := s.coop.ListPartiesByHost(ctx, hostUserID, limit)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.SetJSON(ctx, "coop", key, parties, 2*time.Second)
+	return parties, nil
 }
 
 func (s *CoopService) Get(ctx context.Context, code string) (*models.CoopParty, error) {
-	return s.coop.GetByCode(ctx, code)
+	key := fmt.Sprintf("party:%s", code)
+	var cached models.CoopParty
+	if s.cache.GetJSON(ctx, "coop", key, &cached) {
+		return &cached, nil
+	}
+	party, err := s.coop.GetByCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.SetJSON(ctx, "coop", key, party, 2*time.Second)
+	return party, nil
 }
 
 func (s *CoopService) Join(ctx context.Context, code string, userID uint, characterID uint) (*models.CoopParty, error) {
@@ -116,6 +143,7 @@ func (s *CoopService) Join(ctx context.Context, code string, userID uint, charac
 	if err := s.syncPartyStatus(ctx, party.Id, decodeCoopSharedState(party.SharedState)); err != nil {
 		return nil, err
 	}
+	s.invalidateParty(ctx, code, party.HostUserID)
 	return s.coop.GetByCode(ctx, code)
 }
 
@@ -127,7 +155,11 @@ func (s *CoopService) Leave(ctx context.Context, code string, userID uint) error
 	if err := s.coop.Leave(ctx, party.Id, userID); err != nil {
 		return err
 	}
-	return s.syncPartyStatus(ctx, party.Id, decodeCoopSharedState(party.SharedState))
+	if err := s.syncPartyStatus(ctx, party.Id, decodeCoopSharedState(party.SharedState)); err != nil {
+		return err
+	}
+	s.invalidateParty(ctx, code, party.HostUserID)
+	return nil
 }
 
 func (s *CoopService) Ready(ctx context.Context, code string, userID uint) error {
@@ -135,7 +167,11 @@ func (s *CoopService) Ready(ctx context.Context, code string, userID uint) error
 	if err != nil {
 		return err
 	}
-	return s.coop.Ready(ctx, party.Id, userID)
+	if err := s.coop.Ready(ctx, party.Id, userID); err != nil {
+		return err
+	}
+	s.invalidateParty(ctx, code, party.HostUserID)
+	return nil
 }
 
 func (s *CoopService) Members(ctx context.Context, code string, userID uint) ([]models.CoopPartyMember, error) {
@@ -144,7 +180,17 @@ func (s *CoopService) Members(ctx context.Context, code string, userID uint) ([]
 		return nil, err
 	}
 	_ = s.coop.TouchMember(ctx, party.Id, userID)
-	return s.coop.ListMembers(ctx, party.Id)
+	key := fmt.Sprintf("members:%d", party.Id)
+	var cached []models.CoopPartyMember
+	if s.cache.GetJSON(ctx, "coop", key, &cached) {
+		return cached, nil
+	}
+	members, err := s.coop.ListMembers(ctx, party.Id)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.SetJSON(ctx, "coop", key, members, time.Second)
+	return members, nil
 }
 
 func (s *CoopService) UpdateState(ctx context.Context, code string, userID uint, state map[string]any) (*models.CoopParty, error) {
@@ -171,7 +217,12 @@ func (s *CoopService) UpdateState(ctx context.Context, code string, userID uint,
 	if err := s.syncPartyStatus(ctx, party.Id, mergedState); err != nil {
 		return nil, err
 	}
+	s.invalidateParty(ctx, code, party.HostUserID)
 	return s.coop.GetByCode(ctx, code)
+}
+
+func (s *CoopService) invalidateParty(ctx context.Context, code string, hostUserID uint) {
+	s.cache.InvalidateNamespace(ctx, "coop")
 }
 
 func (s *CoopService) syncPartyStatus(ctx context.Context, partyID uint, state map[string]any) error {

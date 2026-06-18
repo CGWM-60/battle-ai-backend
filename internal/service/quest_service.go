@@ -9,6 +9,7 @@ import (
 
 	"cgwm/battle/internal/app/constants"
 	"cgwm/battle/internal/models"
+	nexuscache "cgwm/battle/internal/nexus_game/cache"
 	"cgwm/battle/internal/repository"
 
 	"gorm.io/datatypes"
@@ -79,10 +80,15 @@ type RolePlayQuestChapterInput struct {
 
 type QuestService struct {
 	quests *repository.QuestRepository
+	cache  *nexuscache.ResponseCache
 }
 
 func NewQuestService(quests *repository.QuestRepository) *QuestService {
 	return &QuestService{quests: quests}
+}
+
+func NewQuestServiceWithCache(quests *repository.QuestRepository, cache *nexuscache.ResponseCache) *QuestService {
+	return &QuestService{quests: quests, cache: cache}
 }
 
 func (s *QuestService) ListBattle(ctx context.Context, status, theme, level string, limit int) ([]models.QuestIaBattle, error) {
@@ -163,11 +169,37 @@ func (s *QuestService) ListRolePlay(ctx context.Context, status, theme, level st
 }
 
 func (s *QuestService) ListRolePlayPage(ctx context.Context, status, theme, level string, limit int, offset int) ([]models.RolePlayQuestTemplate, int64, error) {
-	return s.quests.ListRolePlayQuestsPage(ctx, status, theme, level, limit, offset)
+	key := fmt.Sprintf("list:status=%s:theme=%s:level=%s:limit=%d:offset=%d", status, theme, level, limit, offset)
+	var cached struct {
+		Quests []models.RolePlayQuestTemplate `json:"quests"`
+		Total  int64                          `json:"total"`
+	}
+	if s.cache.GetJSON(ctx, "roleplay_quests", key, &cached) {
+		return cached.Quests, cached.Total, nil
+	}
+	quests, total, err := s.quests.ListRolePlayQuestsPage(ctx, status, theme, level, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	s.cache.SetJSON(ctx, "roleplay_quests", key, struct {
+		Quests []models.RolePlayQuestTemplate `json:"quests"`
+		Total  int64                          `json:"total"`
+	}{Quests: quests, Total: total}, time.Minute)
+	return quests, total, nil
 }
 
 func (s *QuestService) GetRolePlay(ctx context.Context, id uint) (*models.RolePlayQuestTemplate, error) {
-	return s.quests.GetRolePlayQuestByID(ctx, id)
+	key := fmt.Sprintf("detail:%d", id)
+	var cached models.RolePlayQuestTemplate
+	if s.cache.GetJSON(ctx, "roleplay_quests", key, &cached) {
+		return &cached, nil
+	}
+	quest, err := s.quests.GetRolePlayQuestByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.SetJSON(ctx, "roleplay_quests", key, quest, time.Minute)
+	return quest, nil
 }
 
 func (s *QuestService) CreateRolePlay(ctx context.Context, input RolePlayQuestInput) (*models.RolePlayQuestTemplate, error) {
@@ -202,6 +234,7 @@ func (s *QuestService) CreateRolePlay(ctx context.Context, input RolePlayQuestIn
 	if err := s.quests.CreateRolePlayQuest(ctx, quest); err != nil {
 		return nil, err
 	}
+	s.cache.InvalidateNamespace(ctx, "roleplay_quests")
 	if strings.TrimSpace(input.ImagePrompt) != "" || len(input.VisualTags) > 0 || input.RpgMetadata != nil {
 		visual := NewRolePlayQuestVisualService(s.quests.DB())
 		_ = visual.ApplyGeneratedVisuals(ctx, quest.Id, quest.Theme, quest.Level, quest.Title, quest.Summary,
@@ -223,6 +256,7 @@ func (s *QuestService) CreateRolePlay(ctx context.Context, input RolePlayQuestIn
 		_, _ = visual.CreateOrUpdateScenesForChapters(ctx, quest.Id, scenes)
 		quest, _ = s.quests.GetRolePlayQuestByID(ctx, quest.Id)
 	}
+	s.cache.InvalidateNamespace(ctx, "roleplay_quests")
 	return quest, nil
 }
 
@@ -245,6 +279,7 @@ func (s *QuestService) UpdateRolePlay(ctx context.Context, id uint, input RolePl
 	if err := s.quests.UpdateRolePlayQuest(ctx, id, fields); err != nil {
 		return err
 	}
+	defer s.cache.InvalidateNamespace(ctx, "roleplay_quests")
 	if len(input.Arcs) > 0 {
 		return s.quests.ReplaceRolePlayQuestStructure(ctx, id, buildRolePlayQuestArcs(input.Arcs))
 	}
@@ -252,7 +287,11 @@ func (s *QuestService) UpdateRolePlay(ctx context.Context, id uint, input RolePl
 }
 
 func (s *QuestService) DeleteRolePlay(ctx context.Context, id uint) error {
-	return s.quests.DeleteRolePlayQuest(ctx, id)
+	if err := s.quests.DeleteRolePlayQuest(ctx, id); err != nil {
+		return err
+	}
+	s.cache.InvalidateNamespace(ctx, "roleplay_quests")
+	return nil
 }
 
 func buildRolePlayQuestArcs(inputs []RolePlayQuestArcInput) []models.RolePlayQuestArc {

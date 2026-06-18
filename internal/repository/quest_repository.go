@@ -94,13 +94,18 @@ func (r *QuestRepository) ListRolePlayQuests(ctx context.Context, status string,
 
 func (r *QuestRepository) ListRolePlayQuestsPage(ctx context.Context, status string, theme string, level string, limit int, offset int) ([]models.RolePlayQuestTemplate, int64, error) {
 	var quests []models.RolePlayQuestTemplate
-	query := r.rolePlayQuestScope(ctx)
+	query := r.db.WithContext(ctx).Model(&models.RolePlayQuestTemplate{})
 	query = applyQuestQuery(query, status, theme, level)
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	err := query.Order("created_at DESC, id DESC").Limit(limit).Offset(offset).Find(&quests).Error
+	err := query.
+		Select("id", "created_at", "updated_at", "slug", "title", "summary", "theme", "level", "xp", "coin", "source", "status", "metadata", "is_published", "published_at", "unpublished_at", "image_url", "visual_style", "visual_tags", "rpg_metadata").
+		Order("created_at DESC, id DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&quests).Error
 	return quests, total, err
 }
 
