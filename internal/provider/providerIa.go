@@ -166,6 +166,14 @@ func NewsProvider(apiKey string, url string, model string) *Provider {
 	}
 }
 
+// NewMockProvider renvoie un provider local sans appel reseau (billing mode mock).
+func NewMockProvider(name string, model string) *Provider {
+	return &Provider{
+		name:  strings.TrimSpace(name),
+		model: strings.TrimSpace(model),
+	}
+}
+
 func (p *Provider) WithUsageRecorder(recorder UsageRecorder) *Provider {
 	p.usageRecorder = recorder
 	return p
@@ -199,7 +207,51 @@ func (m ProviderMessage) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (p *Provider) isMock() bool {
+	return p != nil && strings.TrimSpace(p.apiKey) == "" && strings.TrimSpace(p.url) == ""
+}
+
+func (p *Provider) mockChat(messages []ProviderMessage, stream bool, onChunk func(chunk string)) (providerCallResult, error) {
+	content := "mock ai response"
+	if len(messages) > 0 {
+		last := strings.TrimSpace(messages[len(messages)-1].Content)
+		if last != "" {
+			content = "mock: " + last
+		}
+	}
+	if stream && onChunk != nil {
+		onChunk(content)
+	}
+	inputChars := 0
+	for _, message := range messages {
+		inputChars += len(message.Content)
+	}
+	promptTokens := inputChars / 4
+	if promptTokens <= 0 {
+		promptTokens = 1
+	}
+	completionTokens := len(content) / 4
+	if completionTokens <= 0 {
+		completionTokens = 1
+	}
+	return providerCallResult{
+		Content:          content,
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		TotalTokens:      promptTokens + completionTokens,
+		Estimated:        true,
+	}, nil
+}
+
 func (p *Provider) Chat(ctx context.Context, messages []ProviderMessage) (string, error) {
+	if p.isMock() {
+		result, err := p.mockChat(messages, false, nil)
+		if err != nil {
+			return "", err
+		}
+		p.recordUsage(messages, result, false, false)
+		return result.Content, nil
+	}
 	result, err := p.chatCompletion(ctx, messages, false, nil)
 	if err != nil {
 		return "", err
@@ -216,6 +268,14 @@ func (p *Provider) ChatStream(
 	messages []ProviderMessage,
 	onChunk func(chunk string),
 ) (string, error) {
+	if p.isMock() {
+		result, err := p.mockChat(messages, true, onChunk)
+		if err != nil {
+			return "", err
+		}
+		p.recordUsage(messages, result, true, false)
+		return result.Content, nil
+	}
 	result, err := p.chatCompletion(ctx, messages, true, onChunk)
 	if err != nil {
 		return "", err

@@ -64,6 +64,7 @@ type battleRequest struct {
 	TotalRounds          int    `form:"totalRounds" json:"totalRounds"`
 	RoundDurationSeconds int    `form:"roundDurationSeconds" json:"roundDurationSeconds"`
 	PublicVote           bool   `form:"publicVote" json:"publicVote"`
+	BillingMode          string `form:"billingMode" json:"billingMode"`
 }
 
 type iaProfileRequest struct {
@@ -184,6 +185,7 @@ type rolePlaySessionRequest struct {
 	Model          string         `form:"model" json:"model"`
 	APIKey         string         `form:"apiKey" json:"apiKey"`
 	CharacterID    uint           `form:"characterId" json:"characterId"`
+	BillingMode    string         `form:"billingMode" json:"billingMode"`
 }
 
 type rolePlayActionRequest struct {
@@ -423,7 +425,7 @@ func startBattle(database *gorm.DB) gin.HandlerFunc {
 		run, err := battleService.Create(c.Request.Context(), currentUserID(c), toServiceBattleRequest(req))
 		if err != nil {
 			log.Printf("[startBattle] Create error: %v", err)
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			writeBillingError(c, err)
 			return
 		}
 
@@ -1444,9 +1446,10 @@ func startRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
 			ModelName:      defaultString(req.ModelName, req.Model),
 			APIKey:         req.APIKey,
 			CharacterID:    req.CharacterID,
+			BillingMode:    req.BillingMode,
 		})
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			writeBillingError(c, err)
 			return
 		}
 		turns, _ := newRolePlayService(database).Turns(c.Request.Context(), session.Id, currentUserID(c))
@@ -1472,9 +1475,10 @@ func createRolePlaySession(database *gorm.DB) gin.HandlerFunc {
 			ModelName:      defaultString(req.ModelName, req.Model),
 			APIKey:         req.APIKey,
 			CharacterID:    req.CharacterID,
+			BillingMode:    req.BillingMode,
 		})
 		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			writeBillingError(c, err)
 			return
 		}
 		turns, _ := newRolePlayService(database).Turns(c.Request.Context(), session.Id, currentUserID(c))
@@ -2826,6 +2830,7 @@ func newBattleService(database *gorm.DB) *service.BattleService {
 		repository.NewIAProfileRepository(database),
 		service.NewLiveServiceWithCache(repository.NewLiveRepository(database), appResponseCache()),
 		repository.NewAIUsageRepository(database),
+		newAIOrchestrator(database),
 	)
 }
 
@@ -2846,6 +2851,7 @@ func newRolePlayService(database *gorm.DB) *service.RolePlayService {
 		repository.NewQuestRepository(database),
 		repository.NewAIUsageRepository(database),
 		repository.NewRolePlayCharacterRepository(database),
+		newAIOrchestrator(database),
 	)
 }
 
@@ -2904,6 +2910,7 @@ func toServiceBattleRequest(req battleRequest) service.BattleRequest {
 		TotalRounds:          req.TotalRounds,
 		RoundDurationSeconds: req.RoundDurationSeconds,
 		PublicVote:           req.PublicVote,
+		BillingMode:          req.BillingMode,
 	}
 }
 

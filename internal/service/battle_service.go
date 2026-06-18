@@ -48,11 +48,13 @@ type BattleRequest struct {
 	TotalRounds          int
 	RoundDurationSeconds int
 	PublicVote           bool
+	BillingMode          string
 }
 
 type BattleRun struct {
-	Battle *models.BattleSave
-	IAs    []models.BattleIAConfig
+	Battle      *models.BattleSave
+	IAs         []models.BattleIAConfig
+	BillingMode string
 }
 
 type AIProviderInfo struct {
@@ -63,11 +65,12 @@ type AIProviderInfo struct {
 }
 
 type BattleService struct {
-	battles    *repository.BattleRepository
-	quests     *repository.QuestRepository
-	iaProfiles *repository.IAProfileRepository
-	live       *LiveService
-	usage      *repository.AIUsageRepository
+	battles      *repository.BattleRepository
+	quests       *repository.QuestRepository
+	iaProfiles   *repository.IAProfileRepository
+	live         *LiveService
+	usage        *repository.AIUsageRepository
+	orchestrator *AIOrchestrator
 }
 
 func NewBattleService(
@@ -76,17 +79,22 @@ func NewBattleService(
 	iaProfiles *repository.IAProfileRepository,
 	live *LiveService,
 	usage *repository.AIUsageRepository,
+	orchestrator *AIOrchestrator,
 ) *BattleService {
 	return &BattleService{
-		battles:    battles,
-		quests:     quests,
-		iaProfiles: iaProfiles,
-		live:       live,
-		usage:      usage,
+		battles:      battles,
+		quests:       quests,
+		iaProfiles:   iaProfiles,
+		live:         live,
+		usage:        usage,
+		orchestrator: orchestrator,
 	}
 }
 
 func (s *BattleService) Create(ctx context.Context, ownerID uint, req BattleRequest) (*BattleRun, error) {
+	if err := s.authorizeBattleBilling(ctx, ownerID, req); err != nil {
+		return nil, MapBillingError(err)
+	}
 	ias, err := s.buildIAConfigs(ctx, ownerID, &req)
 	if err != nil {
 		return nil, err
@@ -154,8 +162,8 @@ func (s *BattleService) Create(ctx context.Context, ownerID uint, req BattleRequ
 		return nil, fmt.Errorf("cannot create battle")
 	}
 
-	run := &BattleRun{Battle: battle, IAs: ias}
-	s.attachBattleUsageRecorders(run)
+	run := &BattleRun{Battle: battle, IAs: ias, BillingMode: req.BillingMode}
+	s.attachBattleUsageRecorders(run, req.BillingMode)
 	return run, nil
 }
 
@@ -201,8 +209,8 @@ func (s *BattleService) Resume(ctx context.Context, ownerID uint, battleID uint,
 	if err != nil {
 		return nil, nil, err
 	}
-	run := &BattleRun{Battle: battle, IAs: ias}
-	s.attachBattleUsageRecorders(run)
+	run := &BattleRun{Battle: battle, IAs: ias, BillingMode: req.BillingMode}
+	s.attachBattleUsageRecorders(run, req.BillingMode)
 
 	now := time.Now()
 	_ = s.battles.UpdateFields(ctx, battle.Id, map[string]any{
@@ -214,7 +222,7 @@ func (s *BattleService) Resume(ctx context.Context, ownerID uint, battleID uint,
 }
 
 func (s *BattleService) Run(ctx context.Context, run *BattleRun, resumeTurns []models.BattleSaveTurn, onEvent func(scenarios.BattleStreamEvent)) error {
-	s.attachBattleUsageRecorders(run)
+	s.attachBattleUsageRecorders(run, run.BillingMode)
 	sequence, err := s.battles.NextTurnSequence(ctx, run.Battle.Id)
 	if err != nil {
 		return fmt.Errorf("cannot prepare battle sequence")
@@ -367,7 +375,7 @@ func (s *BattleService) Run(ctx context.Context, run *BattleRun, resumeTurns []m
 }
 
 func (s *BattleService) RunNextRound(ctx context.Context, run *BattleRun, turns []models.BattleSaveTurn, onEvent func(scenarios.BattleStreamEvent)) error {
-	s.attachBattleUsageRecorders(run)
+	s.attachBattleUsageRecorders(run, run.BillingMode)
 	sequence, err := s.battles.NextTurnSequence(ctx, run.Battle.Id)
 	if err != nil {
 		return fmt.Errorf("cannot prepare battle sequence")
@@ -567,8 +575,8 @@ func (s *BattleService) Judge(
 		return fmt.Errorf("cannot prepare judge sequence")
 	}
 
-	run := &BattleRun{Battle: battle, IAs: ias}
-	s.attachBattleUsageRecorders(run)
+	run := &BattleRun{Battle: battle, IAs: ias, BillingMode: req.BillingMode}
+	s.attachBattleUsageRecorders(run, req.BillingMode)
 
 	judgeCtx, cancelJudge := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancelJudge()
@@ -728,10 +736,27 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 		return nil, fmt.Errorf("provider2 invalide")
 	}
 
+	iaKey1 := req.IAKey1
+	iaKey2 := req.IAKey2
+	if s.orchestrator != nil {
+		plan1 := s.orchestrator.BuildExecutionPlan(req.BillingMode, req.IAKey1, req.Provider1, req.IAModels, 512, 512, "battle:ia1")
+		plan2 := s.orchestrator.BuildExecutionPlan(req.BillingMode, req.IAKey2, req.Provider2, req.IAModels2, 512, 512, "battle:ia2")
+		resolvedKey1, keyErr := s.orchestrator.ResolveAPIKey(plan1, req.IAKey1, req.Provider1)
+		if keyErr != nil {
+			return nil, MapBillingError(keyErr)
+		}
+		resolvedKey2, keyErr := s.orchestrator.ResolveAPIKey(plan2, req.IAKey2, req.Provider2)
+		if keyErr != nil {
+			return nil, MapBillingError(keyErr)
+		}
+		iaKey1 = resolvedKey1
+		iaKey2 = resolvedKey2
+	}
+
 	ias := []models.BattleIAConfig{
 		{
 			Name:         req.IA1Name,
-			Provider:     provider.NewsProvider(req.IAKey1, provider1URL, req.IAModels),
+			Provider:     provider.NewsProvider(iaKey1, provider1URL, req.IAModels),
 			ProviderName: normalizeProviderName(req.Provider1),
 			ModelName:    req.IAModels,
 			Personality:  req.IA1Personality,
@@ -742,7 +767,7 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 		},
 		{
 			Name:         req.IA2Name,
-			Provider:     provider.NewsProvider(req.IAKey2, provider2URL, req.IAModels2),
+			Provider:     provider.NewsProvider(iaKey2, provider2URL, req.IAModels2),
 			ProviderName: normalizeProviderName(req.Provider2),
 			ModelName:    req.IAModels2,
 			Personality:  req.IA2Personality,
@@ -762,22 +787,54 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 	return ias, nil
 }
 
-func (s *BattleService) attachBattleUsageRecorders(run *BattleRun) {
+func (s *BattleService) attachBattleUsageRecorders(run *BattleRun, billingMode string) {
 	if run == nil || run.Battle == nil || s.usage == nil {
 		return
 	}
 	battleID := run.Battle.Id
 	for index := range run.IAs {
 		ia := &run.IAs[index]
+		plan := s.battleUsagePlan(billingMode, ia.ProviderName, ia.ModelName, run.Battle.OwnerID, battleID, index)
 		ia.Provider = attachUsageRecorder(s.usage, usageSessionRef{
-			OwnerID:       run.Battle.OwnerID,
-			SessionMode:   constants.ModeBattleIA,
-			BattleSaveID:  &battleID,
-			BillingSource: billingSourceClientKey,
-			ProviderName:  ia.ProviderName,
-			ModelName:     ia.ModelName,
+			OwnerID:        run.Battle.OwnerID,
+			SessionMode:    constants.ModeBattleIA,
+			BattleSaveID:   &battleID,
+			BillingSource:  plan.BillingSource,
+			ProviderName:   ia.ProviderName,
+			ModelName:      ia.ModelName,
+			Feature:        constants.ModeBattleIA,
+			SettlementPlan: &plan,
+			Orchestrator:   s.orchestrator,
 		}, ia.Provider)
 	}
+}
+
+func (s *BattleService) authorizeBattleBilling(ctx context.Context, ownerID uint, req BattleRequest) error {
+	if s.orchestrator == nil {
+		return nil
+	}
+	plan := s.battleUsagePlan(req.BillingMode, req.Provider1, req.IAModels, ownerID, 0, 0)
+	return s.orchestrator.Authorize(ctx, ownerID, plan)
+}
+
+func (s *BattleService) battleUsagePlan(billingMode string, providerName string, modelName string, ownerID uint, battleID uint, iaIndex int) AIExecutionPlan {
+	clientKey := ""
+	if s.orchestrator == nil {
+		return AIExecutionPlan{BillingSource: billingSourceClientKey}
+	}
+	idempotencyKey := fmt.Sprintf("battle:%d:ia:%d:precheck", battleID, iaIndex)
+	if battleID == 0 {
+		idempotencyKey = fmt.Sprintf("battle:user:%d:precheck", ownerID)
+	}
+	return s.orchestrator.BuildExecutionPlan(
+		billingMode,
+		clientKey,
+		providerName,
+		modelName,
+		512,
+		512,
+		idempotencyKey,
+	)
 }
 
 func (s *BattleService) buildResumeIAConfigs(ctx context.Context, ownerID uint, battle *models.BattleSave, req *BattleRequest) ([]models.BattleIAConfig, error) {

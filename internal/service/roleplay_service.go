@@ -25,6 +25,7 @@ type RolePlaySessionInput struct {
 	ModelName      string
 	APIKey         string
 	CharacterID    uint
+	BillingMode    string
 }
 
 type RolePlayActionInput struct {
@@ -34,15 +35,27 @@ type RolePlayActionInput struct {
 }
 
 type RolePlayService struct {
-	roleplay   *repository.RolePlayRepository
-	quests     *repository.QuestRepository
-	usage      *repository.AIUsageRepository
-	characters *repository.RolePlayCharacterRepository
+	roleplay     *repository.RolePlayRepository
+	quests       *repository.QuestRepository
+	usage        *repository.AIUsageRepository
+	characters   *repository.RolePlayCharacterRepository
+	orchestrator *AIOrchestrator
 }
 
-
-func NewRolePlayService(roleplay *repository.RolePlayRepository, quests *repository.QuestRepository, usage *repository.AIUsageRepository, characters *repository.RolePlayCharacterRepository) *RolePlayService {
-	return &RolePlayService{roleplay: roleplay, quests: quests, usage: usage, characters: characters}
+func NewRolePlayService(
+	roleplay *repository.RolePlayRepository,
+	quests *repository.QuestRepository,
+	usage *repository.AIUsageRepository,
+	characters *repository.RolePlayCharacterRepository,
+	orchestrator *AIOrchestrator,
+) *RolePlayService {
+	return &RolePlayService{
+		roleplay:     roleplay,
+		quests:       quests,
+		usage:        usage,
+		characters:   characters,
+		orchestrator: orchestrator,
+	}
 }
 
 func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input RolePlaySessionInput) (*models.RolePlaySession, error) {
@@ -52,9 +65,22 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 	providerName := strings.TrimSpace(input.ProviderName)
 	modelName := strings.TrimSpace(input.ModelName)
 	apiKey := strings.TrimSpace(input.APIKey)
-	if providerName != "" || modelName != "" || apiKey != "" {
-		if providerName == "" || modelName == "" || apiKey == "" {
-			return nil, fmt.Errorf("providerName, modelName and apiKey are required to launch roleplay with IA")
+	if providerName != "" || modelName != "" || apiKey != "" || input.BillingMode != "" {
+		if providerName == "" || modelName == "" {
+			return nil, fmt.Errorf("providerName and modelName are required to launch roleplay with IA")
+		}
+		if s.orchestrator != nil {
+			plan := s.orchestrator.BuildExecutionPlan(input.BillingMode, apiKey, providerName, modelName, 512, 512, "roleplay:opening")
+			if err := s.orchestrator.Authorize(ctx, ownerID, plan); err != nil {
+				return nil, MapBillingError(err)
+			}
+			resolvedKey, keyErr := s.orchestrator.ResolveAPIKey(plan, apiKey, providerName)
+			if keyErr != nil {
+				return nil, MapBillingError(keyErr)
+			}
+			apiKey = resolvedKey
+		} else if apiKey == "" {
+			return nil, fmt.Errorf("apiKey is required to launch roleplay with IA")
 		}
 		if _, err := ProviderURL(providerName); err != nil {
 			return nil, fmt.Errorf("providerName invalide")
@@ -147,7 +173,7 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 		})
 	}
 	if providerName != "" {
-		if err := s.appendInitialNarration(ctx, session, activeCharacter, providerName, modelName, apiKey); err != nil {
+		if err := s.appendInitialNarration(ctx, session, activeCharacter, providerName, modelName, apiKey, input.BillingMode); err != nil {
 			failedAt := time.Now()
 			_ = s.roleplay.UpdateSessionFields(ctx, session.Id, ownerID, map[string]any{
 				"status":           constants.RolePlayStatusFailed,
@@ -160,7 +186,7 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 	return session, nil
 }
 
-func (s *RolePlayService) appendInitialNarration(ctx context.Context, session *models.RolePlaySession, character *models.RolePlayCharacter, providerName string, modelName string, apiKey string) error {
+func (s *RolePlayService) appendInitialNarration(ctx context.Context, session *models.RolePlaySession, character *models.RolePlayCharacter, providerName string, modelName string, apiKey string, billingMode string) error {
 	url, err := ProviderURL(providerName)
 	if err != nil {
 		return fmt.Errorf("providerName invalide")
@@ -170,14 +196,25 @@ func (s *RolePlayService) appendInitialNarration(ctx context.Context, session *m
 	defer cancel()
 
 	sessionID := session.Id
+	plan := AIExecutionPlan{BillingSource: billingSourceClientKey}
+	if s.orchestrator != nil {
+		plan = s.orchestrator.BuildExecutionPlan(billingMode, apiKey, providerName, modelName, 512, 512, fmt.Sprintf("roleplay:%d:opening", sessionID))
+	}
+	baseProvider := provider.NewsProvider(apiKey, url, modelName)
+	if s.orchestrator != nil {
+		baseProvider = s.orchestrator.AttachProvider(plan, baseProvider)
+	}
 	ai := attachUsageRecorder(s.usage, usageSessionRef{
 		OwnerID:           session.OwnerID,
 		SessionMode:       constants.ModeRolePlayIA,
 		RolePlaySessionID: &sessionID,
-		BillingSource:     billingSourceClientKey,
+		BillingSource:     plan.BillingSource,
 		ProviderName:      providerName,
 		ModelName:         modelName,
-	}, provider.NewsProvider(apiKey, url, modelName))
+		Feature:           constants.ModeRolePlayIA,
+		SettlementPlan:    &plan,
+		Orchestrator:      s.orchestrator,
+	}, baseProvider)
 	if ai != nil {
 		ai.WithUsageMetadata(provider.UsageMetadata{
 			Mode:      constants.ModeRolePlayIA,

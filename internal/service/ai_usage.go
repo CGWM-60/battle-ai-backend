@@ -28,6 +28,9 @@ type usageSessionRef struct {
 	BillingSource     string
 	ProviderName      string
 	ModelName         string
+	Feature           string
+	SettlementPlan    *AIExecutionPlan
+	Orchestrator      *AIOrchestrator
 }
 
 func attachUsageRecorder(
@@ -81,6 +84,23 @@ func attachUsageRecorder(
 		if ref.RolePlaySessionID != nil {
 			if err := usage.IncrementRolePlayUsage(ctx, *ref.RolePlaySessionID, record.PromptTokens, record.CompletionTokens, record.TotalTokens, costMicros); err != nil {
 				log.Printf("[ai-usage] increment roleplay failed session_id=%d err=%v", *ref.RolePlaySessionID, err)
+			}
+		}
+		if ref.Orchestrator != nil && ref.SettlementPlan != nil {
+			referenceID := ""
+			if usageRecord.Id != 0 {
+				referenceID = fmt.Sprintf("ai_usage_record:%d", usageRecord.Id)
+			}
+			if _, err := ref.Orchestrator.SettleUsage(
+				ctx,
+				ref.OwnerID,
+				*ref.SettlementPlan,
+				record.PromptTokens,
+				record.CompletionTokens,
+				defaultString(ref.Feature, ref.SessionMode),
+				referenceID,
+			); err != nil {
+				log.Printf("[ai-usage] billing settlement failed mode=%s user_id=%d err=%v", ref.SessionMode, ref.OwnerID, err)
 			}
 		}
 	})

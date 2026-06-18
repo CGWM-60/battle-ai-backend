@@ -118,6 +118,13 @@ func DbConnect() *gorm.DB {
 		&models.TranslationImportError{},
 		&models.TranslationMissingLog{},
 		&models.UserLocalePreference{},
+		// Billing (AI wallet, store, subscriptions, entitlements)
+		&models.UserAIWallet{},
+		&models.AIWalletLedger{},
+		&models.StoreProduct{},
+		&models.StoreTransaction{},
+		&models.UserSubscription{},
+		&models.UserEntitlement{},
 	)
 	_ = db.Exec(`
 		UPDATE role_play_quest_templates
@@ -130,6 +137,9 @@ func DbConnect() *gorm.DB {
 	}
 	if err := seedDefaultResearchSystem(db); err != nil {
 		panic(fmt.Sprintf("failed to seed research system: %v", err))
+	}
+	if err := seedMockStoreProducts(db); err != nil {
+		panic(fmt.Sprintf("failed to seed mock store products: %v", err))
 	}
 	return db
 }
