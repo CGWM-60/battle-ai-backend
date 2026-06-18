@@ -260,10 +260,7 @@ func mockBillingSubscribe(database *gorm.DB) gin.HandlerFunc {
 func mockBillingRestore(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req billingRestoreRequest
-		if err := bindPayload(c, &req); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid restore payload"})
-			return
-		}
+		_ = bindPayload(c, &req)
 		result, err := newBillingService(database).MockRestore(c.Request.Context(), service.MockRestoreInput{
 			UserID:    currentUserID(c),
 			ReceiptID: req.ReceiptID,

@@ -738,9 +738,11 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 
 	iaKey1 := req.IAKey1
 	iaKey2 := req.IAKey2
+	var plan1 AIExecutionPlan
+	var plan2 AIExecutionPlan
 	if s.orchestrator != nil {
-		plan1 := s.orchestrator.BuildExecutionPlan(req.BillingMode, req.IAKey1, req.Provider1, req.IAModels, 512, 512, "battle:ia1")
-		plan2 := s.orchestrator.BuildExecutionPlan(req.BillingMode, req.IAKey2, req.Provider2, req.IAModels2, 512, 512, "battle:ia2")
+		plan1 = s.orchestrator.BuildExecutionPlan(req.BillingMode, req.IAKey1, req.Provider1, req.IAModels, 512, 512, "battle:ia1")
+		plan2 = s.orchestrator.BuildExecutionPlan(req.BillingMode, req.IAKey2, req.Provider2, req.IAModels2, 512, 512, "battle:ia2")
 		resolvedKey1, keyErr := s.orchestrator.ResolveAPIKey(plan1, req.IAKey1, req.Provider1)
 		if keyErr != nil {
 			return nil, MapBillingError(keyErr)
@@ -753,10 +755,19 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 		iaKey2 = resolvedKey2
 	}
 
+	baseProvider1 := provider.NewsProvider(iaKey1, provider1URL, req.IAModels)
+	if s.orchestrator != nil {
+		baseProvider1 = s.orchestrator.AttachProvider(plan1, baseProvider1)
+	}
+	baseProvider2 := provider.NewsProvider(iaKey2, provider2URL, req.IAModels2)
+	if s.orchestrator != nil {
+		baseProvider2 = s.orchestrator.AttachProvider(plan2, baseProvider2)
+	}
+
 	ias := []models.BattleIAConfig{
 		{
 			Name:         req.IA1Name,
-			Provider:     provider.NewsProvider(iaKey1, provider1URL, req.IAModels),
+			Provider:     baseProvider1,
 			ProviderName: normalizeProviderName(req.Provider1),
 			ModelName:    req.IAModels,
 			Personality:  req.IA1Personality,
@@ -767,7 +778,7 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 		},
 		{
 			Name:         req.IA2Name,
-			Provider:     provider.NewsProvider(iaKey2, provider2URL, req.IAModels2),
+			Provider:     baseProvider2,
 			ProviderName: normalizeProviderName(req.Provider2),
 			ModelName:    req.IAModels2,
 			Personality:  req.IA2Personality,
