@@ -67,7 +67,7 @@ func (o *AIOrchestrator) ResolveMode(requestedMode string, clientAPIKey string) 
 		}
 	}
 	normalized := normalizeBillingMode(requestedMode)
-	if normalized == models.BillingModeOwnKey && strings.TrimSpace(clientAPIKey) != "" {
+	if normalized == models.BillingModeOwnKey {
 		return AIOrchestratorModeBYOK
 	}
 	return AIOrchestratorModePlatform
