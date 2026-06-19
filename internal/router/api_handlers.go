@@ -1436,11 +1436,43 @@ func startRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		req.Snapshot = prepareInitialRolePlaySnapshot(req.Snapshot, req.Title, req.ScenarioPrompt)
+		snapshotQuestID := service.UintFromSnapshot(req.Snapshot, "questId")
+		if snapshotQuestID != 0 && snapshotQuestID != id {
+			log.Printf(
+				"[ROLEPLAY_START][REJECT] pathQuest=%d snapshotQuest=%d",
+				id,
+				snapshotQuestID,
+			)
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error":             "snapshot questId mismatch",
+				"expectedQuestId":   id,
+				"snapshotQuestId": snapshotQuestID,
+			})
+			return
+		}
+		if snapshotQuestID == 0 {
+			if req.Snapshot == nil {
+				req.Snapshot = map[string]any{}
+			}
+			req.Snapshot["questId"] = id
+			snapshotQuestID = id
+		}
 		resolvedProvider := defaultString(req.ProviderName, req.Provider)
 		resolvedModel := defaultString(req.ModelName, req.Model)
+		if !strings.EqualFold(strings.TrimSpace(req.Mode), "localDevice") {
+			resolvedProvider, resolvedModel = service.ResolveRolePlayProviderDefaults(
+				req.BillingMode,
+				resolvedProvider,
+				resolvedModel,
+			)
+		} else {
+			resolvedProvider = ""
+			resolvedModel = ""
+		}
 		log.Printf(
-			"[ROLEPLAY_START] quest=%d user=%d mode=%s provider=%s model=%s billing=%s character=%d snapshotKeys=%v",
+			"[ROLEPLAY_START] quest=%d snapshotQuestId=%d user=%d mode=%s provider=%s model=%s billing=%s character=%d snapshotKeys=%v",
 			id,
+			snapshotQuestID,
 			currentUserID(c),
 			req.Mode,
 			resolvedProvider,

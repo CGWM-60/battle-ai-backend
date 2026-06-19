@@ -66,6 +66,10 @@ func defaultRolePlayModel() string {
 	return envString("AI_DEFAULT_MODEL", "", "gpt-5-mini")
 }
 
+func ResolveRolePlayProviderDefaults(billingMode, providerName, modelName string) (string, string) {
+	return resolveRolePlayProviderDefaults(billingMode, providerName, modelName)
+}
+
 func resolveRolePlayProviderDefaults(billingMode, providerName, modelName string) (string, string) {
 	normalized := normalizeBillingMode(billingMode)
 	if normalized == models.BillingModePlatform ||
@@ -101,35 +105,47 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 	now := time.Now()
 	title := input.Title
 	prompt := input.ScenarioPrompt
-	providerName, modelName := resolveRolePlayProviderDefaults(
-		input.BillingMode,
-		input.ProviderName,
-		input.ModelName,
-	)
-	apiKey := strings.TrimSpace(input.APIKey)
-	if providerName != "" || modelName != "" || apiKey != "" || input.BillingMode != "" {
-		if providerName == "" || modelName == "" {
-			return nil, fmt.Errorf("providerName and modelName are required to launch roleplay with IA")
-		}
-		if s.orchestrator != nil {
-			plan := s.orchestrator.BuildExecutionPlan(input.BillingMode, apiKey, providerName, modelName, 512, 512, "roleplay:opening")
-			if err := s.orchestrator.Authorize(ctx, ownerID, plan); err != nil {
-				return nil, MapBillingError(err)
-			}
-			resolvedKey, keyErr := s.orchestrator.ResolveAPIKey(plan, apiKey, providerName)
-			if keyErr != nil {
-				return nil, MapBillingError(keyErr)
-			}
-			apiKey = resolvedKey
-		} else if apiKey == "" {
-			return nil, fmt.Errorf("apiKey is required to launch roleplay with IA")
-		}
-		if _, err := ProviderURL(providerName); err != nil {
-			return nil, fmt.Errorf("providerName invalide")
-		}
-	}
 	if input.Snapshot == nil {
 		input.Snapshot = map[string]any{}
+	}
+	if input.TemplateID != 0 {
+		ensureRolePlaySnapshotQuestID(input.Snapshot, input.TemplateID)
+		if err := validateRolePlaySnapshotQuestID(input.Snapshot, input.TemplateID); err != nil {
+			return nil, err
+		}
+	}
+
+	isLocalDevice := strings.EqualFold(strings.TrimSpace(input.Mode), "localDevice")
+	providerName := strings.TrimSpace(input.ProviderName)
+	modelName := strings.TrimSpace(input.ModelName)
+	apiKey := strings.TrimSpace(input.APIKey)
+	if !isLocalDevice {
+		providerName, modelName = resolveRolePlayProviderDefaults(
+			input.BillingMode,
+			providerName,
+			modelName,
+		)
+		if providerName != "" || modelName != "" || apiKey != "" || input.BillingMode != "" {
+			if providerName == "" || modelName == "" {
+				return nil, fmt.Errorf("providerName and modelName are required to launch roleplay with IA")
+			}
+			if s.orchestrator != nil {
+				plan := s.orchestrator.BuildExecutionPlan(input.BillingMode, apiKey, providerName, modelName, 512, 512, "roleplay:opening")
+				if err := s.orchestrator.Authorize(ctx, ownerID, plan); err != nil {
+					return nil, MapBillingError(err)
+				}
+				resolvedKey, keyErr := s.orchestrator.ResolveAPIKey(plan, apiKey, providerName)
+				if keyErr != nil {
+					return nil, MapBillingError(keyErr)
+				}
+				apiKey = resolvedKey
+			} else if apiKey == "" {
+				return nil, fmt.Errorf("apiKey is required to launch roleplay with IA")
+			}
+			if _, err := ProviderURL(providerName); err != nil {
+				return nil, fmt.Errorf("providerName invalide")
+			}
+		}
 	}
 	var activeCharacter *models.RolePlayCharacter
 	if input.TemplateID != 0 && input.CharacterID == 0 {
@@ -161,6 +177,10 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 		if err != nil {
 			return nil, fmt.Errorf("roleplay quest not found")
 		}
+		if err := validateRolePlaySnapshotQuestID(input.Snapshot, template.Id); err != nil {
+			return nil, err
+		}
+		stampRolePlaySnapshotFromTemplate(input.Snapshot, template.Id, template.Title, template.Slug)
 		templateID = &template.Id
 		title = defaultString(title, template.Title)
 		prompt = defaultString(prompt, template.Prompt)
