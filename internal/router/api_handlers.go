@@ -1436,14 +1436,27 @@ func startRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		req.Snapshot = prepareInitialRolePlaySnapshot(req.Snapshot, req.Title, req.ScenarioPrompt)
+		resolvedProvider := defaultString(req.ProviderName, req.Provider)
+		resolvedModel := defaultString(req.ModelName, req.Model)
+		log.Printf(
+			"[ROLEPLAY_START] quest=%d user=%d mode=%s provider=%s model=%s billing=%s character=%d snapshotKeys=%v",
+			id,
+			currentUserID(c),
+			req.Mode,
+			resolvedProvider,
+			resolvedModel,
+			req.BillingMode,
+			req.CharacterID,
+			mapKeys(req.Snapshot),
+		)
 		session, err := newRolePlayService(database).CreateSession(c.Request.Context(), currentUserID(c), service.RolePlaySessionInput{
 			TemplateID:     id,
 			Title:          req.Title,
 			Mode:           req.Mode,
 			ScenarioPrompt: req.ScenarioPrompt,
 			Snapshot:       req.Snapshot,
-			ProviderName:   defaultString(req.ProviderName, req.Provider),
-			ModelName:      defaultString(req.ModelName, req.Model),
+			ProviderName:   resolvedProvider,
+			ModelName:      resolvedModel,
 			APIKey:         req.APIKey,
 			CharacterID:    req.CharacterID,
 			BillingMode:    req.BillingMode,
@@ -3357,6 +3370,17 @@ func defaultString(value string, fallback string) string {
 	}
 
 	return value
+}
+
+func mapKeys(value map[string]any) []string {
+	if value == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func aiProviderTestTimeout() time.Duration {

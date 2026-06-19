@@ -58,12 +58,54 @@ func NewRolePlayService(
 	}
 }
 
+func defaultRolePlayProvider() string {
+	return envString("AI_DEFAULT_PROVIDER", "", "openai")
+}
+
+func defaultRolePlayModel() string {
+	return envString("AI_DEFAULT_MODEL", "", "gpt-5-mini")
+}
+
+func resolveRolePlayProviderDefaults(billingMode, providerName, modelName string) (string, string) {
+	normalized := normalizeBillingMode(billingMode)
+	if normalized == models.BillingModePlatform ||
+		strings.EqualFold(strings.TrimSpace(billingMode), "platform_credits") {
+		if strings.TrimSpace(providerName) == "" {
+			providerName = defaultRolePlayProvider()
+		}
+		if strings.TrimSpace(modelName) == "" {
+			modelName = defaultRolePlayModel()
+		}
+	}
+	return strings.TrimSpace(providerName), strings.TrimSpace(modelName)
+}
+
+func snapshotHasClientOpening(snapshot map[string]any) bool {
+	if snapshot == nil {
+		return false
+	}
+	if text, ok := snapshot["openingNarration"].(string); ok && strings.TrimSpace(text) != "" {
+		return true
+	}
+	switch raw := snapshot["sceneDialogues"].(type) {
+	case []any:
+		return len(raw) > 0
+	case []map[string]any:
+		return len(raw) > 0
+	default:
+		return false
+	}
+}
+
 func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input RolePlaySessionInput) (*models.RolePlaySession, error) {
 	now := time.Now()
 	title := input.Title
 	prompt := input.ScenarioPrompt
-	providerName := strings.TrimSpace(input.ProviderName)
-	modelName := strings.TrimSpace(input.ModelName)
+	providerName, modelName := resolveRolePlayProviderDefaults(
+		input.BillingMode,
+		input.ProviderName,
+		input.ModelName,
+	)
 	apiKey := strings.TrimSpace(input.APIKey)
 	if providerName != "" || modelName != "" || apiKey != "" || input.BillingMode != "" {
 		if providerName == "" || modelName == "" {
@@ -172,7 +214,8 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 			"role_play_session_id": session.Id,
 		})
 	}
-	if providerName != "" {
+	shouldAppendInitialNarration := providerName != "" && !snapshotHasClientOpening(input.Snapshot)
+	if shouldAppendInitialNarration {
 		if err := s.appendInitialNarration(ctx, session, activeCharacter, providerName, modelName, apiKey, input.BillingMode); err != nil {
 			failedAt := time.Now()
 			_ = s.roleplay.UpdateSessionFields(ctx, session.Id, ownerID, map[string]any{
