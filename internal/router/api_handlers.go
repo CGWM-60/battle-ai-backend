@@ -1833,7 +1833,14 @@ func createCoopParty(database *gorm.DB) gin.HandlerFunc {
 
 func getCoopParty(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		party, err := newCoopService(database).Get(c.Request.Context(), c.Param("code"))
+		coop := newCoopService(database)
+		var party *models.CoopParty
+		var err error
+		if c.Query("compact") == "1" {
+			party, err = coop.GetCompact(c.Request.Context(), c.Param("code"))
+		} else {
+			party, err = coop.Get(c.Request.Context(), c.Param("code"))
+		}
 		if err != nil {
 			c.JSON(http.StatusNotFound, gin.H{"error": "coop party not found"})
 			return

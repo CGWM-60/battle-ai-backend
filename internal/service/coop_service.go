@@ -116,6 +116,20 @@ func (s *CoopService) Get(ctx context.Context, code string) (*models.CoopParty, 
 	return party, nil
 }
 
+func (s *CoopService) GetCompact(ctx context.Context, code string) (*models.CoopParty, error) {
+	key := fmt.Sprintf("party-compact:%s", code)
+	var cached models.CoopParty
+	if s.cache.GetJSON(ctx, "coop", key, &cached) {
+		return &cached, nil
+	}
+	party, err := s.coop.GetByCodeCompact(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	s.cache.SetJSON(ctx, "coop", key, party, 10*time.Second)
+	return party, nil
+}
+
 func (s *CoopService) Join(ctx context.Context, code string, userID uint, characterID uint) (*models.CoopParty, error) {
 	party, err := s.coop.GetByCode(ctx, code)
 	if err != nil {
@@ -179,7 +193,7 @@ func (s *CoopService) Ready(ctx context.Context, code string, userID uint) error
 }
 
 func (s *CoopService) Members(ctx context.Context, code string, userID uint) ([]models.CoopPartyMember, error) {
-	party, err := s.coop.GetByCode(ctx, code)
+	party, err := s.coop.GetByCodeCompact(ctx, code)
 	if err != nil {
 		return nil, err
 	}

@@ -60,6 +60,17 @@ func (r *CoopRepository) GetByCode(ctx context.Context, code string) (*models.Co
 	return &party, nil
 }
 
+// GetByCodeCompact is used by high-frequency polling and internal mutations.
+// It deliberately skips associations and the RP visual graph.
+func (r *CoopRepository) GetByCodeCompact(ctx context.Context, code string) (*models.CoopParty, error) {
+	var party models.CoopParty
+	err := r.db.WithContext(ctx).Where("code = ?", code).First(&party).Error
+	if err != nil {
+		return nil, err
+	}
+	return &party, nil
+}
+
 func (r *CoopRepository) ListMembers(ctx context.Context, partyID uint) ([]models.CoopPartyMember, error) {
 	var members []models.CoopPartyMember
 	err := r.db.WithContext(ctx).
