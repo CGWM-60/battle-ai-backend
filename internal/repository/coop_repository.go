@@ -18,7 +18,7 @@ func NewCoopRepository(db *gorm.DB) *CoopRepository {
 }
 
 func (r *CoopRepository) coopPartyQuery(ctx context.Context) *gorm.DB {
-	return r.db.WithContext(ctx).
+	return PreloadRolePlayQuestVisuals(r.db.WithContext(ctx), "RolePlaySession").
 		Preload("Members", func(db *gorm.DB) *gorm.DB {
 			return db.
 				Select("id", "created_at", "updated_at", "coop_party_id", "user_id", "role", "status", "joined_at", "last_seen_at", "character_id").

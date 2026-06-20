@@ -615,7 +615,7 @@ func resumeBattle(database *gorm.DB) gin.HandlerFunc {
 func listBattles(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var battles []models.BattleSave
-		err := database.WithContext(c.Request.Context()).
+		err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
 			Where("owner_id = ?", currentUserID(c)).
 			Order("updated_at DESC").
 			Limit(limitFromQuery(c)).
@@ -1444,8 +1444,8 @@ func startRolePlayQuest(database *gorm.DB) gin.HandlerFunc {
 				snapshotQuestID,
 			)
 			c.JSON(http.StatusBadRequest, gin.H{
-				"error":             "snapshot questId mismatch",
-				"expectedQuestId":   id,
+				"error":           "snapshot questId mismatch",
+				"expectedQuestId": id,
 				"snapshotQuestId": snapshotQuestID,
 			})
 			return
@@ -1951,7 +1951,7 @@ func listPublicLiveSessions(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusOK, gin.H{"sessions": sessions})
 			return
 		}
-		err := publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{})).
+		err := repository.PreloadLiveRolePlayQuestVisuals(publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{}))).
 			Order("updated_at DESC").
 			Limit(limit).
 			Find(&sessions).Error
@@ -2026,6 +2026,9 @@ func createLiveSession(database *gorm.DB) gin.HandlerFunc {
 		}
 
 		appResponseCache().InvalidateNamespace(c.Request.Context(), "live")
+		if hydrated, hydrateErr := repository.NewLiveRepository(database).GetSessionOwnedByID(c.Request.Context(), live.Id, userID); hydrateErr == nil {
+			live = *hydrated
+		}
 		c.JSON(http.StatusCreated, gin.H{"session": live})
 	}
 }
@@ -2819,7 +2822,7 @@ func applyProfileToBattleRequest(profile *models.IAProfile, req *battleRequest, 
 
 func findOwnedBattle(c *gin.Context, database *gorm.DB) (models.BattleSave, bool) {
 	var battle models.BattleSave
-	err := database.WithContext(c.Request.Context()).
+	err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
 		Where("id = ? AND owner_id = ?", c.Param("id"), currentUserID(c)).
 		First(&battle).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -3102,7 +3105,7 @@ func findOwnedLiveSessionByID(c *gin.Context, database *gorm.DB) (models.LiveSes
 
 func findPublicLiveSessionByID(c *gin.Context, database *gorm.DB) (models.LiveSession, bool) {
 	var session models.LiveSession
-	err := publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{})).
+	err := repository.PreloadLiveRolePlayQuestVisuals(publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{}))).
 		Where("live_sessions.id = ?", c.Param("id")).
 		First(&session).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -3119,7 +3122,7 @@ func findPublicLiveSessionByID(c *gin.Context, database *gorm.DB) (models.LiveSe
 
 func findOwnedLiveSessionByChannel(c *gin.Context, database *gorm.DB) (models.LiveSession, bool) {
 	var session models.LiveSession
-	err := database.WithContext(c.Request.Context()).
+	err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
 		Where("channel_key = ? AND owner_id = ?", c.Param("channel"), currentUserID(c)).
 		First(&session).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -3136,7 +3139,7 @@ func findOwnedLiveSessionByChannel(c *gin.Context, database *gorm.DB) (models.Li
 
 func findPublicLiveSessionByChannel(c *gin.Context, database *gorm.DB) (models.LiveSession, bool) {
 	var session models.LiveSession
-	err := publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{})).
+	err := repository.PreloadLiveRolePlayQuestVisuals(publicLiveSessionScope(database.WithContext(c.Request.Context()).Model(&models.LiveSession{}))).
 		Where("live_sessions.channel_key = ?", c.Param("channel")).
 		First(&session).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

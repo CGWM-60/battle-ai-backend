@@ -22,7 +22,7 @@ func (r *LiveRepository) CreateSession(ctx context.Context, session *models.Live
 
 func (r *LiveRepository) ListSessionsByOwner(ctx context.Context, ownerID uint, limit int) ([]models.LiveSession, error) {
 	var sessions []models.LiveSession
-	err := r.db.WithContext(ctx).
+	err := PreloadLiveRolePlayQuestVisuals(r.db.WithContext(ctx)).
 		Where("owner_id = ?", ownerID).
 		Order("updated_at DESC").
 		Limit(limit).
@@ -32,7 +32,7 @@ func (r *LiveRepository) ListSessionsByOwner(ctx context.Context, ownerID uint, 
 
 func (r *LiveRepository) GetSessionOwnedByID(ctx context.Context, id uint, ownerID uint) (*models.LiveSession, error) {
 	var session models.LiveSession
-	err := r.db.WithContext(ctx).
+	err := PreloadLiveRolePlayQuestVisuals(r.db.WithContext(ctx)).
 		Where("id = ? AND owner_id = ?", id, ownerID).
 		First(&session).Error
 	if err != nil {
@@ -44,7 +44,7 @@ func (r *LiveRepository) GetSessionOwnedByID(ctx context.Context, id uint, owner
 
 func (r *LiveRepository) GetSessionOwnedByChannel(ctx context.Context, channel string, ownerID uint) (*models.LiveSession, error) {
 	var session models.LiveSession
-	err := r.db.WithContext(ctx).
+	err := PreloadLiveRolePlayQuestVisuals(r.db.WithContext(ctx)).
 		Where("channel_key = ? AND owner_id = ?", channel, ownerID).
 		First(&session).Error
 	if err != nil {

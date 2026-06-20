@@ -246,6 +246,11 @@ func (s *RolePlayService) CreateSession(ctx context.Context, ownerID uint, input
 			return nil, err
 		}
 	}
+	// Return the same visual graph as list/get endpoints so the launch response
+	// can render the selected quest immediately.
+	if hydrated, err := s.roleplay.GetSessionOwnedByID(ctx, session.Id, ownerID); err == nil {
+		return hydrated, nil
+	}
 	return session, nil
 }
 

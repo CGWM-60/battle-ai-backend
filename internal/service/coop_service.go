@@ -81,6 +81,10 @@ func (s *CoopService) Create(ctx context.Context, hostUserID uint, input CoopPar
 		})
 	}
 	s.invalidateParty(ctx, party.Code, hostUserID)
+	// Hydrate the RP quest and its scene images in the creation response too.
+	if hydrated, err := s.coop.GetByCode(ctx, party.Code); err == nil {
+		return hydrated, nil
+	}
 	return party, nil
 }
 
