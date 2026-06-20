@@ -631,6 +631,7 @@ func mergeRolePlaySessionSnapshot(current datatypes.JSON, payload map[string]any
 		"currentChapterTurn",
 		"targetChapterTurns",
 		"chapterPacingLabel",
+		"chapterPhaseStep",
 		"objective",
 		"narration",
 		"scene",
