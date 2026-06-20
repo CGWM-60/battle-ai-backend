@@ -373,7 +373,8 @@ func generateAIProviderText() gin.HandlerFunc {
 		})
 
 		startedAt := time.Now()
-		ctx, cancel := context.WithTimeout(c.Request.Context(), aiProviderGenerationTimeout())
+		generationTimeout := aiProviderGenerationTimeout()
+		ctx, cancel := context.WithTimeout(c.Request.Context(), generationTimeout)
 		defer cancel()
 
 		client := provider.NewsProvider(apiKey, url, modelName)
@@ -381,19 +382,32 @@ func generateAIProviderText() gin.HandlerFunc {
 		latency := time.Since(startedAt)
 
 		if err != nil {
+			statusCode := http.StatusBadGateway
+			retryable := false
+			errorMessage := err.Error()
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				statusCode = http.StatusGatewayTimeout
+				retryable = true
+				errorMessage = fmt.Sprintf("AI provider generation timed out after %s", generationTimeout)
+			}
 			log.Printf(
-				"[aiProviderGenerate] provider call failed provider=%s model=%s latency_ms=%d err=%v",
+				"[aiProviderGenerate] provider call failed provider=%s model=%s timeout_ms=%d latency_ms=%d status=%d retryable=%t err=%v",
 				providerName,
 				modelName,
+				generationTimeout.Milliseconds(),
 				latency.Milliseconds(),
+				statusCode,
+				retryable,
 				err,
 			)
-			c.JSON(http.StatusBadGateway, gin.H{
+			c.JSON(statusCode, gin.H{
 				"ok":           false,
 				"providerName": providerName,
 				"modelName":    modelName,
 				"latencyMs":    latency.Milliseconds(),
-				"error":        err.Error(),
+				"timeoutMs":    generationTimeout.Milliseconds(),
+				"retryable":    retryable,
+				"error":        errorMessage,
 			})
 			return
 		}
@@ -402,6 +416,14 @@ func generateAIProviderText() gin.HandlerFunc {
 		if req.MaxChars > 0 {
 			generated = truncateString(generated, req.MaxChars)
 		}
+		log.Printf(
+			"[aiProviderGenerate] provider call succeeded provider=%s model=%s timeout_ms=%d latency_ms=%d response_chars=%d",
+			providerName,
+			modelName,
+			generationTimeout.Milliseconds(),
+			latency.Milliseconds(),
+			len(generated),
+		)
 
 		c.JSON(http.StatusOK, gin.H{
 			"ok":           true,
@@ -3445,9 +3467,9 @@ func aiProviderTestTimeout() time.Duration {
 }
 
 func aiProviderGenerationTimeout() time.Duration {
-	value, err := strconv.Atoi(getEnv("AI_PROVIDER_GENERATION_TIMEOUT_SECONDS", "45"))
+	value, err := strconv.Atoi(getEnv("AI_PROVIDER_GENERATION_TIMEOUT_SECONDS", "60"))
 	if err != nil || value <= 0 {
-		return 45 * time.Second
+		return 60 * time.Second
 	}
 
 	return time.Duration(value) * time.Second

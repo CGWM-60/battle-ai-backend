@@ -49,7 +49,7 @@ func envTrim(key string) string {
 func aiCallTimeout() time.Duration {
 	seconds, err := strconv.Atoi(envTrim("AI_PROVIDER_GENERATION_TIMEOUT_SECONDS"))
 	if err != nil || seconds <= 0 {
-		seconds = 45
+		seconds = 60
 	}
 	return time.Duration(seconds) * time.Second
 }
