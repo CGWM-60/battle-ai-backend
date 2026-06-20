@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"cgwm/battle/internal/service"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -74,9 +76,21 @@ func securityHeaders() gin.HandlerFunc {
 
 func requestBodyLimit(limit int64) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, limit)
+		requestLimit := requestBodyLimitForPath(c.Request.Method, c.Request.URL.Path, limit)
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, requestLimit)
 		c.Next()
 	}
+}
+
+func requestBodyLimitForPath(method, requestPath string, defaultLimit int64) int64 {
+	if method == http.MethodPost &&
+		strings.HasPrefix(requestPath, "/admin/api/roleplay/quests/") &&
+		strings.HasSuffix(requestPath, "/images") {
+		if uploadLimit := service.RolePlaySceneMaxUploadRequestBytes(); uploadLimit > defaultLimit {
+			return uploadLimit
+		}
+	}
+	return defaultLimit
 }
 
 func jwtAuth() gin.HandlerFunc {

@@ -835,8 +835,8 @@
     "semantic_hash": "e4a6277f1b43cdb2b5200636da4c293a"
   },
   "internal/repository/coop_repository.go": {
-    "mtime": 1781933057.3048165,
-    "ast_hash": "cc859706ec6945c9d351cc3da54d8ad0",
+    "mtime": 1781936319.3025558,
+    "ast_hash": "04d891a49fbdfe09227289bc8dba4407",
     "semantic_hash": ""
   },
   "internal/repository/ia_profile_repository.go": {
@@ -845,18 +845,18 @@
     "semantic_hash": "0b2d8a29076541a82e380df9e421f03c"
   },
   "internal/repository/live_repository.go": {
-    "mtime": 1781933057.3087397,
-    "ast_hash": "ec274cea3c01a36813cc309c154272f4",
+    "mtime": 1781936319.303399,
+    "ast_hash": "83c46089004b22af485b769b2e3fc174",
     "semantic_hash": ""
   },
   "internal/repository/quest_repository.go": {
-    "mtime": 1781810764.4685433,
-    "ast_hash": "027676c9a8a87ea8a0f4b1d40b46d8c2",
+    "mtime": 1781936319.3006864,
+    "ast_hash": "873c16546db284fd678dbf97659b733d",
     "semantic_hash": ""
   },
   "internal/repository/roleplay_repository.go": {
-    "mtime": 1781933044.0323305,
-    "ast_hash": "764a4163754bef9d2c17caea1801bf37",
+    "mtime": 1781936319.3015645,
+    "ast_hash": "89b871115a7587436606a09617c237ee",
     "semantic_hash": ""
   },
   "internal/repository/user_repository.go": {
@@ -875,8 +875,8 @@
     "semantic_hash": ""
   },
   "internal/router/api_handlers.go": {
-    "mtime": 1781933131.0845315,
-    "ast_hash": "3d4f9096269727b8290bc937f167d8dd",
+    "mtime": 1781936332.7168603,
+    "ast_hash": "f889c2350552c6a6c632229583b8dbfb",
     "semantic_hash": ""
   },
   "internal/router/city_engines_handlers.go": {
@@ -1425,18 +1425,18 @@
     "semantic_hash": ""
   },
   "internal/service/roleplay_quest_scene_builder.go": {
-    "mtime": 1781697863.1315763,
-    "ast_hash": "80e95ea94db7cc50b2be6a5338327858",
+    "mtime": 1781936285.5164182,
+    "ast_hash": "0e462af2c0e82c4d59f16abd6fdabbb3",
     "semantic_hash": ""
   },
   "internal/service/roleplay_quest_visual_service.go": {
-    "mtime": 1781698747.2773812,
-    "ast_hash": "b9c866d9d2d26c1e44322ea3d35eafad",
+    "mtime": 1781936366.5258021,
+    "ast_hash": "83e0228276b829dc1ddd6ca74ce9c6b6",
     "semantic_hash": ""
   },
   "internal/service/roleplay_quest_visual_service_test.go": {
-    "mtime": 1781695794.1886396,
-    "ast_hash": "70fae8d89b453fe82caa43deac4922cb",
+    "mtime": 1781936360.59179,
+    "ast_hash": "75b4973db61aa08af6a78dc26f6c1695",
     "semantic_hash": ""
   },
   "internal/service/rpg_map_coop_roll_test.go": {
@@ -1612,6 +1612,16 @@
   "internal/service/wallet_service.go": {
     "mtime": 1781793289.9086456,
     "ast_hash": "2e6b8ed898c25c194f39a0ce23eabea7",
+    "semantic_hash": ""
+  },
+  "internal/repository/roleplay_scene_compatibility.go": {
+    "mtime": 1781936319.2997255,
+    "ast_hash": "ce7d954f783dd4f3c518779688961a30",
+    "semantic_hash": ""
+  },
+  "internal/repository/roleplay_scene_compatibility_test.go": {
+    "mtime": 1781936360.592598,
+    "ast_hash": "7db16c217431736b07f331f9ef474b79",
     "semantic_hash": ""
   }
 }

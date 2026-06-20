@@ -70,3 +70,12 @@ func TestRolePlaySceneMatchSupportsBothKeyGenerations(t *testing.T) {
 		t.Fatal("exact modern key should be preferred over positional legacy match")
 	}
 }
+
+func TestRolePlaySceneUploadBatchLimitExceedsPerFileLimit(t *testing.T) {
+	t.Setenv("ROLEPLAY_SCENE_MAX_BYTES", "3145728")
+	t.Setenv("ROLEPLAY_SCENE_MAX_REQUEST_BYTES", "33554432")
+
+	if RolePlaySceneMaxUploadRequestBytes() <= RolePlaySceneMaxUploadBytes() {
+		t.Fatal("multipart batch limit must allow several valid files")
+	}
+}

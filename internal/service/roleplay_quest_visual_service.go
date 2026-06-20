@@ -972,3 +972,19 @@ func RolePlaySceneMaxUploadBytes() int64 {
 	}
 	return maxSize
 }
+
+// RolePlaySceneMaxUploadRequestBytes limits a complete multipart batch. It is
+// deliberately separate from the per-file limit so several valid images can
+// be uploaded together.
+func RolePlaySceneMaxUploadRequestBytes() int64 {
+	maxSize := int64(64 * 1024 * 1024)
+	if v := strings.TrimSpace(os.Getenv("ROLEPLAY_SCENE_MAX_REQUEST_BYTES")); v != "" {
+		if parsed, parseErr := parseInt64(v); parseErr == nil && parsed > 0 {
+			maxSize = parsed
+		}
+	}
+	if perFile := RolePlaySceneMaxUploadBytes(); maxSize < perFile {
+		return perFile
+	}
+	return maxSize
+}

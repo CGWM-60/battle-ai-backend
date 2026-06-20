@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -148,9 +149,21 @@ func (s *Server) uploadRolePlaySceneImageAdminAPI(c *gin.Context) {
 		return
 	}
 
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, service.RolePlaySceneMaxUploadBytes())
-	if err := c.Request.ParseMultipartForm(service.RolePlaySceneMaxUploadBytes()); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "upload too large or invalid multipart form"})
+	requestLimit := service.RolePlaySceneMaxUploadRequestBytes()
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, requestLimit)
+	if err := c.Request.ParseMultipartForm(requestLimit); err != nil {
+		status := http.StatusBadRequest
+		message := "invalid multipart form"
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			status = http.StatusRequestEntityTooLarge
+			message = "upload batch too large"
+		}
+		c.JSON(status, gin.H{
+			"error":               message,
+			"maxFileBytes":        service.RolePlaySceneMaxUploadBytes(),
+			"maxUploadBatchBytes": requestLimit,
+		})
 		return
 	}
 

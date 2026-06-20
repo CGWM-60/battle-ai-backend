@@ -8,6 +8,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func TestRequestBodyLimitAllowsRolePlayImageBatch(t *testing.T) {
+	t.Setenv("ROLEPLAY_SCENE_MAX_REQUEST_BYTES", "33554432")
+	got := requestBodyLimitForPath(http.MethodPost, "/admin/api/roleplay/quests/9/scenes/3/images", 10*1024*1024)
+	if got != 32*1024*1024 {
+		t.Fatalf("expected roleplay upload batch override, got %d", got)
+	}
+}
+
 func TestSecurityHeadersCacheNextStaticAssets(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
