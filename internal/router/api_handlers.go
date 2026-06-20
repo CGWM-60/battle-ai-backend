@@ -1936,6 +1936,9 @@ func listLiveSessions(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list live sessions"})
 			return
 		}
+		for index := range sessions {
+			repository.ApplyLiveSessionImageCompatibility(&sessions[index])
+		}
 
 		appResponseCache().SetJSON(c.Request.Context(), "live", cacheKey, sessions, 2*time.Second)
 		c.JSON(http.StatusOK, gin.H{"sessions": sessions})
@@ -1958,6 +1961,9 @@ func listPublicLiveSessions(database *gorm.DB) gin.HandlerFunc {
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot list public live sessions"})
 			return
+		}
+		for index := range sessions {
+			repository.ApplyLiveSessionImageCompatibility(&sessions[index])
 		}
 
 		appResponseCache().SetJSON(c.Request.Context(), "live", cacheKey, sessions, 2*time.Second)
@@ -3099,6 +3105,7 @@ func findOwnedLiveSessionByID(c *gin.Context, database *gorm.DB) (models.LiveSes
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get live session"})
 		return session, false
 	}
+	repository.ApplyLiveSessionImageCompatibility(&session)
 
 	return session, true
 }
@@ -3116,6 +3123,7 @@ func findPublicLiveSessionByID(c *gin.Context, database *gorm.DB) (models.LiveSe
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get public live session"})
 		return session, false
 	}
+	repository.ApplyLiveSessionImageCompatibility(&session)
 
 	return session, true
 }
@@ -3133,6 +3141,7 @@ func findOwnedLiveSessionByChannel(c *gin.Context, database *gorm.DB) (models.Li
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get live channel"})
 		return session, false
 	}
+	repository.ApplyLiveSessionImageCompatibility(&session)
 
 	return session, true
 }
@@ -3150,6 +3159,7 @@ func findPublicLiveSessionByChannel(c *gin.Context, database *gorm.DB) (models.L
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "cannot get public live channel"})
 		return session, false
 	}
+	repository.ApplyLiveSessionImageCompatibility(&session)
 
 	return session, true
 }

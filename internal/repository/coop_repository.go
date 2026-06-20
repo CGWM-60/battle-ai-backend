@@ -38,6 +38,11 @@ func (r *CoopRepository) ListPartiesByHost(ctx context.Context, hostUserID uint,
 		Order("updated_at DESC").
 		Limit(limit).
 		Find(&parties).Error
+	if err == nil {
+		for index := range parties {
+			ApplyCoopPartyImageCompatibility(&parties[index])
+		}
+	}
 	return parties, err
 }
 
@@ -51,6 +56,7 @@ func (r *CoopRepository) GetByCode(ctx context.Context, code string) (*models.Co
 	if err != nil {
 		return nil, err
 	}
+	ApplyCoopPartyImageCompatibility(&party)
 	return &party, nil
 }
 

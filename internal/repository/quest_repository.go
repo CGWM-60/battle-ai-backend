@@ -113,6 +113,11 @@ func (r *QuestRepository) ListRolePlayQuestsPage(ctx context.Context, status str
 		Limit(limit).
 		Offset(offset).
 		Find(&quests).Error
+	if err == nil {
+		for index := range quests {
+			ApplyRolePlayQuestImageCompatibility(&quests[index])
+		}
+	}
 	return quests, total, err
 }
 
@@ -122,6 +127,7 @@ func (r *QuestRepository) GetRolePlayQuestByID(ctx context.Context, id uint) (*m
 	if err != nil {
 		return nil, err
 	}
+	ApplyRolePlayQuestImageCompatibility(&quest)
 	return &quest, nil
 }
 

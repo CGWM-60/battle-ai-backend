@@ -24,6 +24,11 @@ func (r *RolePlayRepository) ListSessionsByOwner(ctx context.Context, ownerID ui
 		Order("updated_at DESC").
 		Limit(limit).
 		Find(&sessions).Error
+	if err == nil {
+		for index := range sessions {
+			ApplyRolePlaySessionImageCompatibility(&sessions[index])
+		}
+	}
 	return sessions, err
 }
 
@@ -36,6 +41,7 @@ func (r *RolePlayRepository) GetSessionOwnedByID(ctx context.Context, id uint, o
 	if err != nil {
 		return nil, err
 	}
+	ApplyRolePlaySessionImageCompatibility(&session)
 
 	return &session, nil
 }

@@ -3,9 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -29,29 +29,29 @@ func NewRolePlayQuestVisualService(db *gorm.DB) *RolePlayQuestVisualService {
 }
 
 type RolePlaySceneInput struct {
-	SceneKey            string
-	ArcID               *uint
-	ChapterID           *uint
-	ChapterIndex        int
-	ArcIndex            int
-	Title               string
-	Summary             string
-	Prompt              string
-	ImagePrompt         string
-	NegativePrompt      string
-	SceneType           string
-	RoomType            string
-	Atmosphere          string
-	DangerLevel         string
-	VisualTags          []string
-	RpgMetadata         map[string]any
+	SceneKey       string
+	ArcID          *uint
+	ChapterID      *uint
+	ChapterIndex   int
+	ArcIndex       int
+	Title          string
+	Summary        string
+	Prompt         string
+	ImagePrompt    string
+	NegativePrompt string
+	SceneType      string
+	RoomType       string
+	Atmosphere     string
+	DangerLevel    string
+	VisualTags     []string
+	RpgMetadata    map[string]any
 }
 
 type BackfillImagePromptsInput struct {
-	OnlyMissing       bool   `json:"onlyMissing"`
-	ForceRegenerate   bool   `json:"forceRegenerate"`
-	SceneMode         string `json:"sceneMode"`
-	SceneCount        int    `json:"sceneCount"`
+	OnlyMissing     bool   `json:"onlyMissing"`
+	ForceRegenerate bool   `json:"forceRegenerate"`
+	SceneMode       string `json:"sceneMode"`
+	SceneCount      int    `json:"sceneCount"`
 }
 
 type BackfillImagePromptsResult struct {
@@ -165,24 +165,24 @@ func (s *RolePlayQuestVisualService) CreateScenes(ctx context.Context, questID u
 		tags, _ := json.Marshal(input.VisualTags)
 		rpg, _ := json.Marshal(input.RpgMetadata)
 		scene := models.RolePlayQuestScene{
-			QuestID:             questID,
-			ArcID:               input.ArcID,
-			ChapterID:           input.ChapterID,
-			SceneKey:            defaultString(input.SceneKey, fmt.Sprintf("scene_%02d", input.ChapterIndex)),
-			ChapterIndex:        input.ChapterIndex,
-			ArcIndex:            input.ArcIndex,
-			Title:               input.Title,
-			Summary:             input.Summary,
-			Prompt:              input.Prompt,
-			ImagePrompt:         input.ImagePrompt,
-			NegativePrompt:      input.NegativePrompt,
-			SceneType:           defaultString(input.SceneType, "exploration"),
-			RoomType:            defaultString(input.RoomType, "generic"),
-			Atmosphere:          defaultString(input.Atmosphere, "mysterious"),
-			DangerLevel:         defaultString(input.DangerLevel, "medium"),
-			VisualTags:          datatypes.JSON(tags),
-			RpgMetadata:         datatypes.JSON(rpg),
-			ImageStatus:         "prompt_only",
+			QuestID:        questID,
+			ArcID:          input.ArcID,
+			ChapterID:      input.ChapterID,
+			SceneKey:       defaultString(input.SceneKey, fmt.Sprintf("scene_%02d", input.ChapterIndex)),
+			ChapterIndex:   input.ChapterIndex,
+			ArcIndex:       input.ArcIndex,
+			Title:          input.Title,
+			Summary:        input.Summary,
+			Prompt:         input.Prompt,
+			ImagePrompt:    input.ImagePrompt,
+			NegativePrompt: input.NegativePrompt,
+			SceneType:      defaultString(input.SceneType, "exploration"),
+			RoomType:       defaultString(input.RoomType, "generic"),
+			Atmosphere:     defaultString(input.Atmosphere, "mysterious"),
+			DangerLevel:    defaultString(input.DangerLevel, "medium"),
+			VisualTags:     datatypes.JSON(tags),
+			RpgMetadata:    datatypes.JSON(rpg),
+			ImageStatus:    "prompt_only",
 		}
 		if err := s.db.WithContext(ctx).Create(&scene).Error; err != nil {
 			return created, err
@@ -351,19 +351,33 @@ func (s *RolePlayQuestVisualService) CreateOrUpdateScenesForChapters(
 	if err := s.db.WithContext(ctx).Where("quest_id = ?", questID).Find(&existing).Error; err != nil {
 		return 0, err
 	}
-	byChapterID := map[uint]uint{}
-	for _, scene := range existing {
-		if scene.ChapterID != nil && *scene.ChapterID > 0 {
-			byChapterID[*scene.ChapterID] = scene.Id
-		}
-	}
-
 	created := 0
 	for _, input := range inputs {
-		if input.ChapterID != nil {
-			if _, ok := byChapterID[*input.ChapterID]; ok {
-				continue
+		if matchIndex := bestMatchingRolePlaySceneIndex(existing, input); matchIndex >= 0 {
+			matched := &existing[matchIndex]
+			updates := map[string]any{}
+			if matched.ArcID == nil && input.ArcID != nil {
+				updates["arc_id"] = *input.ArcID
+				matched.ArcID = input.ArcID
 			}
+			if matched.ChapterID == nil && input.ChapterID != nil {
+				updates["chapter_id"] = *input.ChapterID
+				matched.ChapterID = input.ChapterID
+			}
+			if matched.ArcIndex <= 0 && input.ArcIndex > 0 {
+				updates["arc_index"] = input.ArcIndex
+				matched.ArcIndex = input.ArcIndex
+			}
+			if matched.ChapterIndex <= 0 && input.ChapterIndex > 0 {
+				updates["chapter_index"] = input.ChapterIndex
+				matched.ChapterIndex = input.ChapterIndex
+			}
+			if len(updates) > 0 {
+				if err := s.db.WithContext(ctx).Model(&models.RolePlayQuestScene{}).Where("id = ?", matched.Id).Updates(updates).Error; err != nil {
+					return created, err
+				}
+			}
+			continue
 		}
 		count, err := s.CreateScenes(ctx, questID, []RolePlaySceneInput{input})
 		if err != nil {
@@ -401,6 +415,27 @@ func (s *RolePlayQuestVisualService) ResolveOrCreateSceneForChapter(
 
 	for _, input := range BuildScenesFromQuestStructure(quest) {
 		if input.ChapterID != nil && *input.ChapterID == chapterID {
+			var existing []models.RolePlayQuestScene
+			if err := s.db.WithContext(ctx).Where("quest_id = ?", questID).Order("id ASC").Find(&existing).Error; err != nil {
+				return nil, err
+			}
+			if matchIndex := bestMatchingRolePlaySceneIndex(existing, input); matchIndex >= 0 {
+				scene = existing[matchIndex]
+				updates := map[string]any{
+					"arc_id":        input.ArcID,
+					"chapter_id":    input.ChapterID,
+					"arc_index":     input.ArcIndex,
+					"chapter_index": input.ChapterIndex,
+				}
+				if err := s.db.WithContext(ctx).Model(&models.RolePlayQuestScene{}).Where("id = ?", scene.Id).Updates(updates).Error; err != nil {
+					return nil, err
+				}
+				scene.ArcID = input.ArcID
+				scene.ChapterID = input.ChapterID
+				scene.ArcIndex = input.ArcIndex
+				scene.ChapterIndex = input.ChapterIndex
+				return &scene, nil
+			}
 			if _, err := s.CreateScenes(ctx, questID, []RolePlaySceneInput{input}); err != nil {
 				return nil, err
 			}
@@ -485,11 +520,11 @@ func (s *RolePlayQuestVisualService) applyHeuristicVisualsForQuest(
 }
 
 type generatedQuestVisuals struct {
-	ImagePrompt         string                   `json:"imagePrompt"`
-	ImageNegativePrompt string                   `json:"imageNegativePrompt"`
-	VisualStyle         string                   `json:"visualStyle"`
-	VisualTags          []string                 `json:"visualTags"`
-	RpgMetadata         map[string]any           `json:"rpgMetadata"`
+	ImagePrompt         string                      `json:"imagePrompt"`
+	ImageNegativePrompt string                      `json:"imageNegativePrompt"`
+	VisualStyle         string                      `json:"visualStyle"`
+	VisualTags          []string                    `json:"visualTags"`
+	RpgMetadata         map[string]any              `json:"rpgMetadata"`
 	Scenes              []generatedQuestVisualScene `json:"scenes"`
 }
 
@@ -786,25 +821,25 @@ func buildDefaultScenes(theme, level, title, summary string) []RolePlaySceneInpu
 			SceneKey: "scene_01_entry", ChapterIndex: 1, ArcIndex: 1,
 			Title: "Entrée", Summary: fmt.Sprintf("Ouverture de %s", title),
 			SceneType: "exploration", RoomType: "entrance", Atmosphere: "mysterious", DangerLevel: "low",
-			ImagePrompt: buildSceneImagePrompt(theme, "entrance", "Entrée", summary),
+			ImagePrompt:    buildSceneImagePrompt(theme, "entrance", "Entrée", summary),
 			NegativePrompt: buildDefaultNegativePrompt(),
-			VisualTags: []string{"entrance", "fog"},
+			VisualTags:     []string{"entrance", "fog"},
 		},
 		{
 			SceneKey: "scene_02_conflict", ChapterIndex: 2, ArcIndex: 1,
 			Title: "Conflit", Summary: "Tension et exploration",
 			SceneType: "exploration", RoomType: "corridor", Atmosphere: "tense", DangerLevel: "medium",
-			ImagePrompt: buildSceneImagePrompt(theme, "corridor", "Conflit", summary),
+			ImagePrompt:    buildSceneImagePrompt(theme, "corridor", "Conflit", summary),
 			NegativePrompt: buildDefaultNegativePrompt(),
-			VisualTags: []string{"corridor", "shadows"},
+			VisualTags:     []string{"corridor", "shadows"},
 		},
 		{
 			SceneKey: "scene_03_climax", ChapterIndex: 3, ArcIndex: 1,
 			Title: "Climax", Summary: "Révélation ou confrontation",
 			SceneType: "boss", RoomType: "boss_room", Atmosphere: "dramatic", DangerLevel: levelDanger(level),
-			ImagePrompt: buildSceneImagePrompt(theme, "boss_room", "Climax", summary),
+			ImagePrompt:    buildSceneImagePrompt(theme, "boss_room", "Climax", summary),
 			NegativePrompt: buildDefaultNegativePrompt(),
-			VisualTags: []string{"boss", "dramatic_light"},
+			VisualTags:     []string{"boss", "dramatic_light"},
 		},
 	}
 }

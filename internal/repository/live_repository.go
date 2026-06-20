@@ -27,6 +27,11 @@ func (r *LiveRepository) ListSessionsByOwner(ctx context.Context, ownerID uint, 
 		Order("updated_at DESC").
 		Limit(limit).
 		Find(&sessions).Error
+	if err == nil {
+		for index := range sessions {
+			ApplyLiveSessionImageCompatibility(&sessions[index])
+		}
+	}
 	return sessions, err
 }
 
@@ -38,6 +43,7 @@ func (r *LiveRepository) GetSessionOwnedByID(ctx context.Context, id uint, owner
 	if err != nil {
 		return nil, err
 	}
+	ApplyLiveSessionImageCompatibility(&session)
 
 	return &session, nil
 }
@@ -50,6 +56,7 @@ func (r *LiveRepository) GetSessionOwnedByChannel(ctx context.Context, channel s
 	if err != nil {
 		return nil, err
 	}
+	ApplyLiveSessionImageCompatibility(&session)
 
 	return &session, nil
 }

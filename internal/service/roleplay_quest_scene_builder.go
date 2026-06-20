@@ -3,10 +3,14 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"cgwm/battle/internal/models"
 )
+
+var legacyRolePlaySceneKeyPattern = regexp.MustCompile(`^scene_(\d+)(?:_|$)`)
 
 const (
 	SceneModePerChapter = "per_chapter"
@@ -202,28 +206,58 @@ func missingChapterSceneInputs(
 		return nil
 	}
 
-	byChapterID := map[uint]bool{}
-	byPosition := map[string]bool{}
-	for _, scene := range existing {
-		if scene.ChapterID != nil && *scene.ChapterID > 0 {
-			byChapterID[*scene.ChapterID] = true
-		}
-		key := fmt.Sprintf("%d:%d", scene.ArcIndex, scene.ChapterIndex)
-		byPosition[key] = true
-	}
-
 	missing := make([]RolePlaySceneInput, 0)
 	for _, input := range desired {
-		if input.ChapterID != nil && byChapterID[*input.ChapterID] {
-			continue
+		covered := false
+		for _, scene := range existing {
+			if rolePlaySceneMatchScore(scene, input) > 0 {
+				covered = true
+				break
+			}
 		}
-		key := fmt.Sprintf("%d:%d", input.ArcIndex, input.ChapterIndex)
-		if byPosition[key] {
-			continue
+		if !covered {
+			missing = append(missing, input)
 		}
-		missing = append(missing, input)
 	}
 	return missing
+}
+
+// rolePlaySceneMatchScore keeps the historical scene_XX_* structure compatible
+// with the newer arc_XX_chapter_XX structure. ChapterIndex is global in both
+// generations and is therefore the stable fallback when IDs/keys differ.
+func rolePlaySceneMatchScore(scene models.RolePlayQuestScene, input RolePlaySceneInput) int {
+	if input.ChapterID != nil && scene.ChapterID != nil && *input.ChapterID == *scene.ChapterID {
+		return 100
+	}
+	if input.SceneKey != "" && strings.EqualFold(strings.TrimSpace(scene.SceneKey), strings.TrimSpace(input.SceneKey)) {
+		return 90
+	}
+	if ordinal := legacyRolePlaySceneOrdinal(scene.SceneKey); ordinal > 0 && ordinal == input.ChapterIndex {
+		return 70
+	}
+	if input.ChapterIndex > 0 && scene.ChapterIndex == input.ChapterIndex {
+		return 60
+	}
+	return 0
+}
+
+func legacyRolePlaySceneOrdinal(sceneKey string) int {
+	match := legacyRolePlaySceneKeyPattern.FindStringSubmatch(strings.ToLower(strings.TrimSpace(sceneKey)))
+	if len(match) != 2 {
+		return 0
+	}
+	ordinal, _ := strconv.Atoi(match[1])
+	return ordinal
+}
+
+func bestMatchingRolePlaySceneIndex(scenes []models.RolePlayQuestScene, input RolePlaySceneInput) int {
+	bestIndex, bestScore := -1, 0
+	for index, scene := range scenes {
+		if score := rolePlaySceneMatchScore(scene, input); score > bestScore {
+			bestIndex, bestScore = index, score
+		}
+	}
+	return bestIndex
 }
 
 func inferChapterSceneType(chapter models.RolePlayQuestChapter) string {
