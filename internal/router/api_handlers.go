@@ -896,7 +896,7 @@ func randomBattleQuest(database *gorm.DB) gin.HandlerFunc {
 func listIAProfiles(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var profiles []models.IAProfile
-		err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
+		err := database.WithContext(c.Request.Context()).
 			Where("owner_id = ?", currentUserID(c)).
 			Order("updated_at DESC").
 			Limit(limitFromQuery(c)).
@@ -2856,7 +2856,7 @@ func findPublicBattle(c *gin.Context, database *gorm.DB) (models.BattleSave, boo
 
 func findOwnedIAProfile(c *gin.Context, database *gorm.DB) (models.IAProfile, bool) {
 	var profile models.IAProfile
-	err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
+	err := database.WithContext(c.Request.Context()).
 		Where("id = ? AND owner_id = ?", c.Param("id"), currentUserID(c)).
 		First(&profile).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
