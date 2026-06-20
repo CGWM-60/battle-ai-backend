@@ -16,14 +16,35 @@ func PreloadRolePlayQuestVisuals(db *gorm.DB, rolePlaySessionPath string) *gorm.
 
 	return db.
 		Preload(questRuns, func(tx *gorm.DB) *gorm.DB {
-			return tx.Order("created_at DESC").Order("id DESC")
+			return tx.
+				Select("id", "created_at", "updated_at", "template_id", "session_id", "title", "status", "current_step", "total_steps", "current_arc_id", "current_chapter_id").
+				Order("created_at DESC").
+				Order("id DESC")
 		}).
-		Preload(template).
+		Preload(template, func(tx *gorm.DB) *gorm.DB {
+			return tx.Select(
+				"id", "title", "summary", "theme", "level", "status", "is_published",
+				"image_url", "visual_style", "visual_tags", "rpg_metadata",
+			)
+		}).
 		Preload(scenes, func(tx *gorm.DB) *gorm.DB {
-			return tx.Order("chapter_index ASC").Order("id ASC")
+			return tx.
+				Select(
+					"id", "quest_id", "arc_id", "chapter_id", "scene_key", "chapter_index", "arc_index",
+					"title", "summary", "image_url", "image_alt", "image_status", "image_storage_key",
+					"scene_type", "room_type", "atmosphere", "danger_level", "visual_tags", "rpg_metadata",
+				).
+				Order("chapter_index ASC").
+				Order("id ASC")
 		}).
 		Preload(scenes+".Images", func(tx *gorm.DB) *gorm.DB {
-			return tx.Order("is_main DESC").Order("id ASC")
+			return tx.
+				Select(
+					"id", "scene_id", "quest_id", "url", "storage_key", "filename", "mime_type",
+					"size", "width", "height", "is_main", "alt", "source",
+				).
+				Order("is_main DESC").
+				Order("id ASC")
 		})
 }
 
