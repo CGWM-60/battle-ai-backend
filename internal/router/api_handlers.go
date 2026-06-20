@@ -615,7 +615,7 @@ func resumeBattle(database *gorm.DB) gin.HandlerFunc {
 func listBattles(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var battles []models.BattleSave
-		err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
+		err := database.WithContext(c.Request.Context()).
 			Where("owner_id = ?", currentUserID(c)).
 			Order("updated_at DESC").
 			Limit(limitFromQuery(c)).
@@ -896,7 +896,7 @@ func randomBattleQuest(database *gorm.DB) gin.HandlerFunc {
 func listIAProfiles(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var profiles []models.IAProfile
-		err := database.WithContext(c.Request.Context()).
+		err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
 			Where("owner_id = ?", currentUserID(c)).
 			Order("updated_at DESC").
 			Limit(limitFromQuery(c)).
@@ -1927,7 +1927,7 @@ func listLiveSessions(database *gorm.DB) gin.HandlerFunc {
 			c.JSON(http.StatusOK, gin.H{"sessions": sessions})
 			return
 		}
-		err := database.WithContext(c.Request.Context()).
+		err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
 			Where("owner_id = ?", currentUserID(c)).
 			Order("updated_at DESC").
 			Limit(limit).
@@ -2822,7 +2822,7 @@ func applyProfileToBattleRequest(profile *models.IAProfile, req *battleRequest, 
 
 func findOwnedBattle(c *gin.Context, database *gorm.DB) (models.BattleSave, bool) {
 	var battle models.BattleSave
-	err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
+	err := database.WithContext(c.Request.Context()).
 		Where("id = ? AND owner_id = ?", c.Param("id"), currentUserID(c)).
 		First(&battle).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -2856,7 +2856,7 @@ func findPublicBattle(c *gin.Context, database *gorm.DB) (models.BattleSave, boo
 
 func findOwnedIAProfile(c *gin.Context, database *gorm.DB) (models.IAProfile, bool) {
 	var profile models.IAProfile
-	err := database.WithContext(c.Request.Context()).
+	err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
 		Where("id = ? AND owner_id = ?", c.Param("id"), currentUserID(c)).
 		First(&profile).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -3088,7 +3088,7 @@ func parseUintParam(c *gin.Context, name string) (uint, error) {
 
 func findOwnedLiveSessionByID(c *gin.Context, database *gorm.DB) (models.LiveSession, bool) {
 	var session models.LiveSession
-	err := database.WithContext(c.Request.Context()).
+	err := repository.PreloadLiveRolePlayQuestVisuals(database.WithContext(c.Request.Context())).
 		Where("id = ? AND owner_id = ?", c.Param("id"), currentUserID(c)).
 		First(&session).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
