@@ -14,6 +14,9 @@ import (
 
 func main() {
 	database := db.DbConnect()
+	if err := translations.PurgeDeprecatedTranslations(context.Background(), database); err != nil {
+		panic(fmt.Sprintf("failed to purge deprecated translations: %v", err))
+	}
 	if features.NexusGameEnabled() {
 		if _, err := translations.SeedInitialImport(context.Background(), database); err != nil {
 			panic(fmt.Sprintf("failed to seed initial nexus translations: %v", err))

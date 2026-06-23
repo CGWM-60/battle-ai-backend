@@ -16,6 +16,10 @@ var initialImportFS embed.FS
 const initialImportPath = "imports/NEXUS_TRANSLATIONS_INITIAL_IMPORT.fr.json"
 
 func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.TranslationImport, error) {
+	if err := PurgeDeprecatedTranslations(ctx, database); err != nil {
+		return nil, err
+	}
+
 	raw, err := initialImportFS.ReadFile(initialImportPath)
 	if err != nil {
 		return nil, err
@@ -77,7 +81,7 @@ func initialSeedRows(importRows []models.TranslationImportRow, fallbackLocale st
 		if row.Locale == "" {
 			row.Locale = fallbackLocale
 		}
-		if row.Domain == "" || row.Key == "" || row.Locale == "" {
+		if row.Domain == "" || row.Key == "" || row.Locale == "" || !isRetainedTranslation(row.Domain, row.Key) {
 			continue
 		}
 		byKeyLocale[row.Key+"|"+row.Locale] = row
@@ -85,7 +89,8 @@ func initialSeedRows(importRows []models.TranslationImportRow, fallbackLocale st
 	for key, value := range DefaultFrenchFallback {
 		key = strings.TrimSpace(key)
 		value = strings.TrimSpace(value)
-		if key == "" || value == "" {
+		domain := strings.SplitN(key, ".", 2)[0]
+		if key == "" || value == "" || !isRetainedTranslation(domain, key) {
 			continue
 		}
 		mapKey := key + "|fr"
@@ -93,7 +98,7 @@ func initialSeedRows(importRows []models.TranslationImportRow, fallbackLocale st
 			continue
 		}
 		byKeyLocale[mapKey] = models.TranslationImportRow{
-			Domain: strings.SplitN(key, ".", 2)[0],
+			Domain: domain,
 			Key:    key,
 			Locale: "fr",
 			Value:  value,

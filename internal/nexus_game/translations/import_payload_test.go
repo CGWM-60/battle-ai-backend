@@ -59,14 +59,28 @@ func TestInitialSeedRowsIncludesDefaultFrenchFallback(t *testing.T) {
 
 	var found bool
 	for _, row := range rows {
-		if row.Key == "nexus_game.profile.error.load_choices" && row.Locale == "fr" {
+		if row.Key == "battle.action.start" && row.Locale == "fr" {
 			found = true
-			if row.Domain != "nexus_game" || row.Value == "" {
+			if row.Domain != "battle" || row.Value == "" {
 				t.Fatalf("unexpected fallback row: %+v", row)
 			}
 		}
 	}
 	if !found {
-		t.Fatalf("expected fallback key nexus_game.profile.error.load_choices in initial seed rows")
+		t.Fatalf("expected fallback key battle.action.start in initial seed rows")
+	}
+}
+
+func TestInitialSeedRowsSkipsDeprecatedTranslationDomains(t *testing.T) {
+	rows := initialSeedRows([]models.TranslationImportRow{
+		{Domain: "nexus_game", Key: "nexus_game.city.population", Locale: "fr", Value: "Population"},
+		{Domain: "building", Key: "building.modular_habitat.name", Locale: "fr", Value: "Habitat"},
+		{Domain: "battle", Key: "battle.action.start", Locale: "fr", Value: "Démarrer"},
+	}, "fr")
+
+	for _, row := range rows {
+		if row.Domain == "nexus_game" || row.Domain == "building" {
+			t.Fatalf("deprecated translation domain should be purged: %+v", row)
+		}
 	}
 }

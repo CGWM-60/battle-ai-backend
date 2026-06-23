@@ -680,8 +680,8 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/services/server_ai_service.go": {
-    "mtime": 1781178887.2291195,
-    "ast_hash": "1460751ac39d0418ec25fa6fa67f0725",
+    "mtime": 1781970354.3514392,
+    "ast_hash": "1a0fb00faa08080ce07696ec16e6e8d1",
     "semantic_hash": ""
   },
   "internal/nexus_game/services/world_service.go": {
@@ -705,13 +705,13 @@
     "semantic_hash": "6fc3ebed28dbf9cc3365f9579e59c9e0"
   },
   "internal/nexus_game/translations/import_payload_test.go": {
-    "mtime": 1780983102.9547431,
-    "ast_hash": "e1ae47ee247685a7264e467c0b156e06",
-    "semantic_hash": "e1ae47ee247685a7264e467c0b156e06"
+    "mtime": 1782222737.5275552,
+    "ast_hash": "830a0159f3916b4b356334ecbe8eff45",
+    "semantic_hash": ""
   },
   "internal/nexus_game/translations/imports/NEXUS_TRANSLATIONS_INITIAL_IMPORT.fr.json": {
-    "mtime": 1781184244.235722,
-    "ast_hash": "61489f9b0688256664cea3bfe3781c54",
+    "mtime": 1782222885.827238,
+    "ast_hash": "18a87c01013ce8aea000d3e6e59737fb",
     "semantic_hash": ""
   },
   "internal/nexus_game/translations/routes.go": {
@@ -720,14 +720,14 @@
     "semantic_hash": "16ae577a58b10c0cfcdbf16afcf08c9e"
   },
   "internal/nexus_game/translations/seed_initial.go": {
-    "mtime": 1781178539.4679227,
-    "ast_hash": "1c10470559e5f97ee45b15e3b92fc9e8",
+    "mtime": 1782222650.3039985,
+    "ast_hash": "5d4fd3b9ae7648b5b5d70b7762858853",
     "semantic_hash": ""
   },
   "internal/nexus_game/translations/service.go": {
-    "mtime": 1780996504.753137,
-    "ast_hash": "b23278b68e2e996b530b2997f149275c",
-    "semantic_hash": "b23278b68e2e996b530b2997f149275c"
+    "mtime": 1782222885.8280506,
+    "ast_hash": "ffb8131261d50ca0abd807c70baaf38b",
+    "semantic_hash": ""
   },
   "internal/nexus_tribunal/adapters/ai_provider_adapter.go": {
     "mtime": 1780559570.501379,
@@ -875,8 +875,8 @@
     "semantic_hash": ""
   },
   "internal/router/api_handlers.go": {
-    "mtime": 1781947424.4170995,
-    "ast_hash": "2b1b1ba6c4128908cc65469a1e5a5e8b",
+    "mtime": 1781970508.466373,
+    "ast_hash": "3735f6b24266f9acbfb90e67898a0062",
     "semantic_hash": ""
   },
   "internal/router/city_engines_handlers.go": {
@@ -1045,8 +1045,8 @@
     "semantic_hash": "6ec65ff5bff417e8d53dc31e9d35b29f"
   },
   "main.go": {
-    "mtime": 1781611542.1408477,
-    "ast_hash": "c9eccc9b04831a12a3faf353cf2042cc",
+    "mtime": 1782222956.8352513,
+    "ast_hash": "11eb42d4d25b2cdfe5bedfb8188751eb",
     "semantic_hash": ""
   },
   "ADMIN_PANEL.md": {
@@ -1110,8 +1110,8 @@
     "semantic_hash": "65ac1ff3b8e2df02ed2c626b4a49c363"
   },
   "compose.prod.yml": {
-    "mtime": 1781269982.3209798,
-    "ast_hash": "13486aae540ad2fc955f4b1268c95d73",
+    "mtime": 1781970354.3934073,
+    "ast_hash": "2639297f47d8e7ee1b4dec535783c57a",
     "semantic_hash": ""
   },
   "docs/WORLD_API_CONTRACT.md": {
@@ -1220,13 +1220,8 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/translations/content_descriptions.go": {
-    "mtime": 1781184175.161227,
-    "ast_hash": "f4b7dc39247f6e3c2e14cee2a4fa0b12",
-    "semantic_hash": ""
-  },
-  "internal/nexus_game/translations/content_descriptions_test.go": {
-    "mtime": 1781178716.396709,
-    "ast_hash": "490ffeb903c2110ace8cb6ddd4f845ad",
+    "mtime": 1782222715.228072,
+    "ast_hash": "8920c07a3a02a699273e6b71c8704658",
     "semantic_hash": ""
   },
   "internal/repository/roleplay_character_repository.go": {
@@ -1622,6 +1617,16 @@
   "internal/repository/roleplay_scene_compatibility_test.go": {
     "mtime": 1781936360.592598,
     "ast_hash": "7db16c217431736b07f331f9ef474b79",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/translations/purge.go": {
+    "mtime": 1782222894.699129,
+    "ast_hash": "0d80e0694131929b5ece70aca95117e6",
+    "semantic_hash": ""
+  },
+  "internal/router/api_handlers_timeout_test.go": {
+    "mtime": 1781970354.3361034,
+    "ast_hash": "5240d7ff1593e051ccbc47ec06b1c59a",
     "semantic_hash": ""
   }
 }
