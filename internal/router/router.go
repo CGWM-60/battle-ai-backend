@@ -260,7 +260,6 @@ func registerDeprecatedNexusGameRoutes(router *gin.Engine) {
 	router.Any("/api/v1/assets/buildings/updates", handler)
 
 	router.GET("/admin/nexus", adminHandler)
-	router.GET("/admin/nexus/*path", adminHandler)
 	router.GET("/admin/nexus-coin", adminHandler)
 	router.GET("/admin/nexus-coin/*path", adminHandler)
 }

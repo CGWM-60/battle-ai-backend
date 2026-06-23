@@ -5,8 +5,8 @@
     "semantic_hash": "800b587e27a7f9670c50b953f0d8af9b"
   },
   "admin/app/components/AdminShell.tsx": {
-    "mtime": 1781615257.8715508,
-    "ast_hash": "7fdd62a99a3813401eb1b1d2b1960481",
+    "mtime": 1782223811.41407,
+    "ast_hash": "2b2c4c7242a137a553de4d2c36a3a0c1",
     "semantic_hash": ""
   },
   "admin/app/components/LoadState.tsx": {
@@ -325,8 +325,8 @@
     "semantic_hash": "d5381f740cc9e114d7b0af83d6d80e04"
   },
   "internal/admin/admin.go": {
-    "mtime": 1781698756.9092433,
-    "ast_hash": "6b85d68d6ca30adbca1f84db833c0878",
+    "mtime": 1782223838.1806214,
+    "ast_hash": "33ecdfb15a37f9df9074a63e39e5f20c",
     "semantic_hash": ""
   },
   "internal/admin/admin_test.go": {
@@ -905,8 +905,8 @@
     "semantic_hash": ""
   },
   "internal/router/router.go": {
-    "mtime": 1781793164.1649604,
-    "ast_hash": "252c024bf07714cfb93fab27ffeab133",
+    "mtime": 1782223838.1757119,
+    "ast_hash": "4d5b6b685000c74fe201b5a96d63be7c",
     "semantic_hash": ""
   },
   "internal/router/router_startup_test.go": {
@@ -1290,8 +1290,8 @@
     "semantic_hash": ""
   },
   "admin/app/nexus/layout.tsx": {
-    "mtime": 1781509034.2862692,
-    "ast_hash": "71533d64c18e841d94ce6b07c427d6ce",
+    "mtime": 1782223831.3299937,
+    "ast_hash": "4a412a382b99c153e648c2380ea8ca86",
     "semantic_hash": ""
   },
   "internal/features/features.go": {

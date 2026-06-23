@@ -450,8 +450,8 @@
     "semantic_hash": "07eff2ad967ccf76bcc38c613fd9e119"
   },
   "internal/models/models.go": {
-    "mtime": 1781788186.5563993,
-    "ast_hash": "cdfa94982e01b48a62760970d2d8748f",
+    "mtime": 1782227077.5691445,
+    "ast_hash": "816a2411f62ba313f0296c64ab1396db",
     "semantic_hash": ""
   },
   "internal/models/nexus_translation_models.go": {
@@ -875,8 +875,8 @@
     "semantic_hash": ""
   },
   "internal/router/api_handlers.go": {
-    "mtime": 1781970508.466373,
-    "ast_hash": "3735f6b24266f9acbfb90e67898a0062",
+    "mtime": 1782227730.9965289,
+    "ast_hash": "160eb34855db5e2b521bea35a1491ea8",
     "semantic_hash": ""
   },
   "internal/router/city_engines_handlers.go": {
@@ -905,8 +905,8 @@
     "semantic_hash": ""
   },
   "internal/router/router.go": {
-    "mtime": 1782223838.1757119,
-    "ast_hash": "4d5b6b685000c74fe201b5a96d63be7c",
+    "mtime": 1782231853.0896006,
+    "ast_hash": "a541b49df8b253c93933b9df2ba451df",
     "semantic_hash": ""
   },
   "internal/router/router_startup_test.go": {
@@ -945,9 +945,9 @@
     "semantic_hash": "8ce4719b5155bb2d331c9a237434d9c1"
   },
   "internal/scenarios/battle.go": {
-    "mtime": 1779725619.396366,
-    "ast_hash": "8ee1a7a71f25ac6060b8a24d3b7e3530",
-    "semantic_hash": "8ee1a7a71f25ac6060b8a24d3b7e3530"
+    "mtime": 1782227090.7404943,
+    "ast_hash": "d039be0a44495ab125f52f9c860b287e",
+    "semantic_hash": ""
   },
   "internal/scenarios/dev_e2e_test.go": {
     "mtime": 1779633464.595022,
@@ -985,8 +985,8 @@
     "semantic_hash": "dd31970893884ebfcfa311ef53aae5b1"
   },
   "internal/service/battle_service.go": {
-    "mtime": 1781795450.7982438,
-    "ast_hash": "93e9c4c83c4d0693f4cd049e874c02fe",
+    "mtime": 1782227340.0656703,
+    "ast_hash": "296d750bfb11f2164119724601150282",
     "semantic_hash": ""
   },
   "internal/service/coop_service.go": {
@@ -1545,8 +1545,8 @@
     "semantic_hash": ""
   },
   "internal/service/ai_orchestrator_test.go": {
-    "mtime": 1781795048.3692355,
-    "ast_hash": "f0c084b2cf46df9d2cad6259c41f2165",
+    "mtime": 1782227367.2221625,
+    "ast_hash": "2ab19054feaa893453e7c9f068a44909",
     "semantic_hash": ""
   },
   "internal/service/billing_env.go": {
@@ -1627,6 +1627,11 @@
   "internal/router/api_handlers_timeout_test.go": {
     "mtime": 1781970354.3361034,
     "ast_hash": "5240d7ff1593e051ccbc47ec06b1c59a",
+    "semantic_hash": ""
+  },
+  "internal/service/ai_provider_generation_service.go": {
+    "mtime": 1782229249.4927654,
+    "ast_hash": "eb57e4b678a6acc0c4fd3bddbcb0df50",
     "semantic_hash": ""
   }
 }
