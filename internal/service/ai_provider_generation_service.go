@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cgwm/battle/internal/app/constants"
+	"cgwm/battle/internal/models"
 	"cgwm/battle/internal/provider"
 	"cgwm/battle/internal/repository"
 )
@@ -49,7 +50,6 @@ func NewAIProviderGenerationService(usage *repository.AIUsageRepository, orchest
 func (s *AIProviderGenerationService) Generate(ctx context.Context, input AIProviderGenerationInput) (*AIProviderGenerationResult, error) {
 	providerName := strings.TrimSpace(input.ProviderName)
 	modelName := strings.TrimSpace(input.ModelName)
-	apiKey := strings.TrimSpace(input.APIKey)
 	prompt := strings.TrimSpace(input.Prompt)
 	billingMode := strings.TrimSpace(input.BillingMode)
 
@@ -61,9 +61,76 @@ func (s *AIProviderGenerationService) Generate(ctx context.Context, input AIProv
 	if providerName == "" || modelName == "" {
 		return nil, fmt.Errorf("providerName and modelName are required")
 	}
-	if billingMode == "" && apiKey == "" {
+	if billingMode == "" && strings.TrimSpace(input.APIKey) == "" {
 		return nil, fmt.Errorf("apiKey is required")
 	}
+
+	attempts := aiProviderGenerationAttempts(billingMode, providerName, modelName, input.FallbackEnabled)
+	var lastErr error
+	for index, attempt := range attempts {
+		attemptInput := input
+		attemptInput.ProviderName = attempt.providerName
+		attemptInput.ModelName = attempt.modelName
+		result, err := s.generateOnce(ctx, attemptInput)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+		if !shouldTryNextAIProviderGenerationAttempt(billingMode, input.FallbackEnabled, index, len(attempts), err) {
+			return nil, err
+		}
+	}
+
+	return nil, lastErr
+}
+
+type aiProviderGenerationAttempt struct {
+	providerName string
+	modelName    string
+}
+
+func aiProviderGenerationAttempts(billingMode, providerName, modelName string, fallbackEnabled bool) []aiProviderGenerationAttempt {
+	attempts := []aiProviderGenerationAttempt{{
+		providerName: providerName,
+		modelName:    modelName,
+	}}
+	if normalizeBillingMode(billingMode) != models.BillingModePlatform || !fallbackEnabled {
+		return attempts
+	}
+
+	seen := map[string]bool{normalizeProviderName(providerName): true}
+	for _, fallbackProvider := range []string{"mistral", "openai"} {
+		normalized := normalizeProviderName(fallbackProvider)
+		if seen[normalized] {
+			continue
+		}
+		seen[normalized] = true
+		attempts = append(attempts, aiProviderGenerationAttempt{
+			providerName: fallbackProvider,
+			modelName:    platformBattleModel(fallbackProvider),
+		})
+	}
+	return attempts
+}
+
+func shouldTryNextAIProviderGenerationAttempt(billingMode string, fallbackEnabled bool, index int, total int, err error) bool {
+	if normalizeBillingMode(billingMode) != models.BillingModePlatform || !fallbackEnabled || index >= total-1 {
+		return false
+	}
+	if billingErr, ok := AsBillingError(err); ok {
+		if strings.Contains(strings.ToLower(billingErr.Message), "insufficient credits") {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AIProviderGenerationInput) (*AIProviderGenerationResult, error) {
+	providerName := strings.TrimSpace(input.ProviderName)
+	modelName := strings.TrimSpace(input.ModelName)
+	apiKey := strings.TrimSpace(input.APIKey)
+	billingMode := strings.TrimSpace(input.BillingMode)
+	prompt := strings.TrimSpace(input.Prompt)
 
 	url, err := ProviderURL(providerName)
 	if err != nil {
