@@ -6,6 +6,7 @@ import {
   BrainCircuit,
   Gauge,
   Image,
+  Languages,
   ListChecks,
   LogOut,
   Radio,
@@ -41,6 +42,7 @@ const navSections: { title: string; items: NavItem[] }[] = [
       { href: "/roleplay-hero-images/", path: "/admin/roleplay-hero-images/", label: "Images heros", icon: Image },
       { href: "/tribunal-ai/", path: "/admin/tribunal-ai/", label: "Tribunal IA", icon: Shield },
       { href: "/anima/", path: "/admin/anima/", label: "Anima CGWM Park", icon: Users },
+      { href: "/nexus/translations/", path: "/admin/nexus/translations/", label: "Traductions", icon: Languages },
     ],
   },
 ];

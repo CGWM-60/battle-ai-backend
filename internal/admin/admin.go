@@ -499,15 +499,7 @@ func Register(router *gin.Engine, db *gorm.DB) {
 	// Monde IA desactive: ne pas exposer /admin/api/game.
 	// server.registerGameAdminAPI(api)
 
-	// Also register the Nexus translations admin endpoints under the /admin/api group.
-	// This makes /admin/api/translations/* work when the Next.js admin UI is accessed
-	// directly through the Go backend's /admin static serving (serveAdminUI + adminNoRoute).
-	// Fixes 404 when visiting /admin/nexus/translations/ (the page loads the static,
-	// but its data fetches to /admin/api/... were 404ing because the handlers were only
-	// mounted under the separate /api/admin group).
-	if features.NexusGameEnabled() {
-		translations.RegisterAdminRoutes(api, db)
-	}
+	translations.RegisterAdminRoutes(api, db)
 
 	if features.NexusGameEnabled() {
 		router.GET("/api/v1/nexus-coin/plans", server.publicNexusCoinPlansAPI)
@@ -572,8 +564,6 @@ func registerDeprecatedNexusAdminAPI(api *gin.RouterGroup) {
 	api.Any("/nexus-coin/*path", handler)
 	api.Any("/nexus-system", handler)
 	api.Any("/nexus-system/*path", handler)
-	api.Any("/translations", handler)
-	api.Any("/translations/*path", handler)
 }
 
 func adminTemplateFuncs() template.FuncMap {
@@ -1126,15 +1116,15 @@ func (s *Server) createBattleQuest(c *gin.Context) {
 func (s *Server) createRolePlayQuest(c *gin.Context) {
 	metadata := parseMetadata(c.PostForm("metadata"))
 	quest := models.RolePlayQuestTemplate{
-		Slug:     defaultSlug(c.PostForm("slug"), c.PostForm("title")),
-		Title:    c.PostForm("title"),
-		Summary:  c.PostForm("summary"),
-		Prompt:   c.PostForm("prompt"),
-		Theme:    c.PostForm("theme"),
-		Level:    c.PostForm("level"),
-		Xp:       formInt(c, "xp"),
-		Coin:     formInt(c, "coin"),
-		Source:   "admin",
+		Slug:        defaultSlug(c.PostForm("slug"), c.PostForm("title")),
+		Title:       c.PostForm("title"),
+		Summary:     c.PostForm("summary"),
+		Prompt:      c.PostForm("prompt"),
+		Theme:       c.PostForm("theme"),
+		Level:       c.PostForm("level"),
+		Xp:          formInt(c, "xp"),
+		Coin:        formInt(c, "coin"),
+		Source:      "admin",
 		Status:      defaultValue(c.PostForm("status"), constants.QuestStatusDraft),
 		IsPublished: false,
 		Metadata:    datatypes.JSON(metadata),
