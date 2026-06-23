@@ -742,15 +742,22 @@ type BattleIA struct {
 // BattleIAConfig = config runtime d'une IA.
 // Elle peut etre serialisee dans IASnapshot, mais n'est pas migree en table.
 type BattleIAConfig struct {
-	Name         string             `json:"name"`
+	Name         string                     `json:"name"`
+	Provider     *provider.Provider         `json:"-"`
+	Fallbacks    []BattleIAProviderFallback `json:"-"`
+	ProviderName string                     `json:"providerName"`
+	ModelName    string                     `json:"modelName"`
+	Personality  string                     `json:"personality"`
+	Mindset      string                     `json:"mindset"`
+	Style        string                     `json:"style"`
+	Goal         string                     `json:"goal"`
+	Weakness     string                     `json:"weakness"`
+}
+
+type BattleIAProviderFallback struct {
 	Provider     *provider.Provider `json:"-"`
 	ProviderName string             `json:"providerName"`
 	ModelName    string             `json:"modelName"`
-	Personality  string             `json:"personality"`
-	Mindset      string             `json:"mindset"`
-	Style        string             `json:"style"`
-	Goal         string             `json:"goal"`
-	Weakness     string             `json:"weakness"`
 }
 
 // BattleRoundMessage = morceau d'historique runtime.

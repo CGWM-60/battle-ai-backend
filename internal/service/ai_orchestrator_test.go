@@ -21,6 +21,23 @@ func TestAIOrchestratorResolveMode(t *testing.T) {
 	}
 }
 
+func TestBattleServiceResolveBattleProviderModeKeepsPlatformCreditsAuthoritative(t *testing.T) {
+	service := &BattleService{}
+
+	if mode := service.resolveBattleProviderMode("platform", "profile-key"); mode != AIOrchestratorModePlatform {
+		t.Fatalf("mode=%s want platform when credits mode sends a stale profile key", mode)
+	}
+	if mode := service.resolveBattleProviderMode("platform", ""); mode != AIOrchestratorModePlatform {
+		t.Fatalf("mode=%s want platform without profile key", mode)
+	}
+	if mode := service.resolveBattleProviderMode("", "profile-key"); mode != AIOrchestratorModeBYOK {
+		t.Fatalf("mode=%s want byok for legacy payload without billing mode", mode)
+	}
+	if mode := service.resolveBattleProviderMode("own_key", "profile-key"); mode != AIOrchestratorModeBYOK {
+		t.Fatalf("mode=%s want byok for explicit own_key", mode)
+	}
+}
+
 func TestAIOrchestratorPlatformKeepsBillingWithMockProvider(t *testing.T) {
 	t.Setenv("AI_PLATFORM_MODE", "mock")
 	t.Setenv("AI_MOCK_ENABLED", "true")

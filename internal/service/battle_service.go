@@ -727,49 +727,22 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 		req.IA2ProfileID = 0
 	}
 
-	provider1URL, err := ProviderURL(req.Provider1)
+	baseProvider1, fallbacks1, providerName1, modelName1, err := s.buildBattleProviderForSlot(req, 1)
 	if err != nil {
-		return nil, fmt.Errorf("provider1 invalide")
+		return nil, err
 	}
-	provider2URL, err := ProviderURL(req.Provider2)
+	baseProvider2, fallbacks2, providerName2, modelName2, err := s.buildBattleProviderForSlot(req, 2)
 	if err != nil {
-		return nil, fmt.Errorf("provider2 invalide")
-	}
-
-	iaKey1 := req.IAKey1
-	iaKey2 := req.IAKey2
-	var plan1 AIExecutionPlan
-	var plan2 AIExecutionPlan
-	if s.orchestrator != nil {
-		plan1 = s.orchestrator.BuildExecutionPlan(req.BillingMode, req.IAKey1, req.Provider1, req.IAModels, 512, 512, "battle:ia1")
-		plan2 = s.orchestrator.BuildExecutionPlan(req.BillingMode, req.IAKey2, req.Provider2, req.IAModels2, 512, 512, "battle:ia2")
-		resolvedKey1, keyErr := s.orchestrator.ResolveAPIKey(plan1, req.IAKey1, req.Provider1)
-		if keyErr != nil {
-			return nil, MapBillingError(keyErr)
-		}
-		resolvedKey2, keyErr := s.orchestrator.ResolveAPIKey(plan2, req.IAKey2, req.Provider2)
-		if keyErr != nil {
-			return nil, MapBillingError(keyErr)
-		}
-		iaKey1 = resolvedKey1
-		iaKey2 = resolvedKey2
-	}
-
-	baseProvider1 := provider.NewsProvider(iaKey1, provider1URL, req.IAModels)
-	if s.orchestrator != nil {
-		baseProvider1 = s.orchestrator.AttachProvider(plan1, baseProvider1)
-	}
-	baseProvider2 := provider.NewsProvider(iaKey2, provider2URL, req.IAModels2)
-	if s.orchestrator != nil {
-		baseProvider2 = s.orchestrator.AttachProvider(plan2, baseProvider2)
+		return nil, err
 	}
 
 	ias := []models.BattleIAConfig{
 		{
 			Name:         req.IA1Name,
 			Provider:     baseProvider1,
-			ProviderName: normalizeProviderName(req.Provider1),
-			ModelName:    req.IAModels,
+			Fallbacks:    fallbacks1,
+			ProviderName: providerName1,
+			ModelName:    modelName1,
 			Personality:  req.IA1Personality,
 			Mindset:      req.IA1Mindset,
 			Style:        req.IA1Style,
@@ -779,8 +752,9 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 		{
 			Name:         req.IA2Name,
 			Provider:     baseProvider2,
-			ProviderName: normalizeProviderName(req.Provider2),
-			ModelName:    req.IAModels2,
+			Fallbacks:    fallbacks2,
+			ProviderName: providerName2,
+			ModelName:    modelName2,
 			Personality:  req.IA2Personality,
 			Mindset:      req.IA2Mindset,
 			Style:        req.IA2Style,
@@ -796,6 +770,136 @@ func (s *BattleService) buildIAConfigs(ctx context.Context, ownerID uint, req *B
 	}
 
 	return ias, nil
+}
+
+func (s *BattleService) buildBattleProviderForSlot(req *BattleRequest, slot int) (*provider.Provider, []models.BattleIAProviderFallback, string, string, error) {
+	providerName := req.Provider1
+	modelName := req.IAModels
+	apiKey := req.IAKey1
+	if slot == 2 {
+		providerName = req.Provider2
+		modelName = req.IAModels2
+		apiKey = req.IAKey2
+	}
+
+	if s.resolveBattleProviderMode(req.BillingMode, apiKey) == AIOrchestratorModePlatform {
+		return s.buildPlatformBattleProviderChain()
+	}
+
+	providerURL, err := ProviderURL(providerName)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("provider%d invalide", slot)
+	}
+
+	if s.orchestrator != nil {
+		plan := s.orchestrator.BuildExecutionPlan(req.BillingMode, apiKey, providerName, modelName, 512, 512, fmt.Sprintf("battle:ia%d", slot))
+		resolvedKey, keyErr := s.orchestrator.ResolveAPIKey(plan, apiKey, providerName)
+		if keyErr != nil {
+			return nil, nil, "", "", MapBillingError(keyErr)
+		}
+		apiKey = resolvedKey
+		base := provider.NewsProvider(apiKey, providerURL, modelName)
+		return s.orchestrator.AttachProvider(plan, base), nil, normalizeProviderName(providerName), modelName, nil
+	}
+
+	return provider.NewsProvider(apiKey, providerURL, modelName), nil, normalizeProviderName(providerName), modelName, nil
+}
+
+func (s *BattleService) resolveBattleProviderMode(billingMode string, apiKey string) AIOrchestratorMode {
+	if s.orchestrator != nil {
+		return s.orchestrator.ResolveMode(billingMode, apiKey)
+	}
+	if strings.EqualFold(strings.TrimSpace(billingMode), string(AIOrchestratorModeMock)) {
+		return AIOrchestratorModeMock
+	}
+	if strings.TrimSpace(apiKey) != "" {
+		normalized := normalizeBillingMode(billingMode)
+		if normalized == models.BillingModeOwnKey || strings.TrimSpace(billingMode) == "" {
+			return AIOrchestratorModeBYOK
+		}
+	}
+	if normalizeBillingMode(billingMode) == models.BillingModeOwnKey {
+		return AIOrchestratorModeBYOK
+	}
+	return AIOrchestratorModePlatform
+}
+
+func (s *BattleService) buildPlatformBattleProviderChain() (*provider.Provider, []models.BattleIAProviderFallback, string, string, error) {
+	providers := platformBattleProviderRotation()
+	var primary *provider.Provider
+	var primaryName string
+	var primaryModel string
+	fallbacks := make([]models.BattleIAProviderFallback, 0, len(providers)-1)
+
+	for _, providerName := range providers {
+		modelName := platformBattleModel(providerName)
+		apiKey := strings.TrimSpace(platformAPIKey(providerName))
+		if apiKey == "" {
+			continue
+		}
+
+		providerURL, err := ProviderURL(providerName)
+		if err != nil {
+			continue
+		}
+
+		candidate := provider.NewsProvider(apiKey, providerURL, modelName)
+		if primary == nil {
+			primary = candidate
+			primaryName = normalizeProviderName(providerName)
+			primaryModel = modelName
+			continue
+		}
+
+		fallbacks = append(fallbacks, models.BattleIAProviderFallback{
+			Provider:     candidate,
+			ProviderName: normalizeProviderName(providerName),
+			ModelName:    modelName,
+		})
+	}
+
+	if primary == nil {
+		return nil, nil, "", "", PaymentRequiredError("platform api key unavailable", map[string]any{"providers": providers})
+	}
+
+	return primary, fallbacks, primaryName, primaryModel, nil
+}
+
+func platformBattleProviderRotation() []string {
+	raw := envString("AI_BATTLE_PROVIDER_ROTATION", "", "mistral,openai")
+	seen := map[string]bool{}
+	providers := []string{}
+	for _, item := range strings.Split(raw, ",") {
+		name := normalizeProviderName(item)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		providers = append(providers, name)
+	}
+	if len(providers) == 0 {
+		return []string{"mistral", "openai"}
+	}
+	return providers
+}
+
+func platformBattleModel(providerName string) string {
+	switch normalizeProviderName(providerName) {
+	case "mistral":
+		return envString("MISTRAL_AI_MODEL", "MISTRAL_MODEL", "mistral-large-latest")
+	case "openai", "openapi", "open_api":
+		return envString("OPEN_AI_MODEL", "OPENAI_MODEL", "gpt-4o-mini")
+	case "openrouter", "open_router":
+		return envString("OPENROUTER_MODEL", "OPEN_ROUTER_MODEL", "openai/gpt-4o-mini")
+	case "xia", "xai", "x-ai":
+		return envString("XAI_MODEL", "X_AI_MODEL", "grok-3-mini")
+	case "claude", "anthropic":
+		return envString("ANTHROPIC_MODEL", "CLAUDE_MODEL", "claude-haiku-4-5-20251001")
+	case "gemini", "google", "google_ai", "google-ai":
+		return envString("GEMINI_MODEL", "GOOGLE_AI_MODEL", "gemini-1.5-flash")
+	default:
+		return envString("OPEN_AI_MODEL", "OPENAI_MODEL", "gpt-4o-mini")
+	}
 }
 
 func (s *BattleService) attachBattleUsageRecorders(run *BattleRun, billingMode string) {
@@ -817,6 +921,21 @@ func (s *BattleService) attachBattleUsageRecorders(run *BattleRun, billingMode s
 			SettlementPlan: &plan,
 			Orchestrator:   s.orchestrator,
 		}, ia.Provider)
+		for fallbackIndex := range ia.Fallbacks {
+			fallback := &ia.Fallbacks[fallbackIndex]
+			fallbackPlan := s.battleUsagePlan(billingMode, fallback.ProviderName, fallback.ModelName, run.Battle.OwnerID, battleID, index)
+			fallback.Provider = attachUsageRecorder(s.usage, usageSessionRef{
+				OwnerID:        run.Battle.OwnerID,
+				SessionMode:    constants.ModeBattleIA,
+				BattleSaveID:   &battleID,
+				BillingSource:  fallbackPlan.BillingSource,
+				ProviderName:   fallback.ProviderName,
+				ModelName:      fallback.ModelName,
+				Feature:        constants.ModeBattleIA,
+				SettlementPlan: &fallbackPlan,
+				Orchestrator:   s.orchestrator,
+			}, fallback.Provider)
+		}
 	}
 }
 

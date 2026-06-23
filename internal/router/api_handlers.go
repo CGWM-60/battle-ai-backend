@@ -88,14 +88,16 @@ type aiProviderTestRequest struct {
 }
 
 type aiProviderGenerateRequest struct {
-	ProviderName string `form:"providerName" json:"providerName"`
-	Provider     string `form:"provider" json:"provider"`
-	ModelName    string `form:"modelName" json:"modelName"`
-	Model        string `form:"model" json:"model"`
-	APIKey       string `form:"apiKey" json:"apiKey"`
-	SystemPrompt string `form:"systemPrompt" json:"systemPrompt"`
-	Prompt       string `form:"prompt" json:"prompt"`
-	MaxChars     int    `form:"maxChars" json:"maxChars"`
+	ProviderName    string `form:"providerName" json:"providerName"`
+	Provider        string `form:"provider" json:"provider"`
+	ModelName       string `form:"modelName" json:"modelName"`
+	Model           string `form:"model" json:"model"`
+	APIKey          string `form:"apiKey" json:"apiKey"`
+	SystemPrompt    string `form:"systemPrompt" json:"systemPrompt"`
+	Prompt          string `form:"prompt" json:"prompt"`
+	MaxChars        int    `form:"maxChars" json:"maxChars"`
+	BillingMode     string `form:"billingMode" json:"billingMode"`
+	FallbackEnabled bool   `form:"fallbackEnabled" json:"fallbackEnabled"`
 }
 
 type battleQuestRequest struct {
@@ -336,7 +338,7 @@ func testAIProvider() gin.HandlerFunc {
 	}
 }
 
-func generateAIProviderText() gin.HandlerFunc {
+func generateAIProviderText(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req aiProviderGenerateRequest
 		if err := bindPayload(c, &req); err != nil {
@@ -346,56 +348,42 @@ func generateAIProviderText() gin.HandlerFunc {
 
 		providerName := defaultString(req.ProviderName, req.Provider)
 		modelName := defaultString(req.ModelName, req.Model)
-		apiKey := strings.TrimSpace(req.APIKey)
-		prompt := strings.TrimSpace(req.Prompt)
-
-		if strings.TrimSpace(providerName) == "" || strings.TrimSpace(modelName) == "" || apiKey == "" || prompt == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "providerName, modelName, apiKey and prompt are required"})
-			return
-		}
-
-		url, err := providerURL(providerName)
-		if err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "providerName invalide"})
-			return
-		}
-
-		messages := make([]provider.ProviderMessage, 0, 2)
-		if systemPrompt := strings.TrimSpace(req.SystemPrompt); systemPrompt != "" {
-			messages = append(messages, provider.ProviderMessage{
-				Role:    "system",
-				Content: systemPrompt,
-			})
-		}
-		messages = append(messages, provider.ProviderMessage{
-			Role:    "user",
-			Content: prompt,
+		result, err := service.NewAIProviderGenerationService(
+			repository.NewAIUsageRepository(database),
+			newAIOrchestrator(database),
+		).Generate(c.Request.Context(), service.AIProviderGenerationInput{
+			OwnerID:         currentUserID(c),
+			ProviderName:    providerName,
+			ModelName:       modelName,
+			APIKey:          req.APIKey,
+			SystemPrompt:    req.SystemPrompt,
+			Prompt:          req.Prompt,
+			MaxChars:        req.MaxChars,
+			BillingMode:     req.BillingMode,
+			FallbackEnabled: req.FallbackEnabled,
+			Feature:         constants.ModeRolePlayIA,
+			Operation:       "ai_provider_generate",
 		})
-
-		startedAt := time.Now()
-		generationTimeout := aiProviderGenerationTimeout()
-		ctx, cancel := context.WithTimeout(c.Request.Context(), generationTimeout)
-		defer cancel()
-
-		client := provider.NewsProvider(apiKey, url, modelName)
-		response, err := client.Chat(ctx, messages)
-		latency := time.Since(startedAt)
 
 		if err != nil {
 			statusCode := http.StatusBadGateway
 			retryable := false
 			errorMessage := err.Error()
-			if errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			if errors.Is(err, context.DeadlineExceeded) || errors.Is(c.Request.Context().Err(), context.DeadlineExceeded) {
 				statusCode = http.StatusGatewayTimeout
 				retryable = true
-				errorMessage = fmt.Sprintf("AI provider generation timed out after %s", generationTimeout)
+				errorMessage = fmt.Sprintf("AI provider generation timed out after %s", aiProviderGenerationTimeout())
+			} else if billingErr, ok := service.AsBillingError(err); ok {
+				statusCode = billingErr.Status
+			} else if strings.Contains(errorMessage, "required") || strings.Contains(errorMessage, "invalide") {
+				statusCode = http.StatusBadRequest
 			}
 			log.Printf(
 				"[aiProviderGenerate] provider call failed provider=%s model=%s timeout_ms=%d latency_ms=%d status=%d retryable=%t err=%v",
 				providerName,
 				modelName,
-				generationTimeout.Milliseconds(),
-				latency.Milliseconds(),
+				aiProviderGenerationTimeout().Milliseconds(),
+				0,
 				statusCode,
 				retryable,
 				err,
@@ -404,33 +392,29 @@ func generateAIProviderText() gin.HandlerFunc {
 				"ok":           false,
 				"providerName": providerName,
 				"modelName":    modelName,
-				"latencyMs":    latency.Milliseconds(),
-				"timeoutMs":    generationTimeout.Milliseconds(),
+				"latencyMs":    0,
+				"timeoutMs":    aiProviderGenerationTimeout().Milliseconds(),
 				"retryable":    retryable,
 				"error":        errorMessage,
 			})
 			return
 		}
 
-		generated := strings.TrimSpace(response)
-		if req.MaxChars > 0 {
-			generated = truncateString(generated, req.MaxChars)
-		}
 		log.Printf(
 			"[aiProviderGenerate] provider call succeeded provider=%s model=%s timeout_ms=%d latency_ms=%d response_chars=%d",
-			providerName,
-			modelName,
-			generationTimeout.Milliseconds(),
-			latency.Milliseconds(),
-			len(generated),
+			result.ProviderName,
+			result.ModelName,
+			result.Timeout.Milliseconds(),
+			result.Latency.Milliseconds(),
+			len(result.Response),
 		)
 
 		c.JSON(http.StatusOK, gin.H{
 			"ok":           true,
-			"providerName": providerName,
-			"modelName":    modelName,
-			"latencyMs":    latency.Milliseconds(),
-			"response":     generated,
+			"providerName": result.ProviderName,
+			"modelName":    result.ModelName,
+			"latencyMs":    result.Latency.Milliseconds(),
+			"response":     result.Response,
 		})
 	}
 }
@@ -3467,12 +3451,7 @@ func aiProviderTestTimeout() time.Duration {
 }
 
 func aiProviderGenerationTimeout() time.Duration {
-	value, err := strconv.Atoi(getEnv("AI_PROVIDER_GENERATION_TIMEOUT_SECONDS", "60"))
-	if err != nil || value <= 0 {
-		return 60 * time.Second
-	}
-
-	return time.Duration(value) * time.Second
+	return service.AIProviderGenerationTimeout()
 }
 
 func truncateString(value string, maxLength int) string {

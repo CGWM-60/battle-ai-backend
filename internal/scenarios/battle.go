@@ -276,7 +276,7 @@ func RunBattleScenarioWithDurationStreamContext(
 			IA:      ia.Name,
 			Round:   round,
 			Type:    "definition_avis",
-			Content: "",
+			Content: finalDoneContent(response, fullResponse.Len() > 0),
 			Done:    true,
 		})
 	}
@@ -296,6 +296,7 @@ func RunBattleScenarioWithDurationStreamContext(
 				break
 			}
 
+			streamed := false
 			response, err := runIATurnStream(
 				ctx,
 				question,
@@ -306,6 +307,9 @@ func RunBattleScenarioWithDurationStreamContext(
 				history,
 				PromptDebateRound,
 				func(chunk string) {
+					if strings.TrimSpace(chunk) != "" {
+						streamed = true
+					}
 					emit(BattleStreamEvent{
 						IA:      ia.Name,
 						Round:   debateRound,
@@ -337,7 +341,7 @@ func RunBattleScenarioWithDurationStreamContext(
 				IA:      ia.Name,
 				Round:   debateRound,
 				Type:    "debat",
-				Content: "",
+				Content: finalDoneContent(response, streamed),
 				Done:    true,
 			})
 
@@ -352,6 +356,7 @@ func RunBattleScenarioWithDurationStreamContext(
 	finalRound := debateRound
 
 	for _, ia := range ias {
+		streamed := false
 		response, err := runIATurnStream(
 			ctx,
 			question,
@@ -362,6 +367,9 @@ func RunBattleScenarioWithDurationStreamContext(
 			history,
 			PromptFinalRound,
 			func(chunk string) {
+				if strings.TrimSpace(chunk) != "" {
+					streamed = true
+				}
 				emit(BattleStreamEvent{
 					IA:      ia.Name,
 					Round:   finalRound,
@@ -393,7 +401,7 @@ func RunBattleScenarioWithDurationStreamContext(
 			IA:      ia.Name,
 			Round:   finalRound,
 			Type:    "conclusion_finale",
-			Content: "",
+			Content: finalDoneContent(response, streamed),
 			Done:    true,
 		})
 	}
@@ -439,6 +447,7 @@ func RunBattleScenarioWithRoundsStreamContext(
 
 	runRound := func(round int, phase string, prompt string) error {
 		for _, ia := range ias {
+			streamed := false
 			response, err := runIATurnStream(
 				ctx,
 				question,
@@ -449,6 +458,9 @@ func RunBattleScenarioWithRoundsStreamContext(
 				history,
 				prompt,
 				func(chunk string) {
+					if strings.TrimSpace(chunk) != "" {
+						streamed = true
+					}
 					emit(BattleStreamEvent{
 						IA:      ia.Name,
 						Round:   round,
@@ -479,7 +491,7 @@ func RunBattleScenarioWithRoundsStreamContext(
 				IA:      ia.Name,
 				Round:   round,
 				Type:    phase,
-				Content: "",
+				Content: finalDoneContent(response, streamed),
 				Done:    true,
 			})
 		}
@@ -587,6 +599,7 @@ func RunBattleScenarioSingleRoundStreamWithDurationContext(
 
 	runTurn := func(turnIndex int, phase string, prompt string, ia models.BattleIAConfig) error {
 		currentTurnIndex := turnIndex
+		streamed := false
 		response, err := runIATurnStream(
 			roundCtx,
 			question,
@@ -597,6 +610,9 @@ func RunBattleScenarioSingleRoundStreamWithDurationContext(
 			history,
 			prompt,
 			func(chunk string) {
+				if strings.TrimSpace(chunk) != "" {
+					streamed = true
+				}
 				emit(BattleStreamEvent{
 					IA:        ia.Name,
 					Round:     round,
@@ -630,7 +646,7 @@ func RunBattleScenarioSingleRoundStreamWithDurationContext(
 			Round:     round,
 			Type:      phase,
 			TurnIndex: currentTurnIndex,
-			Content:   "",
+			Content:   finalDoneContent(response, streamed),
 			Done:      true,
 		})
 
@@ -762,6 +778,7 @@ func ResumeBattleScenarioWithDurationStreamContext(
 				break
 			}
 
+			streamed := false
 			response, err := runIATurnStream(
 				ctx,
 				question,
@@ -772,6 +789,9 @@ func ResumeBattleScenarioWithDurationStreamContext(
 				history,
 				PromptDebateRound,
 				func(chunk string) {
+					if strings.TrimSpace(chunk) != "" {
+						streamed = true
+					}
 					emit(BattleStreamEvent{
 						IA:      ia.Name,
 						Round:   debateRound,
@@ -802,7 +822,7 @@ func ResumeBattleScenarioWithDurationStreamContext(
 				IA:      ia.Name,
 				Round:   debateRound,
 				Type:    "debat",
-				Content: "",
+				Content: finalDoneContent(response, streamed),
 				Done:    true,
 			})
 
@@ -812,6 +832,7 @@ func ResumeBattleScenarioWithDurationStreamContext(
 
 	finalRound := debateRound
 	for _, ia := range ias {
+		streamed := false
 		response, err := runIATurnStream(
 			ctx,
 			question,
@@ -822,6 +843,9 @@ func ResumeBattleScenarioWithDurationStreamContext(
 			history,
 			PromptFinalRound,
 			func(chunk string) {
+				if strings.TrimSpace(chunk) != "" {
+					streamed = true
+				}
 				emit(BattleStreamEvent{
 					IA:      ia.Name,
 					Round:   finalRound,
@@ -852,7 +876,7 @@ func ResumeBattleScenarioWithDurationStreamContext(
 			IA:      ia.Name,
 			Round:   finalRound,
 			Type:    "conclusion_finale",
-			Content: "",
+			Content: finalDoneContent(response, streamed),
 			Done:    true,
 		})
 	}
@@ -896,38 +920,71 @@ func runIATurnStream(
 		promptTemplate,
 	)
 
-	var fullResponse strings.Builder
+	providers := []models.BattleIAProviderFallback{
+		{
+			Provider:     ia.Provider,
+			ProviderName: ia.ProviderName,
+			ModelName:    ia.ModelName,
+		},
+	}
+	providers = append(providers, ia.Fallbacks...)
+	var lastErr error
+	for index, candidate := range providers {
+		if candidate.Provider == nil {
+			continue
+		}
 
-	if ia.Provider != nil {
-		ia.Provider.WithUsageMetadata(provider.UsageMetadata{
+		candidate.Provider.WithUsageMetadata(provider.UsageMetadata{
 			Mode:      "battle_ia",
 			Operation: "battle_turn",
 			Phase:     roundType,
 			Round:     round,
 			ActorName: ia.Name,
 		})
-	}
-	response, err := ia.Provider.ChatStream(ctx, messages, func(chunk string) {
-		fullResponse.WriteString(chunk)
-		if onChunk != nil {
-			onChunk(chunk)
+
+		var fullResponse strings.Builder
+		response, err := candidate.Provider.ChatStream(ctx, messages, func(chunk string) {
+			fullResponse.WriteString(chunk)
+			if onChunk != nil {
+				onChunk(chunk)
+			}
+		})
+
+		if err != nil {
+			lastErr = err
+			if index < len(providers)-1 && ctx.Err() == nil {
+				continue
+			}
+			return "", err
 		}
-	})
 
-	if err != nil {
-		return "", err
+		if fullResponse.Len() == 0 {
+			fullResponse.WriteString(response)
+		}
+
+		finalResponse := strings.TrimSpace(fullResponse.String())
+		if finalResponse == "" {
+			lastErr = fmt.Errorf("réponse vide du provider pour %s", ia.Name)
+			if index < len(providers)-1 && ctx.Err() == nil {
+				continue
+			}
+			return "", lastErr
+		}
+
+		return finalResponse, nil
 	}
 
-	if fullResponse.Len() == 0 {
-		fullResponse.WriteString(response)
+	if lastErr != nil {
+		return "", lastErr
 	}
+	return "", fmt.Errorf("provider indisponible pour %s", ia.Name)
+}
 
-	finalResponse := strings.TrimSpace(fullResponse.String())
-	if finalResponse == "" {
-		return "", fmt.Errorf("réponse vide du provider pour %s", ia.Name)
+func finalDoneContent(response string, streamed bool) string {
+	if streamed {
+		return ""
 	}
-
-	return finalResponse, nil
+	return strings.TrimSpace(response)
 }
 
 func buildBattleMessages(

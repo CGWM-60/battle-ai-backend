@@ -97,7 +97,7 @@ func RouterApp(database *gorm.DB) {
 	private.PUT("/me", updateMe(database))
 	private.PATCH("/me", updateMe(database))
 	private.POST("/ai/providers/test", testAIProvider())
-	private.POST("/ai/providers/generate", generateAIProviderText())
+	private.POST("/ai/providers/generate", generateAIProviderText(database))
 	registerBillingRoutes(private, database)
 	nexustribunal.RegisterRoutes(router, database, jwtAuth(), adminAPIAuth())
 	if features.NexusGameEnabled() {
