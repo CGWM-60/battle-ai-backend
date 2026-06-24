@@ -70,9 +70,17 @@ func TestInitialSeedRowsSkipsDeprecatedTranslationDomains(t *testing.T) {
 		{Domain: "battle", Key: "battle.action.start", Locale: "fr", Value: "Démarrer"},
 	}, "fr")
 
+	keysByDomain := map[string]int{}
 	for _, row := range rows {
-		if row.Domain == "nexus_game" || row.Domain == "building" {
-			t.Fatalf("deprecated translation domain should be purged: %+v", row)
-		}
+		keysByDomain[row.Domain]++
+	}
+	if keysByDomain["nexus_game"] != 1 {
+		t.Fatalf("nexus_game rows should be retained, got %+v", keysByDomain)
+	}
+	if keysByDomain["building"] != 0 {
+		t.Fatalf("deprecated building domain should be skipped: %+v", rows)
+	}
+	if keysByDomain["battle"] != 1 {
+		t.Fatalf("battle row should be retained: %+v", keysByDomain)
 	}
 }

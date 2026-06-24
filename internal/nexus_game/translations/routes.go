@@ -313,6 +313,40 @@ func RegisterAdminRoutes(adminGroup *gin.RouterGroup, database *gorm.DB) {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "committed"})
 	})
+	adminGroup.POST("/translations/import/flutter-scan", func(c *gin.Context) {
+		var req struct {
+			Source        string                        `json:"source"`
+			DefaultLocale string                        `json:"defaultLocale"`
+			Entries       []FlutterScanEntry            `json:"entries"`
+			DryRun        bool                          `json:"dryRun"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(req.Entries) == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "entries are required"})
+			return
+		}
+		locale := req.DefaultLocale
+		if locale == "" {
+			locale = "fr"
+		}
+		if req.DryRun {
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "preview",
+				"entries": len(req.Entries),
+				"locale":  locale,
+			})
+			return
+		}
+		report, err := svc.ImportFlutterScan(c.Request.Context(), req.Entries, locale)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "imported", "report": report})
+	})
 
 	// Other admin
 	adminGroup.GET("/translations/imports", func(c *gin.Context) {

@@ -69,6 +69,7 @@ type TranslationService interface {
 	GetSupportedLocaleCatalog(ctx context.Context) ([]TranslationLocaleOption, error)
 	GetAITranslationProviders(ctx context.Context) ([]TranslationAIProviderStatus, error)
 	AITranslateMissing(ctx context.Context, req AITranslateMissingRequest) (*AITranslateMissingResult, error)
+	ImportFlutterScan(ctx context.Context, entries []FlutterScanEntry, defaultLocale string) (*FlutterScanImportReport, error)
 }
 
 // dbTranslationService implémente TranslationService avec GORM.

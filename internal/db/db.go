@@ -118,6 +118,8 @@ func DbConnect() *gorm.DB {
 		&models.TranslationImportError{},
 		&models.TranslationMissingLog{},
 		&models.UserLocalePreference{},
+		&models.TranslationTag{},
+		&models.TranslationKeyTag{},
 		// Billing (AI wallet, store, subscriptions, entitlements)
 		&models.UserAIWallet{},
 		&models.AIWalletLedger{},

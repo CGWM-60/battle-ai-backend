@@ -33,8 +33,16 @@ type TranslationKey struct {
 	DomainID uint              `gorm:"index"`
 	Domain   TranslationDomain `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 
-	Key         string `gorm:"size:255;uniqueIndex"` // e.g. "nexus_game.city.population"
-	Description string `gorm:"type:text"`
+	Key          string `gorm:"size:255;uniqueIndex"` // e.g. "nexus_game.city.population"
+	Description  string `gorm:"type:text"`
+	SourceFile   string `gorm:"size:512"`
+	SourceLine   int
+	SourceModule string `gorm:"size:64"`
+	Kind         string `gorm:"size:32"`  // ui, prompt, error, tooltip, button, title, label
+	Status       string `gorm:"size:32"`  // active, unused_candidate
+	Reviewed     bool   `gorm:"default:false"`
+	ImportSource string `gorm:"size:64"` // flutter_scan, admin, seed
+	TagsJSON     string `gorm:"type:jsonb"`
 }
 
 func (TranslationKey) TableName() string { return "nexus_translation_keys" }
@@ -142,3 +150,23 @@ type UserLocalePreference struct {
 }
 
 func (UserLocalePreference) TableName() string { return "nexus_user_locale_preferences" }
+
+// TranslationTag is a reusable label for grouping translation keys.
+type TranslationTag struct {
+	ID        uint `gorm:"primaryKey"`
+	CreatedAt time.Time
+	UpdatedAt time.Time
+
+	Code string `gorm:"size:64;uniqueIndex"`
+	Name string `gorm:"size:120"`
+}
+
+func (TranslationTag) TableName() string { return "nexus_translation_tags" }
+
+// TranslationKeyTag links keys to tags (many-to-many).
+type TranslationKeyTag struct {
+	KeyID uint `gorm:"primaryKey;autoIncrement:false"`
+	TagID uint `gorm:"primaryKey;autoIncrement:false"`
+}
+
+func (TranslationKeyTag) TableName() string { return "nexus_translation_key_tags" }

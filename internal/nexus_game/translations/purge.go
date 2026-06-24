@@ -9,12 +9,9 @@ import (
 )
 
 var deprecatedTranslationDomains = map[string]struct{}{
-	"building":     {},
-	"unit":         {},
-	"research":     {},
-	"nexus_game":   {},
-	"sandbox":      {},
-	"local_models": {},
+	"building": {},
+	"unit":     {},
+	"research": {},
 }
 
 var deprecatedTranslationKeyPrefixes = []string{
