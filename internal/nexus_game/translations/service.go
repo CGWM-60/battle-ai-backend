@@ -236,33 +236,21 @@ func (s *dbTranslationService) UpsertBatch(ctx context.Context, entries []Transl
 			continue
 		}
 
-		// Trouver ou créer le domaine
-		var domain models.TranslationDomain
-		if err := s.db.Where("code = ?", e.Domain).FirstOrCreate(&domain, models.TranslationDomain{Code: e.Domain, Name: e.Domain}).Error; err != nil {
+		domain, err := findOrCreateTranslationDomain(s.db.WithContext(ctx), e.Domain)
+		if err != nil {
 			return err
 		}
 
-		// Trouver ou créer la clé
-		var key models.TranslationKey
-		if err := s.db.Where("domain_id = ? AND `key` = ?", domain.ID, e.Key).FirstOrCreate(&key, models.TranslationKey{
-			DomainID:     domain.ID,
-			Key:          e.Key,
+		key, err := findOrCreateTranslationKey(s.db.WithContext(ctx), domain.ID, e.Key, models.TranslationKey{
 			Status:       "active",
 			ImportSource: "seed",
-			TagsJSON:     normalizeTagsJSON(""),
-		}).Error; err != nil {
+			TagsJSON:     "[]",
+		})
+		if err != nil {
 			return err
 		}
 
-		// Upsert la valeur
-		val := models.TranslationValue{
-			KeyID:  key.ID,
-			Locale: e.Locale,
-			Value:  e.Value,
-		}
-		if err := s.db.Where("key_id = ? AND locale = ?", key.ID, e.Locale).
-			Assign(val).
-			FirstOrCreate(&val).Error; err != nil {
+		if err := upsertTranslationValue(s.db.WithContext(ctx), key.ID, e.Locale, e.Value); err != nil {
 			return err
 		}
 	}
@@ -648,37 +636,22 @@ func upsertTranslationRow(tx *gorm.DB, row models.TranslationImportRow) error {
 		return nil
 	}
 
-	var domain models.TranslationDomain
-	if err := tx.Where("code = ?", row.Domain).
-		FirstOrCreate(&domain, models.TranslationDomain{Code: row.Domain, Name: row.Domain}).Error; err != nil {
+	domain, err := findOrCreateTranslationDomain(tx, row.Domain)
+	if err != nil {
 		return err
 	}
 
-	var key models.TranslationKey
-	if err := tx.Where("domain_id = ? AND `key` = ?", domain.ID, row.Key).
-		FirstOrCreate(&key, models.TranslationKey{
-			DomainID:     domain.ID,
-			Key:          row.Key,
-			Status:       "active",
-			ImportSource: "seed",
-			TagsJSON:     normalizeTagsJSON(""),
-		}).Error; err != nil {
+	key, err := findOrCreateTranslationKey(tx, domain.ID, row.Key, models.TranslationKey{
+		Status:       "active",
+		Reviewed:     false,
+		ImportSource: "seed",
+		TagsJSON:     "[]",
+	})
+	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(key.TagsJSON) == "" {
-		if err := tx.Model(&key).Update("tags_json", "[]").Error; err != nil {
-			return err
-		}
-	}
 
-	value := models.TranslationValue{
-		KeyID:  key.ID,
-		Locale: row.Locale,
-		Value:  row.Value,
-	}
-	return tx.Where("key_id = ? AND locale = ?", key.ID, row.Locale).
-		Assign(value).
-		FirstOrCreate(&value).Error
+	return upsertTranslationValue(tx, key.ID, row.Locale, row.Value)
 }
 
 func translationAISystemPrompt() string {

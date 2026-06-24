@@ -39,6 +39,9 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 	if err := RepairInvalidTranslationTagsJSON(ctx, database); err != nil {
 		return nil, err
 	}
+	if err := RepairTranslationDomains(ctx, database); err != nil {
+		return nil, err
+	}
 	if err := PurgeDeprecatedTranslations(ctx, database); err != nil {
 		return nil, err
 	}

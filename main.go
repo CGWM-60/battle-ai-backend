@@ -17,8 +17,8 @@ func main() {
 	if err := translations.RepairInvalidTranslationTagsJSON(context.Background(), database); err != nil {
 		panic(fmt.Sprintf("failed to repair translation tags json: %v", err))
 	}
-	if err := translations.PurgeDeprecatedTranslations(context.Background(), database); err != nil {
-		panic(fmt.Sprintf("failed to purge deprecated translations: %v", err))
+	if err := translations.RepairTranslationDomains(context.Background(), database); err != nil {
+		panic(fmt.Sprintf("failed to repair translation domains: %v", err))
 	}
 	if _, err := translations.SeedInitialImport(context.Background(), database); err != nil {
 		panic(fmt.Sprintf("failed to seed initial translations: %v", err))

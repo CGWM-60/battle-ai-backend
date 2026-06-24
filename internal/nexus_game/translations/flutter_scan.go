@@ -192,49 +192,47 @@ func upsertFlutterScanKey(
 	report *FlutterScanImportReport,
 	force bool,
 ) (created bool, updated bool, err error) {
-	var domainRow models.TranslationDomain
-	if err = tx.Where("code = ?", domain).
-		FirstOrCreate(&domainRow, models.TranslationDomain{Code: domain, Name: domain}).Error; err != nil {
+	domainRow, err := findOrCreateTranslationDomain(tx, domain)
+	if err != nil {
 		return false, false, err
 	}
 
-	var keyRow models.TranslationKey
-	err = tx.Where("domain_id = ? AND `key` = ?", domainRow.ID, fullKey).First(&keyRow).Error
-	if err == gorm.ErrRecordNotFound {
-		keyRow = models.TranslationKey{
-			DomainID:     domainRow.ID,
-			Key:          fullKey,
-			Description:  buildFlutterScanDescription(entry),
-			SourceFile:   entry.SourceFile,
-			SourceLine:   entry.SourceLine,
-			SourceModule: entry.Module,
-			Kind:         entry.Kind,
-			Status:       "active",
-			Reviewed:     false,
-			ImportSource: "flutter_scan",
-			TagsJSON:     normalizeTagsJSON(tagsJSON(entry.Tags)),
-		}
-		if err = tx.Create(&keyRow).Error; err != nil {
-			return false, false, err
-		}
-		created = true
-	} else if err != nil {
+	var preexistingKey models.TranslationKey
+	keyExisted := tx.Unscoped().Where("`key` = ?", fullKey).First(&preexistingKey).Error == nil
+
+	var keyRow *models.TranslationKey
+	keyRow, err = findOrCreateTranslationKey(tx, domainRow.ID, fullKey, models.TranslationKey{
+		Description:  buildFlutterScanDescription(entry),
+		SourceFile:   entry.SourceFile,
+		SourceLine:   entry.SourceLine,
+		SourceModule: entry.Module,
+		Kind:         entry.Kind,
+		Status:       "active",
+		Reviewed:     false,
+		ImportSource: "flutter_scan",
+		TagsJSON:     normalizeTagsJSON(tagsJSON(entry.Tags)),
+	})
+	if err != nil {
 		return false, false, err
-	} else {
-		updates := map[string]interface{}{
-			"description":   buildFlutterScanDescription(entry),
-			"source_file":   entry.SourceFile,
-			"source_line":   entry.SourceLine,
-			"source_module": entry.Module,
-			"kind":          entry.Kind,
-			"status":        "active",
-			"import_source": "flutter_scan",
-			"tags_json":     normalizeTagsJSON(tagsJSON(entry.Tags)),
-		}
-		if err = tx.Model(&keyRow).Updates(updates).Error; err != nil {
-			return false, false, err
-		}
+	}
+
+	updates := map[string]interface{}{
+		"description":   buildFlutterScanDescription(entry),
+		"source_file":   entry.SourceFile,
+		"source_line":   entry.SourceLine,
+		"source_module": entry.Module,
+		"kind":          entry.Kind,
+		"status":        "active",
+		"import_source": "flutter_scan",
+		"tags_json":     normalizeTagsJSON(tagsJSON(entry.Tags)),
+	}
+	if err = tx.Model(keyRow).Updates(updates).Error; err != nil {
+		return false, false, err
+	}
+	if keyExisted {
 		updated = true
+	} else {
+		created = true
 	}
 
 	val := models.TranslationValue{
@@ -244,21 +242,30 @@ func upsertFlutterScanKey(
 		Source: "flutter_scan",
 	}
 	var existing models.TranslationValue
-	findErr := tx.Where("key_id = ? AND locale = ?", keyRow.ID, locale).First(&existing).Error
+	findErr := tx.Unscoped().Where("key_id = ? AND locale = ?", keyRow.ID, locale).First(&existing).Error
 	if findErr == gorm.ErrRecordNotFound {
 		if err = tx.Create(&val).Error; err != nil {
-			return created, updated, err
+			if isDuplicateEntryError(err) {
+				if err = upsertTranslationValue(tx, keyRow.ID, locale, value); err != nil {
+					return created, updated, err
+				}
+			} else {
+				return created, updated, err
+			}
 		}
 	} else if findErr != nil {
 		return created, updated, findErr
 	} else if existing.Reviewed && !force {
 		// Keep human-reviewed translations intact.
-	} else if strings.TrimSpace(existing.Value) != value {
-		updates := map[string]interface{}{
+	} else if strings.TrimSpace(existing.Value) != value || existing.DeletedAt.Valid {
+		valueUpdates := map[string]interface{}{
 			"value":  value,
 			"source": "flutter_scan",
 		}
-		if err = tx.Model(&existing).Updates(updates).Error; err != nil {
+		if existing.DeletedAt.Valid {
+			valueUpdates["deleted_at"] = nil
+		}
+		if err = tx.Unscoped().Model(&existing).Updates(valueUpdates).Error; err != nil {
 			return created, updated, err
 		}
 	}
