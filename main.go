@@ -17,11 +17,19 @@ func main() {
 	if err := translations.PurgeDeprecatedTranslations(context.Background(), database); err != nil {
 		panic(fmt.Sprintf("failed to purge deprecated translations: %v", err))
 	}
-	if features.NexusGameEnabled() {
-		if _, err := translations.SeedInitialImport(context.Background(), database); err != nil {
-			panic(fmt.Sprintf("failed to seed initial nexus translations: %v", err))
-		}
-	} else {
+	if _, err := translations.SeedInitialImport(context.Background(), database); err != nil {
+		panic(fmt.Sprintf("failed to seed initial translations: %v", err))
+	}
+	missing, err := translations.CheckStartupKeysInDatabase(context.Background(), database, "fr")
+	if err != nil {
+		panic(fmt.Sprintf("failed to check startup translation keys: %v", err))
+	}
+	if len(missing) > 0 {
+		panic(fmt.Sprintf("missing startup translation keys after seed: %v", missing))
+	}
+	log.Printf("[translations] startup keys ok count=%d", len(translations.RequiredStartupKeys))
+
+	if !features.NexusGameEnabled() {
 		log.Printf("[nexus-game] status=deprecated_disabled step=boot reason=NEXUS_GAME_ENABLED is not true")
 	}
 	scheduler.StartQuestGenerationCron(database)

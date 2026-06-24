@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"errors"
+	"log"
 	"strings"
 
 	"cgwm/battle/internal/models"
@@ -14,6 +15,25 @@ import (
 var initialImportFS embed.FS
 
 const initialImportPath = "imports/NEXUS_TRANSLATIONS_INITIAL_IMPORT.fr.json"
+
+func loadInitialSeedRows() ([]models.TranslationImportRow, error) {
+	raw, err := initialImportFS.ReadFile(initialImportPath)
+	if err != nil {
+		return nil, err
+	}
+
+	payload, err := ParseImportPayloadBytes(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	locale := payload.Locale
+	if locale == "" {
+		locale = "fr"
+	}
+
+	return initialSeedRows(payload.Rows, locale), nil
+}
 
 func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.TranslationImport, error) {
 	if err := PurgeDeprecatedTranslations(ctx, database); err != nil {
@@ -32,6 +52,7 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 	if len(payload.Rows) == 0 {
 		return nil, errors.New("initial translation import has no rows")
 	}
+	log.Printf("[translations] seed initial start rows=%d", len(payload.Rows))
 
 	locale := payload.Locale
 	if locale == "" {
@@ -43,8 +64,10 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("[translations] seed initial missing_rows=%d", len(rows))
 	var committed *models.TranslationImport
 	if len(rows) == 0 {
+		log.Printf("[translations] seed initial no missing rows")
 		if err := SeedForcedContentDescriptions(ctx, database); err != nil {
 			return nil, err
 		}
@@ -66,6 +89,11 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 	if err != nil {
 		return nil, err
 	}
+	log.Printf(
+		"[translations] seed initial committed import_id=%d rows=%d",
+		committed.ID,
+		committed.RowCount,
+	)
 	if err := SeedForcedContentDescriptions(ctx, database); err != nil {
 		return nil, err
 	}
