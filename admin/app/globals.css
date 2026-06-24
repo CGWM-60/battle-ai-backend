@@ -900,10 +900,11 @@ dd {
 }
 
 .translation-kpis div {
-  border: 1px solid #e4e7ec;
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
-  background: #f8fafc;
+  background: var(--panel-strong);
+  color: var(--text);
 }
 
 .translation-kpis span {
@@ -963,7 +964,8 @@ dd {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 9px;
-  background: #f8fafc;
+  background: var(--panel-strong);
+  color: var(--text);
 }
 
 .locale-check input {
@@ -974,13 +976,13 @@ dd {
 .locale-check span {
   display: grid;
   gap: 2px;
-  color: #344054;
+  color: var(--text);
   font-size: 12px;
 }
 
 .locale-check strong {
   font-size: 13px;
-  color: #111827;
+  color: #ffffff;
 }
 
 .locale-check em {
@@ -1014,18 +1016,22 @@ dd {
   min-width: 1180px;
   border-collapse: separate;
   border-spacing: 0;
+  background: var(--panel);
+  color: var(--text);
 }
 
 .translation-grid-table th {
   position: sticky;
   top: 0;
   z-index: 5;
-  background: #f8fafc;
+  background: #13272f;
+  color: #d9fbf7;
+  border-color: var(--line);
 }
 
 .translation-grid-table .filter-row th {
   top: 43px;
-  background: #ffffff;
+  background: #0f2027;
 }
 
 .translation-grid-table .filter-row input,
@@ -1034,22 +1040,33 @@ dd {
   margin-bottom: 0;
   padding: 7px;
   font-size: 12px;
+  background: #071014;
+  color: var(--text);
+  border-color: #315762;
 }
 
 .translation-grid-table .sticky-col {
   position: sticky;
   z-index: 6;
-  background: #ffffff;
+  background: #0f2027;
+  color: var(--text);
+  border-color: var(--line);
 }
 
 .translation-grid-table th.sticky-col {
-  background: #f8fafc;
+  background: #13272f;
   z-index: 8;
 }
 
 .translation-grid-table .filter-row th.sticky-col {
-  background: #ffffff;
+  background: #0f2027;
   z-index: 9;
+}
+
+.translation-grid-table td {
+  background: #0b171c;
+  color: var(--text);
+  border-color: var(--line);
 }
 
 .domain-col {
@@ -1067,6 +1084,7 @@ dd {
 .key-col code {
   display: block;
   font-size: 12px;
+  color: #d9fbf7;
 }
 
 .key-col small {
@@ -1082,6 +1100,7 @@ dd {
   min-width: 260px;
   max-width: 360px;
   vertical-align: top;
+  color: var(--text);
 }
 
 .translation-cell p {
@@ -1091,16 +1110,21 @@ dd {
 }
 
 .translation-cell.missing {
-  background: #fff7ed;
+  background: rgba(244, 184, 74, 0.1);
+  color: #ffe3a3;
 }
 
 .translation-cell.ok {
-  background: #ffffff;
+  background: rgba(48, 209, 119, 0.07);
+  color: var(--text);
 }
 
 .translation-cell textarea {
   min-height: 110px;
   margin-bottom: 8px;
+  background: #071014;
+  color: var(--text);
+  border-color: #315762;
 }
 
 .link-button {

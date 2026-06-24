@@ -350,8 +350,8 @@
     "semantic_hash": "495974e1997cfe08f30b48c6589d4896"
   },
   "internal/db/db.go": {
-    "mtime": 1781793012.0967977,
-    "ast_hash": "4e6e9bf5962c59d5af14445707caeba0",
+    "mtime": 1782292034.4802866,
+    "ast_hash": "27934f47497a8f41bbaff642b1824702",
     "semantic_hash": ""
   },
   "internal/db/research_seed.go": {
@@ -455,9 +455,9 @@
     "semantic_hash": ""
   },
   "internal/models/nexus_translation_models.go": {
-    "mtime": 1780912210.3991091,
-    "ast_hash": "b39be4b1af0bffa9181d6fa65ddf9513",
-    "semantic_hash": "b39be4b1af0bffa9181d6fa65ddf9513"
+    "mtime": 1782293712.2624493,
+    "ast_hash": "a0d3b464089e488f3199712cfb8c6c4a",
+    "semantic_hash": ""
   },
   "internal/models/research_models.go": {
     "mtime": 1779951458.224394,
@@ -625,8 +625,8 @@
     "semantic_hash": "f3e5230e35b1d69253af9d09a930bdf8"
   },
   "internal/nexus_game/routes/routes.go": {
-    "mtime": 1781508894.567086,
-    "ast_hash": "1ddf9a1af8b7f8f6d641fe85ab078328",
+    "mtime": 1782290663.8767064,
+    "ast_hash": "20db970830762a1d7aa044800ad6a8a5",
     "semantic_hash": ""
   },
   "internal/nexus_game/routes/routes_test.go": {
@@ -705,28 +705,28 @@
     "semantic_hash": "6fc3ebed28dbf9cc3365f9579e59c9e0"
   },
   "internal/nexus_game/translations/import_payload_test.go": {
-    "mtime": 1782222737.5275552,
-    "ast_hash": "830a0159f3916b4b356334ecbe8eff45",
+    "mtime": 1782292330.775666,
+    "ast_hash": "f22d39f8aca8520134466356a61f07e4",
     "semantic_hash": ""
   },
   "internal/nexus_game/translations/imports/NEXUS_TRANSLATIONS_INITIAL_IMPORT.fr.json": {
-    "mtime": 1782222885.827238,
-    "ast_hash": "18a87c01013ce8aea000d3e6e59737fb",
+    "mtime": 1782293903.2095773,
+    "ast_hash": "a4300077a9f989a4cdc443646674a662",
     "semantic_hash": ""
   },
   "internal/nexus_game/translations/routes.go": {
-    "mtime": 1780983323.1934173,
-    "ast_hash": "16ae577a58b10c0cfcdbf16afcf08c9e",
-    "semantic_hash": "16ae577a58b10c0cfcdbf16afcf08c9e"
+    "mtime": 1782293745.1875372,
+    "ast_hash": "23d92a27fec0ef5697e678174fa7443a",
+    "semantic_hash": ""
   },
   "internal/nexus_game/translations/seed_initial.go": {
-    "mtime": 1782222650.3039985,
-    "ast_hash": "5d4fd3b9ae7648b5b5d70b7762858853",
+    "mtime": 1782290950.3691382,
+    "ast_hash": "425cd4aaecd02b3cf011a3e0d7bbd548",
     "semantic_hash": ""
   },
   "internal/nexus_game/translations/service.go": {
-    "mtime": 1782222885.8280506,
-    "ast_hash": "ffb8131261d50ca0abd807c70baaf38b",
+    "mtime": 1782293745.1871638,
+    "ast_hash": "0a28ed09e3ac9047b21d335ec89cd234",
     "semantic_hash": ""
   },
   "internal/nexus_tribunal/adapters/ai_provider_adapter.go": {
@@ -895,8 +895,8 @@
     "semantic_hash": ""
   },
   "internal/router/middleware.go": {
-    "mtime": 1781961321.294541,
-    "ast_hash": "c4111fcd20a0117585f6d0c525723609",
+    "mtime": 1782290659.123097,
+    "ast_hash": "167f70514944db7ae99e72aa62225fca",
     "semantic_hash": ""
   },
   "internal/router/middleware_test.go": {
@@ -905,8 +905,8 @@
     "semantic_hash": ""
   },
   "internal/router/router.go": {
-    "mtime": 1782231853.0896006,
-    "ast_hash": "a541b49df8b253c93933b9df2ba451df",
+    "mtime": 1782290940.9686346,
+    "ast_hash": "967d8c6fdbebc3dac62f58230d0e8747",
     "semantic_hash": ""
   },
   "internal/router/router_startup_test.go": {
@@ -1520,8 +1520,8 @@
     "semantic_hash": ""
   },
   "internal/router/billing_handlers.go": {
-    "mtime": 1781795450.7979467,
-    "ast_hash": "89762bcfcfc6f449117f3df425620044",
+    "mtime": 1782290659.117789,
+    "ast_hash": "39c2fcf3c7ed6ad2199f3fc6ee775b92",
     "semantic_hash": ""
   },
   "internal/router/billing_handlers_test.go": {
@@ -1620,8 +1620,8 @@
     "semantic_hash": ""
   },
   "internal/nexus_game/translations/purge.go": {
-    "mtime": 1782222894.699129,
-    "ast_hash": "0d80e0694131929b5ece70aca95117e6",
+    "mtime": 1782292034.4805534,
+    "ast_hash": "09ec87915b26a19da039616839f01293",
     "semantic_hash": ""
   },
   "internal/router/api_handlers_timeout_test.go": {
@@ -1632,6 +1632,51 @@
   "internal/service/ai_provider_generation_service.go": {
     "mtime": 1782229249.4927654,
     "ast_hash": "eb57e4b678a6acc0c4fd3bddbcb0df50",
+    "semantic_hash": ""
+  },
+  "cmd/translations_cleanup/main.go": {
+    "mtime": 1782293863.8810158,
+    "ast_hash": "296b0e71a8bd837668ce9b8a8f177583",
+    "semantic_hash": ""
+  },
+  "cmd/translations_import/main.go": {
+    "mtime": 1782293745.203117,
+    "ast_hash": "2fbffb14ef48328102833a0a4ec7acfd",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/translations/flutter_scan.go": {
+    "mtime": 1782293745.186752,
+    "ast_hash": "c292db6f1718a3900877a5ae8c7fae74",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/translations/flutter_scan_cleanup.go": {
+    "mtime": 1782293769.9760828,
+    "ast_hash": "577a98f22c9d0ff6a5c75ec9776a542c",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/translations/flutter_scan_filter.go": {
+    "mtime": 1782293712.2555058,
+    "ast_hash": "80e8f1383679c4f5bcf36b2a324845d7",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/translations/flutter_scan_normalize.go": {
+    "mtime": 1782293712.2553904,
+    "ast_hash": "0f65c1727d4c5d5ec8b8b720f5d65fc4",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/translations/flutter_scan_test.go": {
+    "mtime": 1782293769.9762416,
+    "ast_hash": "c4379d75500e7b035bb68db93685d7fb",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/translations/i18n_routes.go": {
+    "mtime": 1782290940.9559886,
+    "ast_hash": "9db0f479ade05f82f60f0713d87b03a9",
+    "semantic_hash": ""
+  },
+  "internal/nexus_game/translations/i18n_routes_test.go": {
+    "mtime": 1782290940.9559484,
+    "ast_hash": "f59a6ac38f61ad0614b66e1928abe163",
     "semantic_hash": ""
   }
 }
