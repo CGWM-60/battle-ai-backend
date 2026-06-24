@@ -9,6 +9,111 @@
   "file_name": "NEXUS_TRANSLATIONS_INITIAL_IMPORT.fr.json",
   "rows": [
     {
+      "domain": "ai",
+      "key": "ai.action.configure_provider",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Configurer un fournisseur"
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.model_required",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Un modèle est obligatoire pour utiliser ce fournisseur."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.no_usable_provider",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Aucun fournisseur IA utilisable. Ajoute une clé API et sélectionne un modèle dans Profil > Providers."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.create_first",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Créer ma première Amina"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.create_new",
+      "locale": "fr",
+      "language": "fr",
+      "value": "+ Créer une nouvelle Amina"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.enter",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Entrer"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.feed",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Nourrir"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.heal",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Soigner"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.meditate",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Méditer"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.park",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Parc"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.play",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Jouer"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.sleep",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Dormir"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.talk",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Parler"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.action.wake",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Réveiller"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.chat.reply_to",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Répondre à {name}…"
+    },
+    {
       "domain": "anima",
       "key": "anima.companion.enabled",
       "language": "fr",
@@ -45,150 +150,17 @@
     },
     {
       "domain": "anima",
-      "key": "anima.const.string.anima",
-      "locale": "fr",
-      "value": "Anima",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_active_id",
-      "locale": "fr",
-      "value": "anima_active_id",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_beliefs_box",
-      "locale": "fr",
-      "value": "anima_beliefs_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_body_morph_box",
-      "locale": "fr",
-      "value": "anima_body_morph_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_budget_box",
-      "locale": "fr",
-      "value": "anima_budget_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_episodes_box",
-      "locale": "fr",
-      "value": "anima_episodes_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_memory_atoms_box",
-      "locale": "fr",
-      "value": "anima_memory_atoms_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_notifications_v2",
-      "locale": "fr",
-      "value": "anima_notifications_v2",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_player_model_box",
-      "locale": "fr",
-      "value": "anima_player_model_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_predictions_box",
-      "locale": "fr",
-      "value": "anima_predictions_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_profiles_index",
-      "locale": "fr",
-      "value": "anima_profiles_index",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_rag_documents",
-      "locale": "fr",
-      "value": "anima_rag_documents",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_raw_events_box",
-      "locale": "fr",
-      "value": "anima_raw_events_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_reflections_box",
-      "locale": "fr",
-      "value": "anima_reflections_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_reincarnation_box",
-      "locale": "fr",
-      "value": "anima_reincarnation_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_soul_capsules_box",
-      "locale": "fr",
-      "value": "anima_soul_capsules_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_state_box",
-      "locale": "fr",
-      "value": "anima_state_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.anima_workspace_box",
-      "locale": "fr",
-      "value": "anima_workspace_box",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.current_anima_v3",
-      "locale": "fr",
-      "value": "current_anima_v3",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.const.string.messages_et_besoins_de_ton_anima",
-      "locale": "fr",
-      "value": "Messages et besoins de ton Anima",
-      "language": "fr"
-    },
-    {
-      "domain": "anima",
       "key": "anima.conversation.title",
       "language": "fr",
       "locale": "fr",
       "value": "Conversation"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.diary.emotion_line",
+      "locale": "fr",
+      "language": "fr",
+      "value": "~ {emotion}"
     },
     {
       "domain": "anima",
@@ -269,6 +241,111 @@
     },
     {
       "domain": "anima",
+      "key": "anima.gauge.bond.label",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Lien"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.gauge.curiosity.label",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Curiosité"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.gauge.energy.label",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Énergie"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.gauge.health.label",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Santé"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.gauge.hunger.label",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Faim"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.gauge.joy.label",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Joie"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.gauge.peace.label",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Paix"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.inner_thought.line",
+      "locale": "fr",
+      "language": "fr",
+      "value": "{thought} — {emotion}"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.mood.crisis",
+      "locale": "fr",
+      "language": "fr",
+      "value": "En crise"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.mood.distressed",
+      "locale": "fr",
+      "language": "fr",
+      "value": "En détresse"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.mood.ecstatic",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Extatique"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.mood.flourishing",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Épanoui"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.mood.good",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Bien"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.mood.melancholic",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Mélancolique"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.mood.neutral",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Neutre"
+    },
+    {
+      "domain": "anima",
       "key": "anima.neural_map.back_to_anima",
       "language": "fr",
       "locale": "fr",
@@ -336,6 +413,90 @@
       "language": "fr",
       "locale": "fr",
       "value": "Te souviens-tu de la dernière fois que tu es revenu après une absence ?"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.psyche.carried_fear",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Peur emportée : {fear}"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.psyche.origin_myth_quote",
+      "locale": "fr",
+      "language": "fr",
+      "value": "« {originMyth} »"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.psyche.unfulfilled_desire",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Désir inassouvi : {desire}"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.stage.adolescent",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Adolescent"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.stage.adult",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Adulte"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.stage.ancient",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Ancien"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.stage.child",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Enfant"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.stage.larva",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Larve"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.stage.sage",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Sage"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.stage.transcendent",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Transcendant"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.status.age_interactions",
+      "locale": "fr",
+      "language": "fr",
+      "value": "{hours} h • {interactions} échanges"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.status.life_hours_interactions",
+      "locale": "fr",
+      "language": "fr",
+      "value": "{hours} heures de vie • {interactions} échanges"
     },
     {
       "domain": "anima",
@@ -1242,13 +1403,6 @@
     },
     {
       "domain": "anima",
-      "key": "anima.ui.text.desir_inassouvi",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Désir inassouvi : {anima}"
-    },
-    {
-      "domain": "anima",
       "key": "anima.ui.text.diagnostic_anima",
       "language": "fr",
       "locale": "fr",
@@ -1599,24 +1753,10 @@
     },
     {
       "domain": "anima",
-      "key": "anima.ui.text.h_echanges",
-      "language": "fr",
-      "locale": "fr",
-      "value": "{anima}h  •  {anima_2} échanges"
-    },
-    {
-      "domain": "anima",
       "key": "anima.ui.text.habitudes_apprises",
       "language": "fr",
       "locale": "fr",
       "value": "Habitudes apprises :"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.ui.text.heures_de_vie_echanges",
-      "language": "fr",
-      "locale": "fr",
-      "value": "{anima} heures de vie • {anima_2} échanges"
     },
     {
       "domain": "anima",
@@ -2166,13 +2306,6 @@
     },
     {
       "domain": "anima",
-      "key": "anima.ui.text.peur_emportee",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Peur emportée : {anima}"
-    },
-    {
-      "domain": "anima",
       "key": "anima.ui.text.planifiee_pour",
       "language": "fr",
       "locale": "fr",
@@ -2359,13 +2492,6 @@
       "language": "fr",
       "locale": "fr",
       "value": "Rencontres (anonymisées) :"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.ui.text.repondre_a",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Répondre à {anima}…"
     },
     {
       "domain": "anima",
@@ -2831,13 +2957,6 @@
     },
     {
       "domain": "anima",
-      "key": "anima.ui.text.text.670407",
-      "language": "fr",
-      "locale": "fr",
-      "value": "{v}%"
-    },
-    {
-      "domain": "anima",
       "key": "anima.ui.text.text.7cd8ba",
       "language": "fr",
       "locale": "fr",
@@ -2849,13 +2968,6 @@
       "locale": "fr",
       "value": "• {l} — {l_2}",
       "language": "fr"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.ui.text.text.995cbf",
-      "language": "fr",
-      "locale": "fr",
-      "value": "~ {thought}"
     },
     {
       "domain": "anima",
@@ -2898,13 +3010,6 @@
       "language": "fr",
       "locale": "fr",
       "value": "{categoryLabel} — {title}"
-    },
-    {
-      "domain": "anima",
-      "key": "anima.ui.text.text.c03616",
-      "language": "fr",
-      "locale": "fr",
-      "value": "« {anima} »"
     },
     {
       "domain": "anima",
@@ -4728,6 +4833,20 @@
     },
     {
       "domain": "common",
+      "key": "common.button.ok",
+      "locale": "fr",
+      "language": "fr",
+      "value": "OK"
+    },
+    {
+      "domain": "common",
+      "key": "common.validation.action_link",
+      "locale": "fr",
+      "language": "fr",
+      "value": "→ {action}"
+    },
+    {
+      "domain": "common",
       "key": "common.button.pause",
       "language": "fr",
       "locale": "fr",
@@ -4875,20 +4994,6 @@
     },
     {
       "domain": "common",
-      "key": "common.const.string.hf_download_cancelled",
-      "locale": "fr",
-      "value": "hf_download_cancelled",
-      "language": "fr"
-    },
-    {
-      "domain": "common",
-      "key": "common.const.string.hf_download_paused",
-      "locale": "fr",
-      "value": "hf_download_paused",
-      "language": "fr"
-    },
-    {
-      "domain": "common",
       "key": "common.error.exception.aucun_fichier_gguf_safetensors_ou_bin_trouve",
       "language": "fr",
       "locale": "fr",
@@ -4970,6 +5075,13 @@
       "language": "fr",
       "locale": "fr",
       "value": "Mois"
+    },
+    {
+      "domain": "common",
+      "key": "common.format.percent",
+      "locale": "fr",
+      "language": "fr",
+      "value": "{value}%"
     },
     {
       "domain": "common",
@@ -5068,6 +5180,20 @@
       "language": "fr",
       "locale": "fr",
       "value": "Synchronisation..."
+    },
+    {
+      "domain": "common",
+      "key": "common.tooltip.close",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Fermer"
+    },
+    {
+      "domain": "common",
+      "key": "common.tooltip.copy_error",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Copier l’erreur"
     },
     {
       "domain": "common",
@@ -5554,20 +5680,6 @@
     },
     {
       "domain": "common",
-      "key": "common.ui.text.hero_id",
-      "locale": "fr",
-      "value": "Hero ID: {widget}",
-      "language": "fr"
-    },
-    {
-      "domain": "common",
-      "key": "common.ui.text.hero_id.85eae7",
-      "locale": "fr",
-      "value": "Hero ID: {widget} • {hero}",
-      "language": "fr"
-    },
-    {
-      "domain": "common",
       "key": "common.ui.text.heros_indisponible",
       "language": "fr",
       "locale": "fr",
@@ -5999,20 +6111,6 @@
       "language": "fr",
       "locale": "fr",
       "value": "Que faites-vous ?"
-    },
-    {
-      "domain": "common",
-      "key": "common.ui.text.quest_id",
-      "locale": "fr",
-      "value": "Quest ID: {widget}",
-      "language": "fr"
-    },
-    {
-      "domain": "common",
-      "key": "common.ui.text.quest_id.5d5f59",
-      "locale": "fr",
-      "value": "Quest ID: {widget} • {widget_2}",
-      "language": "fr"
     },
     {
       "domain": "common",
@@ -7472,6 +7570,20 @@
     },
     {
       "domain": "ia_chat",
+      "key": "ia_chat.error.no_valid_bot_for_resume",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Impossible de reprendre cette salle : aucun bot n’a encore un fournisseur et un modèle valides."
+    },
+    {
+      "domain": "ia_chat",
+      "key": "ia_chat.error.provider_empty_response",
+      "locale": "fr",
+      "language": "fr",
+      "value": "{provider} avec le modèle {model} n’a pas renvoyé de texte exploitable. Change de modèle ou teste ta clé."
+    },
+    {
+      "domain": "ia_chat",
       "key": "ia_chat.settings_api",
       "language": "fr",
       "locale": "fr",
@@ -7630,6 +7742,104 @@
       "language": "fr",
       "locale": "fr",
       "value": "Connexion sécurisée par cryptage quantique"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.bia",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Connexion Battle IA, calibration des arènes et des juges live"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.coop",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Stabilisation des salons co-op, du live feed et des spectateurs"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.net",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Connexion serveur sécurisée vers battle.cgwm.fr"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.nxs",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Ouverture du canal Nexus et vérification du root access"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.qst",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Récupération des quêtes Battle AI et synchronisation des rotations"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.rpg",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Récupération des quêtes Battle RP et des branches narratives"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.sig",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Analyse des signatures neurales et matching des profils IA"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.sys",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Portail stabilisé. Entrée prête pour l’opérateur."
+    },
+    {
+      "domain": "launch",
+      "key": "launch.button.enter_nexus",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Entrer dans le Nexus"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.button.skip",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Passer"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.status.audio_locked",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Canal {track} verrouillé. Injection du signal d’ouverture…"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.status.audio_unavailable",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Audio indisponible. Simulation Nexus locale engagée sans canal sonore."
+    },
+    {
+      "domain": "launch",
+      "key": "launch.status.portal_ready",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Portail stabilisé. Entrée dans le Nexus autorisée."
+    },
+    {
+      "domain": "launch",
+      "key": "launch.status.preparing",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Préparation du portail cybernétique…"
     },
     {
       "domain": "local_models",
@@ -11035,6 +11245,20 @@
     },
     {
       "domain": "tribunal",
+      "key": "tribunal.ai.local_override_hint",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Choisis un autre fournisseur déjà configuré. Aucune clé n’est ressaisie ici."
+    },
+    {
+      "domain": "tribunal",
+      "key": "tribunal.ai.uses_global_provider",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Tribunal utilise le fournisseur global configuré dans ton profil."
+    },
+    {
+      "domain": "tribunal",
       "key": "tribunal.cases_fetch_error",
       "language": "fr",
       "locale": "fr",
@@ -11494,111 +11718,6 @@
       "language": "fr",
       "locale": "fr",
       "value": "TRIBUNAL NEXUS"
-    },
-    {
-      "domain": "tribunal",
-      "key": "tribunal.ui.text.verifie_dans_le_backend_que_les_generated_cases_",
-      "locale": "fr",
-      "value": "Vérifie dans le backend que les generated_cases ont is_playable=true et status=ready ou published.\nLe client utilise /api/nexus-tribunal/generated-cases (auth avec ton token).",
-      "language": "fr"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.button.skip",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Passer"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.button.enter_nexus",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Entrer dans le Nexus"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.status.preparing",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Préparation du portail cybernétique…"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.status.portal_ready",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Portail stabilisé. Entrée dans le Nexus autorisée."
-    },
-    {
-      "domain": "launch",
-      "key": "launch.status.audio_locked",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Canal {track} verrouillé. Injection du signal d’ouverture…"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.status.audio_unavailable",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Audio indisponible. Simulation Nexus locale engagée sans canal sonore."
-    },
-    {
-      "domain": "launch",
-      "key": "launch.boot.net",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Connexion serveur sécurisée vers battle.cgwm.fr"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.boot.sig",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Analyse des signatures neurales et matching des profils IA"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.boot.bia",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Connexion Battle IA, calibration des arènes et des juges live"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.boot.qst",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Récupération des quêtes Battle AI et synchronisation des rotations"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.boot.rpg",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Récupération des quêtes Battle RP et des branches narratives"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.boot.coop",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Stabilisation des salons co-op, du live feed et des spectateurs"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.boot.nxs",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Ouverture du canal Nexus et vérification du root access"
-    },
-    {
-      "domain": "launch",
-      "key": "launch.boot.sys",
-      "language": "fr",
-      "locale": "fr",
-      "value": "Portail stabilisé. Entrée prête pour l’opérateur."
     }
   ]
 }

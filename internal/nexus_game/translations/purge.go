@@ -16,6 +16,20 @@ var deprecatedTranslationDomains = map[string]struct{}{
 
 var deprecatedTranslationKeyPrefixes = []string{
 	"home.card.sandbox.",
+	"anima.const.string.",
+	"common.const.string.",
+}
+
+var rejectedTranslationKeySubstrings = []string{
+	"_box",
+	"_id",
+	"_v2",
+	"_v3",
+	"assets/",
+	"secure_auth_jwt",
+	"token",
+	"api_key",
+	"provider_api",
 }
 
 func isRetainedTranslation(domain, key string) bool {
@@ -29,6 +43,12 @@ func isRetainedTranslation(domain, key string) bool {
 	}
 	for _, prefix := range deprecatedTranslationKeyPrefixes {
 		if strings.HasPrefix(key, prefix) {
+			return false
+		}
+	}
+	lowerKey := strings.ToLower(key)
+	for _, fragment := range rejectedTranslationKeySubstrings {
+		if strings.Contains(lowerKey, fragment) {
 			return false
 		}
 	}
@@ -47,6 +67,9 @@ func PurgeDeprecatedTranslations(ctx context.Context, database *gorm.DB) error {
 
 	return database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := purgeDeprecatedTranslationKeyPrefixes(tx); err != nil {
+			return err
+		}
+		if err := purgeRejectedTranslationKeySubstrings(tx); err != nil {
 			return err
 		}
 
@@ -78,6 +101,25 @@ func PurgeDeprecatedTranslations(ctx context.Context, database *gorm.DB) error {
 
 		return tx.Where("id IN ?", domainIDs).Delete(&models.TranslationDomain{}).Error
 	})
+}
+
+func purgeRejectedTranslationKeySubstrings(tx *gorm.DB) error {
+	for _, fragment := range rejectedTranslationKeySubstrings {
+		var keyIDs []uint
+		if err := tx.Model(&models.TranslationKey{}).Where("LOWER(`key`) LIKE ?", "%"+strings.ToLower(fragment)+"%").Pluck("id", &keyIDs).Error; err != nil {
+			return err
+		}
+		if len(keyIDs) == 0 {
+			continue
+		}
+		if err := tx.Where("key_id IN ?", keyIDs).Delete(&models.TranslationValue{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id IN ?", keyIDs).Delete(&models.TranslationKey{}).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func purgeDeprecatedTranslationKeyPrefixes(tx *gorm.DB) error {
