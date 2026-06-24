@@ -42,7 +42,7 @@ type TranslationKey struct {
 	Status       string `gorm:"size:32"`  // active, unused_candidate
 	Reviewed     bool   `gorm:"default:false"`
 	ImportSource string `gorm:"size:64"` // flutter_scan, admin, seed
-	TagsJSON     string `gorm:"type:jsonb"`
+	TagsJSON     string `gorm:"type:json"`
 }
 
 func (TranslationKey) TableName() string { return "nexus_translation_keys" }
@@ -59,6 +59,11 @@ type TranslationValue struct {
 
 	Locale string `gorm:"size:10;index"` // "fr", "en", ...
 	Value  string `gorm:"type:text"`
+
+	Reviewed           bool   `gorm:"default:false"`
+	MachineTranslated  bool   `gorm:"default:false"`
+	Source             string `gorm:"size:64"` // seed, flutter_scan, admin, ai
+	UpdatedBy          string `gorm:"size:120"`
 }
 
 func (TranslationValue) TableName() string { return "nexus_translation_values" }

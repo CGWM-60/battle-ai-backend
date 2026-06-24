@@ -314,33 +314,47 @@ func RegisterAdminRoutes(adminGroup *gin.RouterGroup, database *gorm.DB) {
 		c.JSON(http.StatusOK, gin.H{"status": "committed"})
 	})
 	adminGroup.POST("/translations/import/flutter-scan", func(c *gin.Context) {
-		var req struct {
-			Source        string                        `json:"source"`
-			DefaultLocale string                        `json:"defaultLocale"`
-			Entries       []FlutterScanEntry            `json:"entries"`
-			DryRun        bool                          `json:"dryRun"`
-		}
-		if err := c.ShouldBindJSON(&req); err != nil {
+		raw, err := c.GetRawData()
+		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
-		if len(req.Entries) == 0 {
+		entries, err := ParseFlutterScanBytes(raw)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		if len(entries) == 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "entries are required"})
 			return
 		}
+
+		var req struct {
+			Source        string `json:"source"`
+			DefaultLocale string `json:"defaultLocale"`
+			DryRun        bool   `json:"dryRun"`
+			Force         bool   `json:"force"`
+		}
+		_ = json.Unmarshal(raw, &req)
+
 		locale := req.DefaultLocale
 		if locale == "" {
 			locale = "fr"
 		}
 		if req.DryRun {
+			report, err := PreviewFlutterScan(entries)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
 			c.JSON(http.StatusOK, gin.H{
-				"status":  "preview",
-				"entries": len(req.Entries),
-				"locale":  locale,
+				"status": "preview",
+				"locale": locale,
+				"report": report,
 			})
 			return
 		}
-		report, err := svc.ImportFlutterScan(c.Request.Context(), req.Entries, locale)
+		report, err := svc.ImportFlutterScan(c.Request.Context(), entries, locale, &FlutterScanImportOptions{Force: req.Force})
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return

@@ -10,21 +10,9 @@ import (
 	"gorm.io/gorm"
 )
 
-// FlutterScanEntry is one extracted string from the Flutter codebase.
-type FlutterScanEntry struct {
-	ID                 string   `json:"id"`
-	Text               string   `json:"text"`
-	SourceFile         string   `json:"sourceFile"`
-	SourceLine         int      `json:"sourceLine"`
-	Usage              string   `json:"usage"`
-	Kind               string   `json:"kind"`
-	Module             string   `json:"module"`
-	SuggestedNamespace string   `json:"suggestedNamespace"`
-	SuggestedKey       string   `json:"suggestedKey"`
-	Tags               []string `json:"tags"`
-	NeedsParams        bool     `json:"needsParams"`
-	Params             []string `json:"params"`
-	DefaultText        string   `json:"defaultText"`
+// FlutterScanImportOptions controls upsert behavior.
+type FlutterScanImportOptions struct {
+	Force bool
 }
 
 // FlutterScanImportReport summarizes a flutter_scan upsert run.
@@ -35,25 +23,38 @@ type FlutterScanImportReport struct {
 	CreatedTags       []string `json:"createdTags"`
 	CreatedNamespaces []string `json:"createdNamespaces"`
 	SkippedEntries    []string `json:"skippedEntries"`
+	SkippedTechnical  []string `json:"skippedTechnical"`
+	SkippedAssets     []string `json:"skippedAssets"`
+	SkippedRoutes     []string `json:"skippedRoutes"`
+	SkippedProviders  []string `json:"skippedProviders"`
+	SkippedStorageKeys []string `json:"skippedStorageKeys"`
 	Conflicts         []string `json:"conflicts"`
 	DuplicateTexts    []string `json:"duplicateTexts"`
 	ReusedCommonKeys  []string `json:"reusedCommonKeys"`
-}
-
-func ParseFlutterScanBytes(raw []byte) ([]FlutterScanEntry, error) {
-	var entries []FlutterScanEntry
-	if err := json.Unmarshal(raw, &entries); err != nil {
-		return nil, err
-	}
-	return entries, nil
+	MissingTranslations []string `json:"missingTranslations,omitempty"`
 }
 
 func (s *dbTranslationService) ImportFlutterScan(
 	ctx context.Context,
 	entries []FlutterScanEntry,
 	defaultLocale string,
+	opts *FlutterScanImportOptions,
 ) (*FlutterScanImportReport, error) {
-	if s.db == nil {
+	force := false
+	if opts != nil {
+		force = opts.Force
+	}
+	return importFlutterScanEntries(ctx, s.db, entries, defaultLocale, force)
+}
+
+func importFlutterScanEntries(
+	ctx context.Context,
+	database *gorm.DB,
+	entries []FlutterScanEntry,
+	defaultLocale string,
+	force bool,
+) (*FlutterScanImportReport, error) {
+	if database == nil {
 		return nil, fmt.Errorf("database is required for flutter_scan import")
 	}
 	locale := strings.TrimSpace(defaultLocale)
@@ -61,31 +62,23 @@ func (s *dbTranslationService) ImportFlutterScan(
 		locale = "fr"
 	}
 
-	report := &FlutterScanImportReport{
-		Source: "flutter_scan",
-	}
+	report := &FlutterScanImportReport{Source: "flutter_scan"}
 	seenTextToKey := make(map[string]string)
 
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for _, entry := range entries {
-			fullKey := strings.TrimSpace(entry.SuggestedKey)
-			if fullKey == "" {
-				report.SkippedEntries = append(report.SkippedEntries, entry.ID)
-				continue
-			}
-			domain, keyName := splitDomainAndKey(fullKey)
-			if !isRetainedTranslation(domain, fullKey) {
-				report.SkippedEntries = append(report.SkippedEntries, fullKey)
+	err := database.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for _, raw := range entries {
+			entry := raw.Normalized()
+			ok, reason := isTranslatableFlutterEntry(entry)
+			if !ok {
+				appendSkipped(report, entry, reason)
 				continue
 			}
 
-			value := strings.TrimSpace(entry.DefaultText)
+			fullKey := entry.FullKey
+			domain, _ := splitDomainAndKey(fullKey)
+			value := entry.DefaultText
 			if value == "" {
-				value = strings.TrimSpace(entry.Text)
-			}
-			if value == "" {
-				report.SkippedEntries = append(report.SkippedEntries, fullKey)
-				continue
+				value = entry.Text
 			}
 
 			if existingKey, ok := seenTextToKey[value]; ok && existingKey != fullKey {
@@ -94,13 +87,11 @@ func (s *dbTranslationService) ImportFlutterScan(
 				seenTextToKey[value] = fullKey
 			}
 
-			createdDomain, err := ensureDomain(tx, domain, report)
-			if err != nil {
+			if _, err := ensureDomain(tx, domain, report); err != nil {
 				return err
 			}
-			_ = createdDomain
 
-			created, updated, err := upsertFlutterScanKey(tx, fullKey, domain, keyName, locale, value, entry, report)
+			created, updated, err := upsertFlutterScanKey(tx, fullKey, domain, locale, value, entry, report, force)
 			if err != nil {
 				return err
 			}
@@ -121,6 +112,52 @@ func (s *dbTranslationService) ImportFlutterScan(
 		return nil, err
 	}
 	return report, nil
+}
+
+// PreviewFlutterScan filters entries without touching the database.
+func PreviewFlutterScan(entries []FlutterScanEntry) (*FlutterScanImportReport, error) {
+	report := &FlutterScanImportReport{Source: "flutter_scan"}
+	seen := make(map[string]string)
+	for _, raw := range entries {
+		entry := raw.Normalized()
+		ok, reason := isTranslatableFlutterEntry(entry)
+		if !ok {
+			appendSkipped(report, entry, reason)
+			continue
+		}
+		if prev, ok := seen[entry.DefaultText]; ok && prev != entry.FullKey {
+			report.DuplicateTexts = append(report.DuplicateTexts, entry.FullKey+"<=>"+prev)
+		} else {
+			seen[entry.DefaultText] = entry.FullKey
+		}
+		report.CreatedKeys = append(report.CreatedKeys, entry.FullKey)
+		if strings.HasPrefix(entry.FullKey, "common.") {
+			report.ReusedCommonKeys = append(report.ReusedCommonKeys, entry.FullKey)
+		}
+	}
+	return report, nil
+}
+
+func appendSkipped(report *FlutterScanImportReport, entry NormalizedFlutterScanEntry, reason FlutterScanSkipReason) {
+	label := entry.FullKey
+	if label == "" {
+		label = entry.ID
+	}
+	report.SkippedEntries = append(report.SkippedEntries, label)
+	switch reason {
+	case SkipTechnical:
+		report.SkippedTechnical = append(report.SkippedTechnical, label)
+	case SkipAssets:
+		report.SkippedAssets = append(report.SkippedAssets, label)
+	case SkipRoutes:
+		report.SkippedRoutes = append(report.SkippedRoutes, label)
+	case SkipProviders:
+		report.SkippedProviders = append(report.SkippedProviders, label)
+	case SkipStorageKeys:
+		report.SkippedStorageKeys = append(report.SkippedStorageKeys, label)
+	default:
+		report.SkippedTechnical = append(report.SkippedTechnical, label)
+	}
 }
 
 func splitDomainAndKey(fullKey string) (string, string) {
@@ -150,9 +187,10 @@ func ensureDomain(tx *gorm.DB, code string, report *FlutterScanImportReport) (bo
 
 func upsertFlutterScanKey(
 	tx *gorm.DB,
-	fullKey, domain, keyName, locale, value string,
-	entry FlutterScanEntry,
+	fullKey, domain, locale, value string,
+	entry NormalizedFlutterScanEntry,
 	report *FlutterScanImportReport,
+	force bool,
 ) (created bool, updated bool, err error) {
 	var domainRow models.TranslationDomain
 	if err = tx.Where("code = ?", domain).
@@ -199,7 +237,12 @@ func upsertFlutterScanKey(
 		updated = true
 	}
 
-	val := models.TranslationValue{KeyID: keyRow.ID, Locale: locale, Value: value}
+	val := models.TranslationValue{
+		KeyID:  keyRow.ID,
+		Locale: locale,
+		Value:  value,
+		Source: "flutter_scan",
+	}
 	var existing models.TranslationValue
 	findErr := tx.Where("key_id = ? AND locale = ?", keyRow.ID, locale).First(&existing).Error
 	if findErr == gorm.ErrRecordNotFound {
@@ -208,8 +251,14 @@ func upsertFlutterScanKey(
 		}
 	} else if findErr != nil {
 		return created, updated, findErr
+	} else if existing.Reviewed && !force {
+		// Keep human-reviewed translations intact.
 	} else if strings.TrimSpace(existing.Value) != value {
-		if err = tx.Model(&existing).Update("value", value).Error; err != nil {
+		updates := map[string]interface{}{
+			"value":  value,
+			"source": "flutter_scan",
+		}
+		if err = tx.Model(&existing).Updates(updates).Error; err != nil {
 			return created, updated, err
 		}
 	}
@@ -220,7 +269,7 @@ func upsertFlutterScanKey(
 	return created, updated, nil
 }
 
-func buildFlutterScanDescription(entry FlutterScanEntry) string {
+func buildFlutterScanDescription(entry NormalizedFlutterScanEntry) string {
 	parts := []string{
 		fmt.Sprintf("Extracted from %s:%d", entry.SourceFile, entry.SourceLine),
 		"usage=" + entry.Usage,

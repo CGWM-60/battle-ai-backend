@@ -17,6 +17,7 @@ func main() {
 	source := flag.String("source", "seed", "import source: seed|flutter_scan")
 	defaultLocale := flag.String("default-locale", "fr", "default locale for flutter_scan import")
 	dryRun := flag.Bool("dry-run", false, "preview only, do not persist")
+	force := flag.Bool("force", false, "overwrite reviewed translations")
 	reportPath := flag.String("report", "", "optional path to write import report JSON")
 	flag.Parse()
 
@@ -34,7 +35,7 @@ func main() {
 	ctx := context.Background()
 	switch strings.TrimSpace(*source) {
 	case "flutter_scan":
-		runFlutterScan(ctx, raw, *defaultLocale, *dryRun, *reportPath)
+		runFlutterScan(ctx, raw, *defaultLocale, *dryRun, *force, *reportPath)
 	default:
 		runSeedImport(ctx, raw, *dryRun)
 	}
@@ -83,7 +84,7 @@ func runSeedImport(ctx context.Context, raw []byte, dryRun bool) {
 	fmt.Printf("committed import_id=%d rows=%d status=%s\n", imp.ID, imp.RowCount, imp.Status)
 }
 
-func runFlutterScan(ctx context.Context, raw []byte, defaultLocale string, dryRun bool, reportPath string) {
+func runFlutterScan(ctx context.Context, raw []byte, defaultLocale string, dryRun bool, force bool, reportPath string) {
 	entries, err := translations.ParseFlutterScanBytes(raw)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "parse flutter_scan file: %v\n", err)
@@ -94,21 +95,27 @@ func runFlutterScan(ctx context.Context, raw []byte, defaultLocale string, dryRu
 		os.Exit(1)
 	}
 
-	fmt.Printf("flutter_scan entries=%d locale=%s dry_run=%v\n", len(entries), defaultLocale, dryRun)
+	fmt.Printf("flutter_scan entries=%d locale=%s dry_run=%v force=%v\n", len(entries), defaultLocale, dryRun, force)
 	if dryRun {
-		fmt.Println("dry-run: flutter_scan import not committed")
-		writeReport(reportPath, map[string]interface{}{
-			"source":        "flutter_scan",
-			"entries":       len(entries),
-			"defaultLocale": defaultLocale,
-			"dryRun":        true,
-		})
+		report, err := translations.PreviewFlutterScan(entries)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "preview flutter_scan: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf(
+			"dry-run importable=%d skipped=%d technical=%d storage=%d\n",
+			len(report.CreatedKeys),
+			len(report.SkippedEntries),
+			len(report.SkippedTechnical),
+			len(report.SkippedStorageKeys),
+		)
+		writeReport(reportPath, report)
 		return
 	}
 
 	database := db.DbConnect()
 	service := translations.NewTranslationService(database)
-	report, err := service.ImportFlutterScan(ctx, entries, defaultLocale)
+	report, err := service.ImportFlutterScan(ctx, entries, defaultLocale, &translations.FlutterScanImportOptions{Force: force})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "import flutter_scan: %v\n", err)
 		os.Exit(1)
