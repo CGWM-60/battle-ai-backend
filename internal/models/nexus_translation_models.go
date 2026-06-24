@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -42,7 +43,28 @@ type TranslationKey struct {
 	Status       string `gorm:"size:32"`  // active, unused_candidate
 	Reviewed     bool   `gorm:"default:false"`
 	ImportSource string `gorm:"size:64"` // flutter_scan, admin, seed
-	TagsJSON     string `gorm:"type:json"`
+	TagsJSON     string `gorm:"type:json;default:'[]'"`
+}
+
+func (k *TranslationKey) BeforeCreate(tx *gorm.DB) error {
+	if strings.TrimSpace(k.TagsJSON) == "" {
+		k.TagsJSON = "[]"
+	}
+	return nil
+}
+
+func (k *TranslationKey) BeforeSave(tx *gorm.DB) error {
+	if strings.TrimSpace(k.TagsJSON) == "" {
+		k.TagsJSON = "[]"
+	}
+	return nil
+}
+
+func (k *TranslationKey) BeforeUpdate(tx *gorm.DB) error {
+	if strings.TrimSpace(k.TagsJSON) == "" {
+		k.TagsJSON = "[]"
+	}
+	return nil
 }
 
 func (TranslationKey) TableName() string { return "nexus_translation_keys" }

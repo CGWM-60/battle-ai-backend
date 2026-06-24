@@ -14,6 +14,9 @@ import (
 
 func main() {
 	database := db.DbConnect()
+	if err := translations.RepairInvalidTranslationTagsJSON(context.Background(), database); err != nil {
+		panic(fmt.Sprintf("failed to repair translation tags json: %v", err))
+	}
 	if err := translations.PurgeDeprecatedTranslations(context.Background(), database); err != nil {
 		panic(fmt.Sprintf("failed to purge deprecated translations: %v", err))
 	}

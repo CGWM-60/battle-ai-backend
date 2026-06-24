@@ -36,6 +36,9 @@ func loadInitialSeedRows() ([]models.TranslationImportRow, error) {
 }
 
 func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.TranslationImport, error) {
+	if err := RepairInvalidTranslationTagsJSON(ctx, database); err != nil {
+		return nil, err
+	}
 	if err := PurgeDeprecatedTranslations(ctx, database); err != nil {
 		return nil, err
 	}

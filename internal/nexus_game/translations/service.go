@@ -244,7 +244,13 @@ func (s *dbTranslationService) UpsertBatch(ctx context.Context, entries []Transl
 
 		// Trouver ou créer la clé
 		var key models.TranslationKey
-		if err := s.db.Where("domain_id = ? AND `key` = ?", domain.ID, e.Key).FirstOrCreate(&key, models.TranslationKey{DomainID: domain.ID, Key: e.Key}).Error; err != nil {
+		if err := s.db.Where("domain_id = ? AND `key` = ?", domain.ID, e.Key).FirstOrCreate(&key, models.TranslationKey{
+			DomainID:     domain.ID,
+			Key:          e.Key,
+			Status:       "active",
+			ImportSource: "seed",
+			TagsJSON:     normalizeTagsJSON(""),
+		}).Error; err != nil {
 			return err
 		}
 
@@ -308,10 +314,12 @@ func (s *dbTranslationService) GetAllKeys(ctx context.Context) ([]models.Transla
 }
 
 func (s *dbTranslationService) CreateKey(ctx context.Context, k *models.TranslationKey) error {
+	k.TagsJSON = normalizeTagsJSON(k.TagsJSON)
 	return s.db.Create(k).Error
 }
 
 func (s *dbTranslationService) UpdateKey(ctx context.Context, id uint, k *models.TranslationKey) error {
+	k.TagsJSON = normalizeTagsJSON(k.TagsJSON)
 	return s.db.Model(&models.TranslationKey{ID: id}).Updates(k).Error
 }
 
@@ -648,8 +656,19 @@ func upsertTranslationRow(tx *gorm.DB, row models.TranslationImportRow) error {
 
 	var key models.TranslationKey
 	if err := tx.Where("domain_id = ? AND `key` = ?", domain.ID, row.Key).
-		FirstOrCreate(&key, models.TranslationKey{DomainID: domain.ID, Key: row.Key}).Error; err != nil {
+		FirstOrCreate(&key, models.TranslationKey{
+			DomainID:     domain.ID,
+			Key:          row.Key,
+			Status:       "active",
+			ImportSource: "seed",
+			TagsJSON:     normalizeTagsJSON(""),
+		}).Error; err != nil {
 		return err
+	}
+	if strings.TrimSpace(key.TagsJSON) == "" {
+		if err := tx.Model(&key).Update("tags_json", "[]").Error; err != nil {
+			return err
+		}
 	}
 
 	value := models.TranslationValue{

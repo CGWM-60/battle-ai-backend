@@ -212,7 +212,7 @@ func upsertFlutterScanKey(
 			Status:       "active",
 			Reviewed:     false,
 			ImportSource: "flutter_scan",
-			TagsJSON:     tagsJSON(entry.Tags),
+			TagsJSON:     normalizeTagsJSON(tagsJSON(entry.Tags)),
 		}
 		if err = tx.Create(&keyRow).Error; err != nil {
 			return false, false, err
@@ -229,7 +229,7 @@ func upsertFlutterScanKey(
 			"kind":          entry.Kind,
 			"status":        "active",
 			"import_source": "flutter_scan",
-			"tags_json":     tagsJSON(entry.Tags),
+			"tags_json":     normalizeTagsJSON(tagsJSON(entry.Tags)),
 		}
 		if err = tx.Model(&keyRow).Updates(updates).Error; err != nil {
 			return false, false, err
