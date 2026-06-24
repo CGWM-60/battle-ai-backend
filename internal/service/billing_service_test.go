@@ -509,7 +509,7 @@ func TestAIOrchestratorModes(t *testing.T) {
 		t.Fatal("expected platform billing even when AI provider is mock")
 	}
 	plan := orchestrator.BuildExecutionPlan("platform", "", "openai", "gpt-test", 1200, 800, "usage:test")
-	if !plan.RequiresWallet || !plan.UsesMockProvider {
+	if !plan.RequiresWallet || plan.UsesMockProvider || !plan.UsesPlatformKey {
 		t.Fatalf("unexpected plan: %+v", plan)
 	}
 }

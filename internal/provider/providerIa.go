@@ -158,18 +158,21 @@ type SpecMessageTextOpenAI struct {
 	ImageUrl string `json:"image_url,omitempty"`
 }
 
+const mockProviderMarker = "__mock__"
+
 func NewsProvider(apiKey string, url string, model string) *Provider {
 	return &Provider{
-		apiKey: apiKey,
-		url:    url,
-		model:  model,
+		apiKey: strings.TrimSpace(apiKey),
+		url:    strings.TrimSpace(url),
+		model:  strings.TrimSpace(model),
 	}
 }
 
-// NewMockProvider renvoie un provider local sans appel reseau (billing mode mock).
+// NewMockProvider renvoie un provider mock explicite (tests/admin uniquement).
 func NewMockProvider(name string, model string) *Provider {
+	_ = name
 	return &Provider{
-		name:  strings.TrimSpace(name),
+		name:  mockProviderMarker,
 		model: strings.TrimSpace(model),
 	}
 }
@@ -208,7 +211,26 @@ func (m ProviderMessage) MarshalJSON() ([]byte, error) {
 }
 
 func (p *Provider) isMock() bool {
-	return p != nil && strings.TrimSpace(p.apiKey) == "" && strings.TrimSpace(p.url) == ""
+	return p != nil && strings.TrimSpace(p.name) == mockProviderMarker
+}
+
+func (p *Provider) validateLiveConfig() error {
+	if p == nil {
+		return fmt.Errorf("provider is nil")
+	}
+	if p.isMock() {
+		return nil
+	}
+	if strings.TrimSpace(p.url) == "" {
+		return fmt.Errorf("provider url is required")
+	}
+	if strings.TrimSpace(p.apiKey) == "" {
+		return fmt.Errorf("provider api key is required")
+	}
+	if strings.TrimSpace(p.model) == "" {
+		return fmt.Errorf("provider model is required")
+	}
+	return nil
 }
 
 func (p *Provider) mockChat(messages []ProviderMessage, stream bool, onChunk func(chunk string)) (providerCallResult, error) {
@@ -244,6 +266,9 @@ func (p *Provider) mockChat(messages []ProviderMessage, stream bool, onChunk fun
 }
 
 func (p *Provider) Chat(ctx context.Context, messages []ProviderMessage) (string, error) {
+	if err := p.validateLiveConfig(); err != nil {
+		return "", err
+	}
 	if p.isMock() {
 		result, err := p.mockChat(messages, false, nil)
 		if err != nil {
@@ -268,6 +293,9 @@ func (p *Provider) ChatStream(
 	messages []ProviderMessage,
 	onChunk func(chunk string),
 ) (string, error) {
+	if err := p.validateLiveConfig(); err != nil {
+		return "", err
+	}
 	if p.isMock() {
 		result, err := p.mockChat(messages, true, onChunk)
 		if err != nil {

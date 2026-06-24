@@ -94,20 +94,18 @@ func (o *AIOrchestrator) BuildExecutionPlan(
 		ModelName:        modelName,
 	}
 
-	mockProvider := usesMockAIProvider()
-
 	switch mode {
 	case AIOrchestratorModeBYOK:
 		plan.BillingSource = billingSourceClientKey
 		plan.UsesClientKey = true
 	case AIOrchestratorModeMock:
 		plan.BillingSource = "mock"
-		plan.UsesMockProvider = true
+		plan.UsesMockProvider = AllowUserFacingMockAI()
 	default:
 		plan.BillingSource = billingSourcePlatformKey
 		plan.RequiresWallet = estimate.NexusCoins > 0
-		plan.UsesMockProvider = mockProvider
-		plan.UsesPlatformKey = !mockProvider
+		plan.UsesPlatformKey = true
+		plan.UsesMockProvider = false
 	}
 	return plan
 }
@@ -183,18 +181,45 @@ func (o *AIOrchestrator) ResolveAPIKey(plan AIExecutionPlan, clientAPIKey string
 	case AIOrchestratorModeBYOK:
 		key := strings.TrimSpace(clientAPIKey)
 		if key == "" {
-			return "", BillingForbiddenError("client api key required for own_key billing mode", nil)
+			return "", NewAIProviderError(
+				AIErrorProviderKeyMissing,
+				providerName,
+				plan.ModelName,
+				"client api key required for own_key billing mode",
+				false,
+			)
 		}
 		return key, nil
 	case AIOrchestratorModeMock:
+		if !AllowUserFacingMockAI() {
+			return "", NewAIProviderError(
+				AIErrorMockDisabled,
+				providerName,
+				plan.ModelName,
+				"mock ai is disabled on user-facing routes",
+				false,
+			)
+		}
 		return "", nil
 	default:
 		if plan.UsesMockProvider {
-			return "", nil
+			return "", NewAIProviderError(
+				AIErrorMockDisabled,
+				providerName,
+				plan.ModelName,
+				"mock ai is disabled on user-facing routes",
+				false,
+			)
 		}
 		key := strings.TrimSpace(platformAPIKey(providerName))
 		if key == "" {
-			return "", PaymentRequiredError("platform api key unavailable", map[string]any{"provider": providerName})
+			return "", NewAIProviderError(
+				AIErrorPlatformKeyMissing,
+				providerName,
+				plan.ModelName,
+				"platform provider key is not configured",
+				false,
+			)
 		}
 		return key, nil
 	}
@@ -204,8 +229,11 @@ func (o *AIOrchestrator) AttachProvider(plan AIExecutionPlan, base *provider.Pro
 	if base == nil {
 		return nil
 	}
-	if plan.Mode == AIOrchestratorModeMock || plan.UsesMockProvider {
-		return provider.NewMockProvider(defaultString(plan.ProviderName, "mock"), defaultString(plan.ModelName, "mock-model"))
+	if (plan.Mode == AIOrchestratorModeMock || plan.UsesMockProvider) && AllowUserFacingMockAI() {
+		return provider.NewMockProvider(
+			defaultString(plan.ProviderName, "mock"),
+			defaultString(plan.ModelName, "mock-model"),
+		)
 	}
 	return base
 }
@@ -220,6 +248,10 @@ func platformAPIKey(providerName string) string {
 		return firstNonEmptyEnv("OPENROUTER_API_KEY", "OPEN_ROUTER_API_KEY")
 	case "xia", "xai", "x-ai":
 		return firstNonEmptyEnv("XAI_API_KEY", "X_AI_KEY")
+	case "claude", "anthropic":
+		return firstNonEmptyEnv("ANTHROPIC_API_KEY", "CLAUDE_API_KEY")
+	case "gemini", "google", "google_ai", "google-ai":
+		return firstNonEmptyEnv("GEMINI_API_KEY", "GOOGLE_AI_API_KEY")
 	default:
 		return firstNonEmptyEnv("OPEN_AI_KEY", "OPENAI_API_KEY")
 	}

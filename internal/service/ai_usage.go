@@ -42,68 +42,84 @@ func attachUsageRecorder(
 		return ai
 	}
 	return ai.WithUsageRecorder(func(record provider.UsageRecord) {
-		ctx := context.Background()
-		price := usagePricing(ref.ProviderName)
-		costMicros := estimateUsageCostMicros(record.PromptTokens, record.CompletionTokens, price)
-		usageRecord := &models.AIUsageRecord{
-			OwnerID:              ref.OwnerID,
-			SessionMode:          defaultString(ref.SessionMode, constants.ModeBattleIA),
-			BattleSaveID:         ref.BattleSaveID,
-			RolePlaySessionID:    ref.RolePlaySessionID,
-			BillingSource:        defaultString(ref.BillingSource, billingSourceClientKey),
-			ProviderName:         normalizeProviderName(ref.ProviderName),
-			ProviderHost:         record.ProviderHost,
-			ModelName:            defaultString(record.Model, ref.ModelName),
-			Operation:            record.Operation,
-			Phase:                record.Phase,
-			Round:                record.Round,
-			ActorName:            record.ActorName,
-			PromptTokens:         record.PromptTokens,
-			CompletionTokens:     record.CompletionTokens,
-			TotalTokens:          record.TotalTokens,
-			InputChars:           record.InputChars,
-			OutputChars:          record.OutputChars,
-			Stream:               record.Stream,
-			Fallback:             record.Fallback,
-			Estimated:            record.Estimated,
-			Currency:             "USD",
-			InputUSDPer1MToken:   price.InputUSDPer1M,
-			OutputUSDPer1MToken:  price.OutputUSDPer1M,
-			EstimatedCostMicros:  costMicros,
-			PricingConfiguration: price.Source,
-		}
-		if err := usage.Create(ctx, usageRecord); err != nil {
-			log.Printf("[ai-usage] create failed mode=%s provider=%s model=%s err=%v", ref.SessionMode, ref.ProviderName, ref.ModelName, err)
-			return
-		}
-		if ref.BattleSaveID != nil {
-			if err := usage.IncrementBattleUsage(ctx, *ref.BattleSaveID, record.PromptTokens, record.CompletionTokens, record.TotalTokens, costMicros); err != nil {
-				log.Printf("[ai-usage] increment battle failed battle_id=%d err=%v", *ref.BattleSaveID, err)
-			}
-		}
-		if ref.RolePlaySessionID != nil {
-			if err := usage.IncrementRolePlayUsage(ctx, *ref.RolePlaySessionID, record.PromptTokens, record.CompletionTokens, record.TotalTokens, costMicros); err != nil {
-				log.Printf("[ai-usage] increment roleplay failed session_id=%d err=%v", *ref.RolePlaySessionID, err)
-			}
-		}
-		if ref.Orchestrator != nil && ref.SettlementPlan != nil {
-			referenceID := ""
-			if usageRecord.Id != 0 {
-				referenceID = fmt.Sprintf("ai_usage_record:%d", usageRecord.Id)
-			}
-			if _, err := ref.Orchestrator.SettleUsage(
-				ctx,
-				ref.OwnerID,
-				*ref.SettlementPlan,
-				record.PromptTokens,
-				record.CompletionTokens,
-				defaultString(ref.Feature, ref.SessionMode),
-				referenceID,
-			); err != nil {
-				log.Printf("[ai-usage] billing settlement failed mode=%s user_id=%d err=%v", ref.SessionMode, ref.OwnerID, err)
-			}
-		}
+		commitAIUsageRecord(usage, ref, record)
 	})
+}
+
+func attachCapturedUsageRecorder(ai *provider.Provider, capture *provider.UsageRecord) *provider.Provider {
+	if ai == nil || capture == nil {
+		return ai
+	}
+	return ai.WithUsageRecorder(func(record provider.UsageRecord) {
+		*capture = record
+	})
+}
+
+func commitAIUsageRecord(usage *repository.AIUsageRepository, ref usageSessionRef, record provider.UsageRecord) {
+	if usage == nil {
+		return
+	}
+	ctx := context.Background()
+	price := usagePricing(ref.ProviderName)
+	costMicros := estimateUsageCostMicros(record.PromptTokens, record.CompletionTokens, price)
+	usageRecord := &models.AIUsageRecord{
+		OwnerID:              ref.OwnerID,
+		SessionMode:          defaultString(ref.SessionMode, constants.ModeBattleIA),
+		BattleSaveID:         ref.BattleSaveID,
+		RolePlaySessionID:    ref.RolePlaySessionID,
+		BillingSource:        defaultString(ref.BillingSource, billingSourceClientKey),
+		ProviderName:         normalizeProviderName(ref.ProviderName),
+		ProviderHost:         record.ProviderHost,
+		ModelName:            defaultString(record.Model, ref.ModelName),
+		Operation:            record.Operation,
+		Phase:                record.Phase,
+		Round:                record.Round,
+		ActorName:            record.ActorName,
+		PromptTokens:         record.PromptTokens,
+		CompletionTokens:     record.CompletionTokens,
+		TotalTokens:          record.TotalTokens,
+		InputChars:           record.InputChars,
+		OutputChars:          record.OutputChars,
+		Stream:               record.Stream,
+		Fallback:             record.Fallback,
+		Estimated:            record.Estimated,
+		Currency:             "USD",
+		InputUSDPer1MToken:   price.InputUSDPer1M,
+		OutputUSDPer1MToken:  price.OutputUSDPer1M,
+		EstimatedCostMicros:  costMicros,
+		PricingConfiguration: price.Source,
+	}
+	if err := usage.Create(ctx, usageRecord); err != nil {
+		log.Printf("[ai-usage] create failed mode=%s provider=%s model=%s err=%v", ref.SessionMode, ref.ProviderName, ref.ModelName, err)
+		return
+	}
+	if ref.BattleSaveID != nil {
+		if err := usage.IncrementBattleUsage(ctx, *ref.BattleSaveID, record.PromptTokens, record.CompletionTokens, record.TotalTokens, costMicros); err != nil {
+			log.Printf("[ai-usage] increment battle failed battle_id=%d err=%v", *ref.BattleSaveID, err)
+		}
+	}
+	if ref.RolePlaySessionID != nil {
+		if err := usage.IncrementRolePlayUsage(ctx, *ref.RolePlaySessionID, record.PromptTokens, record.CompletionTokens, record.TotalTokens, costMicros); err != nil {
+			log.Printf("[ai-usage] increment roleplay failed session_id=%d err=%v", *ref.RolePlaySessionID, err)
+		}
+	}
+	if ref.Orchestrator != nil && ref.SettlementPlan != nil {
+		referenceID := ""
+		if usageRecord.Id != 0 {
+			referenceID = fmt.Sprintf("ai_usage_record:%d", usageRecord.Id)
+		}
+		if _, err := ref.Orchestrator.SettleUsage(
+			ctx,
+			ref.OwnerID,
+			*ref.SettlementPlan,
+			record.PromptTokens,
+			record.CompletionTokens,
+			defaultString(ref.Feature, ref.SessionMode),
+			referenceID,
+		); err != nil {
+			log.Printf("[ai-usage] billing settlement failed mode=%s user_id=%d err=%v", ref.SessionMode, ref.OwnerID, err)
+		}
+	}
 }
 
 type usagePrice struct {

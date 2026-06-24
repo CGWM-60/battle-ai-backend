@@ -48,7 +48,7 @@ func TestGenerateRejectsMockEvenWhenMockModeForUserFacingRoutes(t *testing.T) {
 		t.Fatal("expected mock mode")
 	}
 
-	if allowMockForUserFacingRoutes() {
+	if AllowUserFacingMockAI() {
 		t.Fatal("user-facing mock must be disabled by default")
 	}
 

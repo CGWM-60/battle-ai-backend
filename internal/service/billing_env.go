@@ -46,11 +46,11 @@ func envBool(key string, defaultValue bool) bool {
 }
 
 func BillingModeEnv() string {
-	return strings.ToLower(envString("BILLING_MODE", "", "mock"))
+	return strings.ToLower(envString("BILLING_MODE", "", "live"))
 }
 
 func AIPlatformMode() string {
-	return strings.ToLower(envString("AI_PLATFORM_MODE", "", "mock"))
+	return strings.ToLower(envString("AI_PLATFORM_MODE", "", "live"))
 }
 
 func StoreVerifierMode() string {
@@ -62,7 +62,7 @@ func AICreditsEnabled() bool {
 }
 
 func AIMockEnabled() bool {
-	return envBool("AI_MOCK_ENABLED", true)
+	return envBool("AI_MOCK_ENABLED", false)
 }
 
 func StarterBonusCredits() int64 {

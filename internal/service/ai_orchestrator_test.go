@@ -38,9 +38,10 @@ func TestBattleServiceResolveBattleProviderModeKeepsPlatformCreditsAuthoritative
 	}
 }
 
-func TestAIOrchestratorPlatformKeepsBillingWithMockProvider(t *testing.T) {
+func TestAIOrchestratorPlatformNeverUsesMockProviderOnUserFacingRoutes(t *testing.T) {
 	t.Setenv("AI_PLATFORM_MODE", "mock")
 	t.Setenv("AI_MOCK_ENABLED", "true")
+	t.Setenv("AI_ALLOW_USER_FACING_MOCK", "false")
 	orchestrator := NewAIOrchestrator(nil, NewAICreditEstimator(), nil)
 
 	if mode := orchestrator.ResolveMode("platform", ""); mode != AIOrchestratorModePlatform {
@@ -51,11 +52,11 @@ func TestAIOrchestratorPlatformKeepsBillingWithMockProvider(t *testing.T) {
 	if !plan.RequiresWallet {
 		t.Fatalf("expected wallet requirement with platform billing: %+v", plan)
 	}
-	if !plan.UsesMockProvider {
-		t.Fatalf("expected mock provider with AI_PLATFORM_MODE=mock: %+v", plan)
+	if plan.UsesMockProvider {
+		t.Fatalf("platform plan must not use mock provider on user-facing routes: %+v", plan)
 	}
-	if plan.UsesPlatformKey {
-		t.Fatalf("expected no platform key when mock provider is enabled: %+v", plan)
+	if !plan.UsesPlatformKey {
+		t.Fatalf("platform plan must require real platform key: %+v", plan)
 	}
 }
 

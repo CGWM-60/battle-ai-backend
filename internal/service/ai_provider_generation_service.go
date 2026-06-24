@@ -133,6 +133,10 @@ func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AI
 	billingMode := strings.TrimSpace(input.BillingMode)
 	prompt := strings.TrimSpace(input.Prompt)
 
+	if err := rejectUserFacingMock(providerName, modelName); err != nil {
+		return nil, err
+	}
+
 	url, err := ProviderURL(providerName)
 	if err != nil {
 		return nil, fmt.Errorf("providerName invalide")
@@ -144,8 +148,20 @@ func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AI
 		if err := s.orchestrator.Authorize(ctx, input.OwnerID, plan); err != nil {
 			return nil, MapBillingError(err)
 		}
+		if plan.UsesMockProvider && !AllowUserFacingMockAI() {
+			return nil, NewAIProviderError(
+				AIErrorMockDisabled,
+				providerName,
+				modelName,
+				"mock ai is disabled on user-facing routes",
+				false,
+			)
+		}
 		resolvedKey, keyErr := s.orchestrator.ResolveAPIKey(plan, apiKey, providerName)
 		if keyErr != nil {
+			if _, ok := AsAIProviderError(keyErr); ok {
+				return nil, keyErr
+			}
 			return nil, MapBillingError(keyErr)
 		}
 		apiKey = resolvedKey
@@ -178,7 +194,7 @@ func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AI
 		baseProvider = s.orchestrator.AttachProvider(plan, baseProvider)
 	}
 	feature := defaultString(input.Feature, constants.ModeRolePlayIA)
-	ai := attachUsageRecorder(s.usage, usageSessionRef{
+	usageRef := usageSessionRef{
 		OwnerID:        input.OwnerID,
 		SessionMode:    feature,
 		BillingSource:  plan.BillingSource,
@@ -187,7 +203,9 @@ func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AI
 		Feature:        feature,
 		SettlementPlan: &plan,
 		Orchestrator:   s.orchestrator,
-	}, baseProvider)
+	}
+	var capturedUsage provider.UsageRecord
+	ai := attachCapturedUsageRecorder(baseProvider, &capturedUsage)
 	if ai != nil {
 		ai.WithUsageMetadata(provider.UsageMetadata{
 			Mode:      feature,
@@ -207,7 +225,13 @@ func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AI
 
 	generated := strings.TrimSpace(response)
 	if generated == "" {
-		return nil, fmt.Errorf("ai provider returned empty response")
+		return nil, NewAIProviderError(
+			AIErrorProviderEmptyResponse,
+			providerName,
+			modelName,
+			"ai provider returned empty response",
+			true,
+		)
 	}
 	if looksLikeAIMockOrPromptLeak(generated) {
 		log.Printf(
@@ -217,14 +241,24 @@ func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AI
 			feature,
 			input.Operation,
 			usesMockAIProvider(),
-			allowMockForUserFacingRoutes(),
+			AllowUserFacingMockAI(),
 		)
-		if !allowMockForUserFacingRoutes() {
-			return nil, fmt.Errorf("ai provider returned mock or prompt leak response")
+		if !AllowUserFacingMockAI() {
+			return nil, NewAIProviderError(
+				AIErrorProviderMockResponse,
+				providerName,
+				modelName,
+				"ai provider returned mock or prompt leak response",
+				false,
+			)
 		}
 	}
 	if input.MaxChars > 0 {
 		generated = truncateRunes(generated, input.MaxChars)
+	}
+
+	if capturedUsage.TotalTokens > 0 || capturedUsage.PromptTokens > 0 || capturedUsage.CompletionTokens > 0 {
+		commitAIUsageRecord(s.usage, usageRef, capturedUsage)
 	}
 
 	return &AIProviderGenerationResult{
