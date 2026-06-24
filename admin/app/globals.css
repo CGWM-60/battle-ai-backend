@@ -332,7 +332,8 @@ textarea {
 
 button.primary,
 button.danger,
-button.secondary {
+button.secondary,
+.secondary-link {
   min-height: 38px;
   border: 0;
   border-radius: 6px;
@@ -342,6 +343,7 @@ button.secondary {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  text-decoration: none;
 }
 
 button.primary {
@@ -353,7 +355,8 @@ button.primary:hover {
   background: var(--accent-strong);
 }
 
-button.secondary {
+button.secondary,
+.secondary-link {
   background: rgba(48, 209, 119, 0.16);
   color: #9ef8bd;
 }
@@ -947,6 +950,19 @@ dd {
   margin-top: 12px;
 }
 
+.translation-import-controls {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.5fr) minmax(180px, 1fr) minmax(220px, 1.2fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.translation-import-controls label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .locale-toolbar {
   margin-bottom: 12px;
 }
@@ -1010,6 +1026,10 @@ dd {
 
 .translation-grid-wrap {
   max-height: 70vh;
+}
+
+.translation-preview-wrap {
+  max-height: 56vh;
 }
 
 .translation-grid-table {
@@ -1134,6 +1154,42 @@ dd {
   padding: 0;
   cursor: pointer;
   font-weight: 700;
+}
+
+.translation-confirm-modal {
+  width: min(760px, 100%);
+}
+
+.translation-confirm-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.translation-confirm-grid div {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--panel-strong);
+}
+
+.translation-confirm-grid span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.translation-confirm-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: #ffffff;
+  font-size: 22px;
+}
+
+.translation-confirm-list {
+  grid-template-columns: minmax(100px, 150px) 1fr;
+  margin: 12px 0 16px;
 }
 
 .status.complete {

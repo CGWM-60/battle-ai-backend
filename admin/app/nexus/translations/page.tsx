@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "../../components/AdminShell";
 import { ErrorState, LoadingState } from "../../components/LoadState";
@@ -314,6 +315,22 @@ export default function TranslationsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const exportCsv = (locales: string[], fileName: string) => {
+    const valuesByKeyLocale = new Map<string, TranslationValue>();
+    values.forEach((value) => valuesByKeyLocale.set(`${value.KeyID}:${value.Locale}`, value));
+    const headers = ["domain", "key", "description", ...locales];
+    const rows = filteredRows.map((row) => [
+      row.domain,
+      row.key,
+      row.description,
+      ...locales.map((locale) => valuesByKeyLocale.get(`${row.keyId}:${locale}`)?.Value || ""),
+    ]);
+    downloadText(fileName, toCsv([headers, ...rows]), "text/csv;charset=utf-8");
+  };
+
+  const exportVisibleCsv = () => exportCsv(visibleLocales, "translations-visible.csv");
+  const exportAllCsv = () => exportCsv(localeOptions.map((item) => item.code), "translations-all-locales.csv");
+
   return (
     <AdminShell
       title="Traductions Nexus"
@@ -394,7 +411,10 @@ export default function TranslationsPage() {
               <button className="secondary" onClick={() => translateKeys([], [lineTargetLocale], batchLimit)} disabled={busy || lineTargetLocale === sourceLocale}>
                 Traduire locale ligne sélectionnée
               </button>
-              <button className="secondary" onClick={exportVisible} disabled={busy}>Exporter vue</button>
+              <button className="secondary" onClick={exportVisibleCsv} disabled={busy}>Exporter CSV visibles</button>
+              <button className="secondary" onClick={exportAllCsv} disabled={busy}>Exporter CSV toutes langues</button>
+              <button className="secondary" onClick={exportVisible} disabled={busy}>Exporter JSON vue</button>
+              <Link className="secondary-link" href="/nexus/translations/import/">Importer CSV/JSON</Link>
               <button className="secondary" onClick={reload} disabled={busy}>Rafraîchir</button>
             </div>
           </section>
@@ -538,4 +558,26 @@ export default function TranslationsPage() {
       )}
     </AdminShell>
   );
+}
+
+function downloadText(fileName: string, text: string, type: string) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function toCsv(rows: string[][]): string {
+  return rows.map((row) => row.map(escapeCsvCell).join(",")).join("\r\n");
+}
+
+function escapeCsvCell(value: string): string {
+  const safeValue = String(value ?? "");
+  if (/[",\r\n]/.test(safeValue)) {
+    return `"${safeValue.replace(/"/g, '""')}"`;
+  }
+  return safeValue;
 }
