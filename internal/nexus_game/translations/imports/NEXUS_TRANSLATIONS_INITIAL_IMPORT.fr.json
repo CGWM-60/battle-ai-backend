@@ -34,14 +34,14 @@
       "key": "ai.error.provider_empty_response",
       "locale": "fr",
       "language": "fr",
-      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas renvoyé de texte exploitable."
+      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas pu répondre."
     },
     {
       "domain": "ai",
       "key": "ai.error.provider_mock_response",
       "locale": "fr",
       "language": "fr",
-      "value": "Le fournisseur {provider} avec le modèle {model} a renvoyé une réponse invalide (mock ou prompt)."
+      "value": "Le fournisseur {provider} avec le modèle {model} a renvoyé une réponse de test au lieu d’une vraie réponse IA."
     },
     {
       "domain": "ai",
@@ -90,7 +90,35 @@
       "key": "ai.error.generic",
       "locale": "fr",
       "language": "fr",
-      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas pu répondre."
+      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas pu générer de réponse."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.mock_disabled",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le mode simulation IA est désactivé pour les joueurs. Configure un vrai fournisseur IA."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.platform_key_missing",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur IA serveur n’est pas configuré. Contacte l’administrateur."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.provider_unavailable",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur {provider} avec le modèle {model} est indisponible pour le moment."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.openrouter_free_unavailable",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le modèle gratuit OpenRouter sélectionné ne répond pas correctement. Choisis un autre modèle ou teste ta clé."
     },
     {
       "domain": "anima",
@@ -5116,7 +5144,7 @@
       "key": "errors.rpg.launch.provider_invalid_response",
       "locale": "fr",
       "language": "fr",
-      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas renvoyé une réponse RP valide. Teste ta clé ou choisis un autre modèle."
+      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas généré une scène valide. Teste ta clé ou choisis un autre modèle."
     },
     {
       "domain": "errors",
