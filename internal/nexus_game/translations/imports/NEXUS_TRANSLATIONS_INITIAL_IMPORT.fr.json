@@ -4846,6 +4846,209 @@
       "value": "→ {action}"
     },
     {
+      "domain": "rpg",
+      "key": "rpg.launch.summary.title",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Résumé préparation"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.launch.summary.subtitle",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Vérifie ta quête, ton héros et ton moteur IA."
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.quest.section",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Quête"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.quest.difficulty",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Difficulté : {level}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.quest.scene_count",
+      "locale": "fr",
+      "language": "fr",
+      "value": "{count} scènes visuelles"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.quest.id",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Quest ID : {id}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.provider.title",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Fournisseur IA"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.provider.local_model",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Modèle : {model}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.provider.remote_model",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Provider : {provider} • {model}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.narrator",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Narrateur : {name}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.narrator.section",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Narrateur"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.hero.section",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Héros"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.hero.title",
+      "locale": "fr",
+      "language": "fr",
+      "value": "{name} — {className} Niv. {level}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.hero.health",
+      "locale": "fr",
+      "language": "fr",
+      "value": "PV {health}/{maxHealth}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.hero.skills",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Compétences : {skills}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.hero.equipment",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Équipement : {equipment}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.hero.objective",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Objectif : {goal}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.hero.id",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Hero ID : {id}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.verification.title",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Vérification lancement"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.verification.quest",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Quête : {id} — {title}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.verification.hero",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Héros : {id} — {name}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.verification.mode",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Mode : {mode}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.summary.verification.provider_model",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Provider : {provider} • Model : {model}"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.launch.action.edit_hero",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Modifier le héros"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.launch.action.change_provider",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Changer de fournisseur"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.launch.action.start_adventure",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Démarrer l'aventure"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.launch.action.create_lobby",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Créer le lobby"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.launch.action.join_adventure",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Rejoindre l'aventure"
+    },
+    {
+      "domain": "errors",
+      "key": "errors.rpg.launch.failed",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Impossible de démarrer la quête : {error}"
+    },
+    {
       "domain": "common",
       "key": "common.button.pause",
       "language": "fr",

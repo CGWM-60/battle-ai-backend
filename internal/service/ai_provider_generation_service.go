@@ -205,6 +205,9 @@ func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AI
 	}
 
 	generated := strings.TrimSpace(response)
+	if looksLikeAIMockOrPromptLeak(generated) && !usesMockAIProvider() {
+		return nil, fmt.Errorf("ai provider returned mock or prompt leak response")
+	}
 	if input.MaxChars > 0 {
 		generated = truncateRunes(generated, input.MaxChars)
 	}
@@ -225,6 +228,15 @@ func AIProviderGenerationTimeout() time.Duration {
 	}
 
 	return time.Duration(value) * time.Second
+}
+
+func looksLikeAIMockOrPromptLeak(value string) bool {
+	text := strings.ToLower(strings.TrimSpace(value))
+	return strings.HasPrefix(text, "mock:") ||
+		strings.Contains(text, "tu es le maître du jeu ia") ||
+		strings.Contains(text, "réponds uniquement avec ce json") ||
+		strings.Contains(text, "règles rpg:") ||
+		strings.Contains(text, "prompt source:")
 }
 
 func truncateRunes(value string, maxLength int) string {
