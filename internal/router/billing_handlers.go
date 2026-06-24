@@ -58,9 +58,11 @@ func registerBillingRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	billing.GET("/subscription", getBillingSubscription(database))
 	billing.POST("/subscription/cancel", cancelBillingSubscription(database))
 	billing.GET("/access/:tier", getBillingTierAccess(database))
-	billing.POST("/mock/purchase", mockBillingPurchase(database))
-	billing.POST("/mock/subscribe", mockBillingSubscribe(database))
-	billing.POST("/mock/restore", mockBillingRestore(database))
+	if mockBillingEnabled() {
+		billing.POST("/mock/purchase", mockBillingPurchase(database))
+		billing.POST("/mock/subscribe", mockBillingSubscribe(database))
+		billing.POST("/mock/restore", mockBillingRestore(database))
+	}
 	billing.PATCH("/mode", updateBillingMode(database))
 
 	private.POST("/ai/estimate", estimateAIUsage(database))

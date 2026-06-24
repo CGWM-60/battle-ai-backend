@@ -66,8 +66,9 @@ func RouterApp(database *gorm.DB) {
 	admin.Register(router, database)
 
 	api := router.Group("/api/v1")
-	api.POST("/auth/login", login(database))
-	api.POST("/auth/signup", signup(database))
+	authRateLimit := ipRateLimit(30, time.Minute)
+	api.POST("/auth/login", authRateLimit, login(database))
+	api.POST("/auth/signup", authRateLimit, signup(database))
 	api.POST("/subscrit", signup(database))
 	api.GET("/ai/providers", listAIProviders())
 
@@ -100,11 +101,11 @@ func RouterApp(database *gorm.DB) {
 	private.POST("/ai/providers/generate", generateAIProviderText(database))
 	registerBillingRoutes(private, database)
 	nexustribunal.RegisterRoutes(router, database, jwtAuth(), adminAPIAuth())
+	translations.RegisterRoutes(router, database, jwtAuth())
 	if features.NexusGameEnabled() {
-		translations.RegisterRoutes(router, database)
 		nexusdev.RegisterRoutes(router)
 		nexuscache.RegisterRoutes(router)
-		nexusroutes.RegisterRoutes(router, database)
+		nexusroutes.RegisterRoutes(router, database, jwtAuth())
 	} else {
 		registerDeprecatedNexusGameRoutes(router)
 	}

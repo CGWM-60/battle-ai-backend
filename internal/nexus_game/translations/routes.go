@@ -15,9 +15,11 @@ import (
 
 // RegisterRoutes enregistre les endpoints publics et semi-publics pour les traductions.
 // Suivant la spec AGENTS.md POINT 02.
-func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
+func RegisterRoutes(r *gin.Engine, database *gorm.DB, authMiddleware ...gin.HandlerFunc) {
 	svc := NewTranslationService(database)
 	redis := cache.NewRedisServiceFromEnv()
+
+	registerI18nRoutes(r, svc)
 
 	// Public bootstrap pour le client Flutter au démarrage
 	r.GET("/api/translations/bootstrap", func(c *gin.Context) {
@@ -106,29 +108,30 @@ func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 		c.JSON(http.StatusOK, payload)
 	})
 
-	// Auth requis pour mettre à jour la locale utilisateur
-	// On utilise un middleware simple ici (le vrai jwtAuth est dans le router principal)
-	r.PUT("/api/user/locale", func(c *gin.Context) {
-		// Pour le point 02, on accepte user_id dans le body ou query pour simplicité.
-		// En vrai, on extrairait du JWT.
+	localeHandlers := []gin.HandlerFunc{}
+	if len(authMiddleware) > 0 && authMiddleware[0] != nil {
+		localeHandlers = append(localeHandlers, authMiddleware[0])
+	}
+	localeHandlers = append(localeHandlers, func(c *gin.Context) {
+		userID, ok := userIDFromContext(c)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authorization required"})
+			return
+		}
 		var req struct {
-			UserID uint   `json:"user_id" form:"user_id"`
 			Locale string `json:"locale" form:"locale" binding:"required"`
 		}
 		if err := c.ShouldBind(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "locale requis"})
 			return
 		}
-		if req.UserID == 0 {
-			// Fallback pour test sans auth complète
-			req.UserID = 1
-		}
-		if err := svc.SetUserLocale(c.Request.Context(), req.UserID, req.Locale); err != nil {
+		if err := svc.SetUserLocale(c.Request.Context(), userID, req.Locale); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "locale": req.Locale})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "locale": req.Locale, "userId": userID})
 	})
+	r.PUT("/api/user/locale", localeHandlers...)
 
 	// Log de clé manquante (appelé par le client quand une clé n'est pas trouvée)
 	r.POST("/api/translations/missing", func(c *gin.Context) {
@@ -146,6 +149,15 @@ func RegisterRoutes(r *gin.Engine, database *gorm.DB) {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "logged"})
 	})
+}
+
+func userIDFromContext(c *gin.Context) (uint, bool) {
+	userID, exists := c.Get("auth.user_id")
+	if !exists {
+		return 0, false
+	}
+	value, ok := userID.(uint)
+	return value, ok && value > 0
 }
 
 func writeCachedJSON(c *gin.Context, cached string) bool {

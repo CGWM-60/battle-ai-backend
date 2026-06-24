@@ -73,7 +73,7 @@ func SeedInitialImport(ctx context.Context, database *gorm.DB) (*models.Translat
 }
 
 func initialSeedRows(importRows []models.TranslationImportRow, fallbackLocale string) []models.TranslationImportRow {
-	byKeyLocale := make(map[string]models.TranslationImportRow, len(importRows)+len(DefaultFrenchFallback))
+	byKeyLocale := make(map[string]models.TranslationImportRow, len(importRows))
 	for _, row := range importRows {
 		row.Domain = strings.TrimSpace(row.Domain)
 		row.Key = strings.TrimSpace(row.Key)
@@ -85,24 +85,6 @@ func initialSeedRows(importRows []models.TranslationImportRow, fallbackLocale st
 			continue
 		}
 		byKeyLocale[row.Key+"|"+row.Locale] = row
-	}
-	for key, value := range DefaultFrenchFallback {
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		domain := strings.SplitN(key, ".", 2)[0]
-		if key == "" || value == "" || !isRetainedTranslation(domain, key) {
-			continue
-		}
-		mapKey := key + "|fr"
-		if _, exists := byKeyLocale[mapKey]; exists {
-			continue
-		}
-		byKeyLocale[mapKey] = models.TranslationImportRow{
-			Domain: domain,
-			Key:    key,
-			Locale: "fr",
-			Value:  value,
-		}
 	}
 	rows := make([]models.TranslationImportRow, 0, len(byKeyLocale))
 	for _, row := range byKeyLocale {

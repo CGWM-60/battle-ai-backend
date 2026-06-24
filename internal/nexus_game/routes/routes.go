@@ -88,7 +88,7 @@ func copyLegacyContentAssetsToVolume(dstRoot string) {
 	})
 }
 
-func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
+func RegisterRoutes(router *gin.Engine, database *gorm.DB, authMiddleware ...gin.HandlerFunc) {
 	if !features.NexusGameEnabled() {
 		registerDeprecatedRoutes(router)
 		return
@@ -150,9 +150,16 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 		router.Static(assetsBaseURL, assetsBaseDir)
 	}
 
+	public := router.Group("/api/nexus-game")
+	public.GET("/health", health.Health)
+	if getEnv("GIN_MODE", "debug") != "release" {
+		public.GET("/debug/status", health.DebugStatus)
+	}
+
 	group := router.Group("/api/nexus-game")
-	group.GET("/health", health.Health)
-	group.GET("/debug/status", health.DebugStatus)
+	if len(authMiddleware) > 0 && authMiddleware[0] != nil {
+		group.Use(authMiddleware[0])
+	}
 
 	// Bootstrap endpoint: profile, resources, city stats, assets, world context.
 	group.GET("/bootstrap", bootstrap.Load)
@@ -285,6 +292,9 @@ func RegisterRoutes(router *gin.Engine, database *gorm.DB) {
 	// === /api/v1/buildings and construction endpoints for Flutter (public client) ===
 	// Matches the requested contract. Implemented on top of existing service.
 	v1 := router.Group("/api/v1")
+	if len(authMiddleware) > 0 && authMiddleware[0] != nil {
+		v1.Use(authMiddleware[0])
+	}
 	v1.GET("/prerequisites/validate", contentH.ValidatePrerequisitesV1)
 	// Catalog
 	v1.GET("/buildings/catalog", contentH.ListBuildingsV1)

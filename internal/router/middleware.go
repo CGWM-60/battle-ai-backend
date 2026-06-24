@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cgwm/battle/internal/service"
@@ -196,4 +197,61 @@ func maxBodyBytes() int64 {
 	}
 
 	return value
+}
+
+type ipRateLimiter struct {
+	mu      sync.Mutex
+	entries map[string][]time.Time
+}
+
+func newIPRateLimiter() *ipRateLimiter {
+	return &ipRateLimiter{entries: make(map[string][]time.Time)}
+}
+
+func (l *ipRateLimiter) allow(key string, max int, window time.Duration) bool {
+	now := time.Now()
+	cutoff := now.Add(-window)
+
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	timestamps := l.entries[key]
+	filtered := timestamps[:0]
+	for _, ts := range timestamps {
+		if ts.After(cutoff) {
+			filtered = append(filtered, ts)
+		}
+	}
+	if len(filtered) >= max {
+		l.entries[key] = filtered
+		return false
+	}
+	filtered = append(filtered, now)
+	l.entries[key] = filtered
+	return true
+}
+
+var authIPLimiter = newIPRateLimiter()
+
+func ipRateLimit(max int, window time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		key := strings.TrimSpace(c.ClientIP())
+		if key == "" {
+			key = "unknown"
+		}
+		if !authIPLimiter.allow(key, max, window) {
+			c.AbortWithStatusJSON(http.StatusTooManyRequests, gin.H{
+				"error": "too many requests, retry later",
+			})
+			return
+		}
+		c.Next()
+	}
+}
+
+func mockBillingEnabled() bool {
+	if getEnv("GIN_MODE", "debug") == "release" {
+		return strings.EqualFold(getEnv("BILLING_MOCK_ENABLED", "false"), "true")
+	}
+	return true
 }

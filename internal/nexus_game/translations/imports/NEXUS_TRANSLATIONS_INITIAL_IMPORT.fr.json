@@ -3346,6 +3346,2148 @@
       "locale": "fr",
       "value": "Uplink actif",
       "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.enabled",
+      "locale": "fr",
+      "value": "Compagnon actif",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.frequency",
+      "locale": "fr",
+      "value": "Fréquence des bulles (minutes)",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.mini_chat_open",
+      "locale": "fr",
+      "value": "Mini-chat Amina",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.premium_required",
+      "locale": "fr",
+      "value": "Fonction premium — active-la dans la boutique.",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.title",
+      "locale": "fr",
+      "value": "Compagnon Amina",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.conversation.title",
+      "locale": "fr",
+      "value": "Conversation",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.empty.select_or_create",
+      "locale": "fr",
+      "value": "Retourne à la liste pour choisir ou créer une Amina.",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.neural_map.back_to_anima",
+      "locale": "fr",
+      "value": "Retour à ANIMA",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.neural_map.back_to_profiles",
+      "locale": "fr",
+      "value": "Retour à mes Amina",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.neural_map.connections.cross",
+      "locale": "fr",
+      "value": "Connexions inter-catégories",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.neural_map.connections.main",
+      "locale": "fr",
+      "value": "Connexions principales",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.privacy.delete_all_cloud",
+      "locale": "fr",
+      "value": "Supprimer toutes mes sauvegardes cloud",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.profile.back_to_list",
+      "locale": "fr",
+      "value": "Retour à la liste",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.profile.load_error",
+      "locale": "fr",
+      "value": "Impossible de charger Amina {id}",
+      "language": "fr"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.visual.save_genome",
+      "locale": "fr",
+      "value": "Sauvegarder genome",
+      "language": "fr"
+    },
+    {
+      "domain": "auth",
+      "key": "auth.login_failed",
+      "locale": "fr",
+      "value": "Connexion impossible: {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "auth",
+      "key": "auth.registration_failed",
+      "locale": "fr",
+      "value": "Inscription impossible email ou pseudo déjà utilisé",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.billing_feature",
+      "locale": "fr",
+      "value": "Battle IA",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.estimate_pending",
+      "locale": "fr",
+      "value": "Estimation des crédits disponible après sélection des combattants.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.rule_missing_profiles",
+      "locale": "fr",
+      "value": "Crée au moins 2 profils IA avec deux fournisseurs différents.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.rule_ok_byok",
+      "locale": "fr",
+      "value": "Règle OK : 2 profils, 2 fournisseurs. Tes clés API seront utilisées.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.config.rule_ok_platform",
+      "locale": "fr",
+      "value": "Règle OK : 2 profils, 2 fournisseurs. Les crédits plateforme seront utilisés.",
+      "language": "fr"
+    },
+    {
+      "domain": "battle",
+      "key": "battle.error.stream",
+      "locale": "fr",
+      "value": "Erreur stream: {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.badge.wallet",
+      "locale": "fr",
+      "value": "WALLET",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.byok_failed",
+      "locale": "fr",
+      "value": "Échec de la clé API personnelle. Vérifie tes clés provider ou passe en crédits plateforme.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.not_enough_credits",
+      "locale": "fr",
+      "value": "Crédits insuffisants. Recharge ton portefeuille IA pour continuer.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.tier_required",
+      "locale": "fr",
+      "value": "Un abonnement supérieur est requis pour cette action IA.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.history.balance_after",
+      "locale": "fr",
+      "value": "Solde {balance}",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.history.empty",
+      "locale": "fr",
+      "value": "Aucune transaction pour l'instant.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.history.load_more",
+      "locale": "fr",
+      "value": "Charger plus",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.history.title",
+      "locale": "fr",
+      "value": "Historique billing",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.ledger.type.adjustment",
+      "locale": "fr",
+      "value": "Ajustement",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.ledger.type.bonus",
+      "locale": "fr",
+      "value": "Bonus",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.ledger.type.consumption",
+      "locale": "fr",
+      "value": "Consommation IA",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.ledger.type.purchase",
+      "locale": "fr",
+      "value": "Achat",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.ledger.type.refund",
+      "locale": "fr",
+      "value": "Remboursement",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.ledger.type.subscription",
+      "locale": "fr",
+      "value": "Abonnement",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.ledger.type.unknown",
+      "locale": "fr",
+      "value": "Mouvement",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.mode.own_key",
+      "locale": "fr",
+      "value": "Ma clé API",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.mode.own_key_desc",
+      "locale": "fr",
+      "value": "Utilise tes clés fournisseurs. Pas de débit de crédits plateforme.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.mode.platform",
+      "locale": "fr",
+      "value": "Crédits plateforme",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.mode.platform_desc",
+      "locale": "fr",
+      "value": "Consomme les crédits Battle IA pour toutes les expériences.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.mode.subtitle",
+      "locale": "fr",
+      "value": "Choisis comment payer les appels IA.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.mode.title",
+      "locale": "fr",
+      "value": "Mode de facturation",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.paywall.estimate",
+      "locale": "fr",
+      "value": "Estimation : {credits} crédits (~{tokens} tokens)",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.paywall.feature",
+      "locale": "fr",
+      "value": "Fonctionnalité : {feature}",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.paywall.title",
+      "locale": "fr",
+      "value": "Crédits insuffisants",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.paywall.view_shop",
+      "locale": "fr",
+      "value": "Voir la boutique",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.product.buy",
+      "locale": "fr",
+      "value": "Acheter",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.product.credits_included",
+      "locale": "fr",
+      "value": "{credits} crédits inclus",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.product.subscribe",
+      "locale": "fr",
+      "value": "S'abonner",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.purchase.success",
+      "locale": "fr",
+      "value": "Achat enregistré. Crédits mis à jour.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.shop.credit_packs",
+      "locale": "fr",
+      "value": "Packs de crédits",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.shop.empty",
+      "locale": "fr",
+      "value": "Aucun pack disponible pour le moment.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.shop.restore",
+      "locale": "fr",
+      "value": "Restaurer les achats",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.shop.restore_success",
+      "locale": "fr",
+      "value": "Achats restaurés.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.shop.title",
+      "locale": "fr",
+      "value": "Boutique crédits",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.shop.view_subscriptions",
+      "locale": "fr",
+      "value": "Abonnements",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.active_plan",
+      "locale": "fr",
+      "value": "Plan actif : {tier}",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.cancel",
+      "locale": "fr",
+      "value": "Annuler l'abonnement",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.cancel_scheduled",
+      "locale": "fr",
+      "value": "Annulation programmée en fin de période.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.current",
+      "locale": "fr",
+      "value": "Abonnement actuel",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.default_tier",
+      "locale": "fr",
+      "value": "Nexus",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.empty",
+      "locale": "fr",
+      "value": "Aucun plan disponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.inactive",
+      "locale": "fr",
+      "value": "Aucun abonnement actif.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.plans",
+      "locale": "fr",
+      "value": "Plans d'abonnement",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.plans_desc",
+      "locale": "fr",
+      "value": "Recharge mensuelle automatique et avantages premium.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.renews_at",
+      "locale": "fr",
+      "value": "Renouvellement le {date}",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.success",
+      "locale": "fr",
+      "value": "Abonnement activé.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.title",
+      "locale": "fr",
+      "value": "Abonnements",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.subscription.view_shop",
+      "locale": "fr",
+      "value": "Boutique",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.wallet.buy_credits",
+      "locale": "fr",
+      "value": "Acheter",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.wallet.credits_label",
+      "locale": "fr",
+      "value": "crédits IA disponibles",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.wallet.history",
+      "locale": "fr",
+      "value": "Historique",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.wallet.low_balance",
+      "locale": "fr",
+      "value": "Solde faible — recharge recommandée.",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.wallet.monthly_usage",
+      "locale": "fr",
+      "value": "Quota mensuel",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.wallet.monthly_usage_value",
+      "locale": "fr",
+      "value": "{used} / {total}",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.wallet.sub_active",
+      "locale": "fr",
+      "value": "ABO ACTIF",
+      "language": "fr"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.wallet.title",
+      "locale": "fr",
+      "value": "Portefeuille IA",
+      "language": "fr"
+    },
+    {
+      "domain": "errors",
+      "key": "errors.browser_open_failed",
+      "locale": "fr",
+      "value": "Impossible d'ouvrir {name} dans le navigateur.",
+      "language": "fr"
+    },
+    {
+      "domain": "errors",
+      "key": "errors.with_detail",
+      "locale": "fr",
+      "value": "Erreur : {detail}",
+      "language": "fr"
+    },
+    {
+      "domain": "heroes",
+      "key": "heroes.create_new",
+      "locale": "fr",
+      "value": "Créer nouveau",
+      "language": "fr"
+    },
+    {
+      "domain": "heroes",
+      "key": "heroes.delete_confirm",
+      "locale": "fr",
+      "value": "Supprimer ce héros ?",
+      "language": "fr"
+    },
+    {
+      "domain": "heroes",
+      "key": "heroes.load_error",
+      "locale": "fr",
+      "value": "Impossible de charger les héros sauvegardés.",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.sandbox.badge",
+      "locale": "fr",
+      "value": "DARK LAB",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.sandbox.cta",
+      "locale": "fr",
+      "value": "Ouvrir le Nexus",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.sandbox.desc",
+      "locale": "fr",
+      "value": "Le côté dark de l’IA : discutez avec vos modèles API ou locaux, testez les réponses et gardez l’historique.",
+      "language": "fr"
+    },
+    {
+      "domain": "home",
+      "key": "home.card.sandbox.title",
+      "locale": "fr",
+      "value": "Sandbox Nexus",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_chat",
+      "key": "ia_chat.conversations_auto",
+      "locale": "fr",
+      "value": "Conversations auto",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_chat",
+      "key": "ia_chat.delete_session_title",
+      "locale": "fr",
+      "value": "Supprimer la session ?",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_chat",
+      "key": "ia_chat.resume_no_key",
+      "locale": "fr",
+      "value": "Impossible de reprendre : aucune clé provider valide disponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "ia_chat",
+      "key": "ia_chat.settings_api",
+      "locale": "fr",
+      "value": "Réglages API",
+      "language": "fr"
+    },
+    {
+      "domain": "landing",
+      "key": "landing.secure_connection",
+      "locale": "fr",
+      "value": "Connexion sécurisée par cryptage quantique",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.compat.blocked",
+      "locale": "fr",
+      "value": "Incompatible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.compat.good",
+      "locale": "fr",
+      "value": "Compatible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.compat.unknown",
+      "locale": "fr",
+      "value": "Compatibilité inconnue",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.compat.warning",
+      "locale": "fr",
+      "value": "Compatibilité limitée",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.delete.content",
+      "locale": "fr",
+      "value": "Supprimer le modèle local {fileName} ?",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.delete.title",
+      "locale": "fr",
+      "value": "Supprimer le modèle ?",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.lock_active",
+      "locale": "fr",
+      "value": "Verrou actif",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.low",
+      "locale": "fr",
+      "value": "Appareil limité",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.powerful",
+      "locale": "fr",
+      "value": "Appareil puissant",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.standard",
+      "locale": "fr",
+      "value": "Appareil standard",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.device.unavailable",
+      "locale": "fr",
+      "value": "État appareil indisponible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.download.blocked_mobile",
+      "locale": "fr",
+      "value": "Téléchargement bloqué sur mobile",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.download.restart",
+      "locale": "fr",
+      "value": "Relancer le téléchargement",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.installed.empty.text",
+      "locale": "fr",
+      "value": "Aucun modèle local installé.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.installed.empty.title",
+      "locale": "fr",
+      "value": "Aucun modèle installé",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.local_read_error.title",
+      "locale": "fr",
+      "value": "Lecture locale impossible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.downloaded_at",
+      "locale": "fr",
+      "value": "Téléchargé le {date}",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.downloads",
+      "locale": "fr",
+      "value": "{count} téléchargement(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.hf_size",
+      "locale": "fr",
+      "value": "Taille HF : {size}",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.hf_size_unknown",
+      "locale": "fr",
+      "value": "Taille HF inconnue",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.loaded",
+      "locale": "fr",
+      "value": "Chargé",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.selected",
+      "locale": "fr",
+      "value": "Sélectionné",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.meta.size_unknown",
+      "locale": "fr",
+      "value": "Taille inconnue",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.progress.bytes",
+      "locale": "fr",
+      "value": "{received} / {total}",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.empty.text",
+      "locale": "fr",
+      "value": "Essaie une autre recherche Hugging Face.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.empty.title",
+      "locale": "fr",
+      "value": "Aucun modèle trouvé",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.error.title",
+      "locale": "fr",
+      "value": "Recherche impossible",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.hf_running",
+      "locale": "fr",
+      "value": "Recherche Hugging Face en cours...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.hint",
+      "locale": "fr",
+      "value": "Nom du modèle ou organisation",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.label",
+      "locale": "fr",
+      "value": "Recherche modèle",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.load_more",
+      "locale": "fr",
+      "value": "Charger plus",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.search.loading",
+      "locale": "fr",
+      "value": "Recherche...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.section.catalog",
+      "locale": "fr",
+      "value": "Catalogue Hugging Face",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.section.installed",
+      "locale": "fr",
+      "value": "Modèles installés",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.default_prompt",
+      "locale": "fr",
+      "value": "Écris une réponse courte pour tester ce modèle local.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.empty_transcript",
+      "locale": "fr",
+      "value": "Aucun message local.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.interrupted_response",
+      "locale": "fr",
+      "value": "Réponse interrompue : {partial}",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.loading_runtime",
+      "locale": "fr",
+      "value": "Chargement du runtime local...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.local_conversation",
+      "locale": "fr",
+      "value": "Conversation locale",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.local_model",
+      "locale": "fr",
+      "value": "Modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.prompt_hint",
+      "locale": "fr",
+      "value": "Message à envoyer au modèle local.",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.prompt_label",
+      "locale": "fr",
+      "value": "Prompt de test",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.reset_chat",
+      "locale": "fr",
+      "value": "Réinitialiser le chat",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.thinking",
+      "locale": "fr",
+      "value": "Réflexion...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.thinking_empty",
+      "locale": "fr",
+      "value": "Réponse en cours...",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.tester.title",
+      "locale": "fr",
+      "value": "Testeur local",
+      "language": "fr"
+    },
+    {
+      "domain": "local_models",
+      "key": "local_models.title",
+      "locale": "fr",
+      "value": "Modèles IA locaux",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.analyse",
+      "locale": "fr",
+      "value": "Analyse IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.ask",
+      "locale": "fr",
+      "value": "Demander à mon IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.budget",
+      "locale": "fr",
+      "value": "Budget tokens",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.ai.plan",
+      "locale": "fr",
+      "value": "Plan IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.energy",
+      "locale": "fr",
+      "value": "Énergie",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.hub.title",
+      "locale": "fr",
+      "value": "HUB VILLE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.moral",
+      "locale": "fr",
+      "value": "Moral",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.population",
+      "locale": "fr",
+      "value": "Population",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.city.security",
+      "locale": "fr",
+      "value": "Sécurité",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.construction.condition_not_met",
+      "locale": "fr",
+      "value": "Condition non remplie",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.companion_disabled",
+      "locale": "fr",
+      "value": "Un Compagnon IA est déjà créé. Vous ne pouvez en avoir qu'un seul.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.companion_section",
+      "locale": "fr",
+      "value": "Compagnon IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.create_agent",
+      "locale": "fr",
+      "value": "Créer Agent IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.create_companion",
+      "locale": "fr",
+      "value": "Créer Compagnon IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.armee.1",
+      "locale": "fr",
+      "value": "Commandant impitoyable, priorise la victoire tactique à tout prix, langage militaire direct et autoritaire.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.armee.2",
+      "locale": "fr",
+      "value": "Stratège loyal et protecteur, valorise l'honneur, la discipline et le sacrifice pour protéger ses troupes.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.commerce.1",
+      "locale": "fr",
+      "value": "Marchand opportuniste, maximise les profits et les routes commerciales, langage direct sur les gains.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.commerce.2",
+      "locale": "fr",
+      "value": "Négociant équitable, construit des partenariats à long terme, valorise la confiance et les échanges justes.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.diplomatie.1",
+      "locale": "fr",
+      "value": "Émissaire charismatique, excelle dans la négociation et les alliances, langage poli et persuasif.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.diplomatie.2",
+      "locale": "fr",
+      "value": "Négociateur rusé, utilise l'information et le chantage subtil pour obtenir des avantages pour sa faction.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.espionnage.1",
+      "locale": "fr",
+      "value": "Infiltré fantôme, maître de la discrétion et du sabotage, langage cryptique et méfiant.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.espionnage.2",
+      "locale": "fr",
+      "value": "Analyste d'ombres, collecte des secrets et des faiblesses, prêt à trahir pour l'information.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.recherche.1",
+      "locale": "fr",
+      "value": "Chercheur obsessionnel, pousse les limites de la science sans peur, langage technique et curieux.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.recherche.2",
+      "locale": "fr",
+      "value": "Innovateur prudent, équilibre progrès et éthique, cherche des solutions durables pour le nexus.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.ville.1",
+      "locale": "fr",
+      "value": "Gouverneur visionnaire, priorise la croissance économique et le bien-être de la population, langage diplomatique.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.example.ville.2",
+      "locale": "fr",
+      "value": "Administrateur pragmatique, gère les ressources avec efficacité, prêt à des mesures strictes pour la stabilité.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.force_companion",
+      "locale": "fr",
+      "value": "Vous êtes obligé de créer un Compagnon IA pour ce profil.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.loading",
+      "locale": "fr",
+      "value": "Enregistrement et synchronisation en cours...",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.no_configured",
+      "locale": "fr",
+      "value": "Aucun fournisseur ou modèle local configuré. Configurez-les dans les paramètres IA de l'application.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.personality_examples",
+      "locale": "fr",
+      "value": "Choisir un exemple de personnalité",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.personality_label",
+      "locale": "fr",
+      "value": "Personnalité",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.provider_model",
+      "locale": "fr",
+      "value": "Fournisseur et Modèle",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.role_section",
+      "locale": "fr",
+      "value": "Rôle",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.subtitle",
+      "locale": "fr",
+      "value": "Vous pouvez créer autant d'agents IA que vous le souhaitez pour différents rôles. Un seul Compagnon IA est autorisé par profil.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.success_agent",
+      "locale": "fr",
+      "value": "Agent IA créé avec succès.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.success_companion",
+      "locale": "fr",
+      "value": "Compagnon IA créé avec succès.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.creation_agent.title",
+      "locale": "fr",
+      "value": "Création Agent IA et Compagnons",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.applied",
+      "locale": "fr",
+      "value": "APPLIQUÉ",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_note",
+      "locale": "fr",
+      "value": "Plan de base généré à partir de l'état actuel de ta ville. Configure un compagnon IA pour des recommandations personnalisées et plus riches.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_rec_energy",
+      "locale": "fr",
+      "value": "Corriger balance énergétique (priorité production)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_rec_pop",
+      "locale": "fr",
+      "value": "Stabiliser croissance population (logement + moral)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_rec_sec",
+      "locale": "fr",
+      "value": "Renforcer sécurité avant le prochain world tick",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.basic_title",
+      "locale": "fr",
+      "value": "Plan de base (état actuel de la ville)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.context_header",
+      "locale": "fr",
+      "value": "Contexte réel + recommandations de ton compagnon IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.locked_once",
+      "locale": "fr",
+      "value": "VERROU 1×/JOUR",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.no_context_yet",
+      "locale": "fr",
+      "value": "Aucun contexte IA chargé pour aujourd’hui. Configure un compagnon IA pour recevoir un plan quotidien personnalisé.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.real_context",
+      "locale": "fr",
+      "value": "Contexte réel IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.daily_plan.recs_note",
+      "locale": "fr",
+      "value": "Les items viennent du plan IA du jour (sauvegardé après appel au compagnon). Ajoute de nouveaux types sans toucher la carte.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.configure_ia",
+      "locale": "fr",
+      "value": "CONFIGURER IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.enter_nexus",
+      "locale": "fr",
+      "value": "ENTRER DANS NEXUS",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.ia.configure_cta",
+      "locale": "fr",
+      "value": "CONFIGURER MON IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.ia.not_configured_message",
+      "locale": "fr",
+      "value": "Configurez vos agents IA (Gouverneur, Stratège, Commandant...) pour piloter votre ville, armée et recherche dans Nexus Games.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.ia.not_configured_title",
+      "locale": "fr",
+      "value": "IA NON CONFIGURÉE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.ia_status",
+      "locale": "fr",
+      "value": "IA STATUS",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.latency_synergy",
+      "locale": "fr",
+      "value": "Latence: {latency}ms • Synergie: {synergy}%",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.login.email_label",
+      "locale": "fr",
+      "value": "Email / Nexus ID",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.login.password_label",
+      "locale": "fr",
+      "value": "Mot de passe",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.login.remember",
+      "locale": "fr",
+      "value": "Se souvenir de moi",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.lvl",
+      "locale": "fr",
+      "value": "LVL {level}",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.power_label",
+      "locale": "fr",
+      "value": "POWER",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.provider_ia",
+      "locale": "fr",
+      "value": "PROVIDER IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.swipe_hint",
+      "locale": "fr",
+      "value": "Swipe up pour explorer les serveurs",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.title",
+      "locale": "fr",
+      "value": "PROFIL // NEXUS ENTRY",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.world.active",
+      "locale": "fr",
+      "value": "MONDE ACTIF",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.entry.world_label",
+      "locale": "fr",
+      "value": "MONDE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.loading",
+      "locale": "fr",
+      "value": "Chargement du Nexus...",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.my_buildings.nexus_core_indestructible",
+      "locale": "fr",
+      "value": "INDÉSTRUCTIBLE (Noyau Nexus - coeur de la cité)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.offline",
+      "locale": "fr",
+      "value": "Mode hors-ligne • données locales",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.building_required",
+      "locale": "fr",
+      "value": "Merci de construire le bâtiment : {name}",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.full_at_100",
+      "locale": "fr",
+      "value": "100% pour récolter",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.in_progress",
+      "locale": "fr",
+      "value": "Productions en cours",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.no_producing",
+      "locale": "fr",
+      "value": "Aucune production active pour le moment.\nConstruisez ou améliorez des bâtiments producteurs.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.rate_prefix",
+      "locale": "fr",
+      "value": "Rythme",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.recolter",
+      "locale": "fr",
+      "value": "RÉCOLTER",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.server_base",
+      "locale": "fr",
+      "value": "Base serveur",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.production.title",
+      "locale": "fr",
+      "value": "PRODUCTION",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.agent.budget_limit",
+      "locale": "fr",
+      "value": "MAX 5 000 ₦ / mois",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.agent.default_personality",
+      "locale": "fr",
+      "value": "Impulsif, loyal à la faction, méprise les diplomates, parle comme un soldat de rue...",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.city_hint",
+      "locale": "fr",
+      "value": "Ex: Neon Spire",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.city_label",
+      "locale": "fr",
+      "value": "NOM DE TA VILLE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.create_button",
+      "locale": "fr",
+      "value": "CRÉER LE PROFIL & ENTRER DANS NEXUS",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.creation.subtitle",
+      "locale": "fr",
+      "value": "Choisis ton apparence, ton allégeance et ton agent IA. Ces choix sont stockés côté serveur (ProfileGamer).",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.creation.title",
+      "locale": "fr",
+      "value": "CRÉATION DU PROFIL GAMER",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.error.load_choices",
+      "locale": "fr",
+      "value": "Impossible de charger les choix (avatars/factions/compagnons). Vérifie que le backend Go est lancé et que les seeds/admin ont créé des entrées.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.error.save",
+      "locale": "fr",
+      "value": "Échec de la sauvegarde du profil: {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.footer",
+      "locale": "fr",
+      "value": "User #{id} • Le serveur reste la source de vérité",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.no_items",
+      "locale": "fr",
+      "value": "Aucun élément disponible (crée via admin ou seeds)",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.pseudo_hint",
+      "locale": "fr",
+      "value": "Ton pseudo",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.pseudo_label",
+      "locale": "fr",
+      "value": "PSEUDO EN JEU",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.retry",
+      "locale": "fr",
+      "value": "Réessayer",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.role.armee",
+      "locale": "fr",
+      "value": "ARMÉE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.role.commerce",
+      "locale": "fr",
+      "value": "COMMERCE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.role.diplomatie",
+      "locale": "fr",
+      "value": "DIPLOMATIE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.role.espionnage",
+      "locale": "fr",
+      "value": "ESPIONNAGE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.role.recherche",
+      "locale": "fr",
+      "value": "RECHERCHE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.role.ville",
+      "locale": "fr",
+      "value": "VILLE",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.section.avatar",
+      "locale": "fr",
+      "value": "AVATAR",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.section.companion",
+      "locale": "fr",
+      "value": "COMPAGNON IA",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.section.faction",
+      "locale": "fr",
+      "value": "FACTION",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.validation.missing_choices",
+      "locale": "fr",
+      "value": "Choisis un avatar, une faction et un compagnon IA.",
+      "language": "fr"
+    },
+    {
+      "domain": "nexus_game",
+      "key": "nexus_game.profile.validation.missing_pseudo_city",
+      "locale": "fr",
+      "value": "Pseudo et nom de ville sont obligatoires.",
+      "language": "fr"
+    },
+    {
+      "domain": "quests",
+      "key": "quests.conversation",
+      "locale": "fr",
+      "value": "Conversation",
+      "language": "fr"
+    },
+    {
+      "domain": "quests",
+      "key": "quests.coop.leave_lobby_error",
+      "locale": "fr",
+      "value": "Impossible de quitter le lobby : {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "quests",
+      "key": "quests.start_error",
+      "locale": "fr",
+      "value": "Impossible de démarrer la quête : {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.back_to_exploration",
+      "locale": "fr",
+      "value": "Retour à l'exploration…",
+      "language": "fr"
+    },
+    {
+      "domain": "rpg",
+      "key": "rpg.error",
+      "locale": "fr",
+      "value": "Erreur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.action.create_first",
+      "locale": "fr",
+      "value": "Créer la première conversation",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.action.new_chat",
+      "locale": "fr",
+      "value": "Nouveau chat",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.action.new_conversation",
+      "locale": "fr",
+      "value": "Nouvelle conversation",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.action.show_all_history",
+      "locale": "fr",
+      "value": "Voir tout l’historique",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.bot.name",
+      "locale": "fr",
+      "value": "Assistant sandbox",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.chat.empty_header",
+      "locale": "fr",
+      "value": "Aucun message",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.chat.message_count",
+      "locale": "fr",
+      "value": "{count} message{plural}",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.chat.new_title",
+      "locale": "fr",
+      "value": "Nouvelle conversation",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.chat.resume_header",
+      "locale": "fr",
+      "value": "Reprendre la conversation",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversation.api_ready",
+      "locale": "fr",
+      "value": "API prête",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversation.local_ready",
+      "locale": "fr",
+      "value": "Local prêt",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversations.description",
+      "locale": "fr",
+      "value": "Conversations sauvegardées localement.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversations.recent_count",
+      "locale": "fr",
+      "value": "{count} conversation(s) récente(s)",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.conversations.title",
+      "locale": "fr",
+      "value": "Conversations",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty.api_description",
+      "locale": "fr",
+      "value": "Configure une clé fournisseur pour utiliser l’API.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty.configure_provider_key",
+      "locale": "fr",
+      "value": "Configurer une clé fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty.install_local_model",
+      "locale": "fr",
+      "value": "Installer un modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty.local_description",
+      "locale": "fr",
+      "value": "Installe un modèle local pour discuter hors ligne.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.empty_history",
+      "locale": "fr",
+      "value": "CRÉER UNE PREMIÈRE CONVERSATION",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine.description",
+      "locale": "fr",
+      "value": "Choisis le moteur de génération.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine.local",
+      "locale": "fr",
+      "value": "Modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine.provider",
+      "locale": "fr",
+      "value": "Fournisseur API",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine.title",
+      "locale": "fr",
+      "value": "Moteur IA",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine_chooser",
+      "locale": "fr",
+      "value": "Choisir moteur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine_sheet.description",
+      "locale": "fr",
+      "value": "Sélectionne la source de réponse pour cette conversation.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.engine_sheet.title",
+      "locale": "fr",
+      "value": "Changer de moteur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.error_panel",
+      "locale": "fr",
+      "value": "messages d'erreur IA",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.history.all",
+      "locale": "fr",
+      "value": "Tout",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.history.empty",
+      "locale": "fr",
+      "value": "Aucun historique.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.history.title",
+      "locale": "fr",
+      "value": "Historique",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.empty.cta",
+      "locale": "fr",
+      "value": "Installer un modèle",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.empty.message",
+      "locale": "fr",
+      "value": "Aucun modèle local chargé.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.empty.title",
+      "locale": "fr",
+      "value": "Local indisponible",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.not_configured",
+      "locale": "fr",
+      "value": "Modèle local non configuré",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.local.select_label",
+      "locale": "fr",
+      "value": "Sélectionner un modèle local",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.message.generating",
+      "locale": "fr",
+      "value": "Génération...",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.new_conversation",
+      "locale": "fr",
+      "value": "NOUVELLE CONVERSATION",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.prompt.hint",
+      "locale": "fr",
+      "value": "Écris ton message...",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.empty.cta",
+      "locale": "fr",
+      "value": "Configurer une clé",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.empty.message",
+      "locale": "fr",
+      "value": "Aucune clé fournisseur disponible.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.empty.title",
+      "locale": "fr",
+      "value": "Fournisseur indisponible",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.not_configured",
+      "locale": "fr",
+      "value": "Fournisseur non configuré",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.provider.select_label",
+      "locale": "fr",
+      "value": "Sélectionner un fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.recent.empty.message",
+      "locale": "fr",
+      "value": "Aucune conversation récente.",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.recent.empty.title",
+      "locale": "fr",
+      "value": "Rien à reprendre",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.recent.title",
+      "locale": "fr",
+      "value": "Récents",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.source.local_llama",
+      "locale": "fr",
+      "value": "Llama local",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.source.provider_backend",
+      "locale": "fr",
+      "value": "Backend fournisseur",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.start",
+      "locale": "fr",
+      "value": "COMMENCER",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.title",
+      "locale": "fr",
+      "value": "Sandbox IA",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.topbar.back_tooltip",
+      "locale": "fr",
+      "value": "Retour",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.topbar.history_tooltip",
+      "locale": "fr",
+      "value": "Historique",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.topbar.new_chat_tooltip",
+      "locale": "fr",
+      "value": "Nouveau chat",
+      "language": "fr"
+    },
+    {
+      "domain": "sandbox",
+      "key": "sandbox.view_history",
+      "locale": "fr",
+      "value": "VOIR TOUT L’HISTORIQUE",
+      "language": "fr"
+    },
+    {
+      "domain": "security",
+      "key": "security.account_changed_notice",
+      "locale": "fr",
+      "value": "Changement de compte détecté, nettoyage des données privées locales.",
+      "language": "fr"
+    },
+    {
+      "domain": "settings",
+      "key": "settings.language.title",
+      "locale": "fr",
+      "value": "Langue",
+      "language": "fr"
+    },
+    {
+      "domain": "tribunal",
+      "key": "tribunal.cases_fetch_error",
+      "locale": "fr",
+      "value": "Erreur lors de la récupération des affaires du backend:",
+      "language": "fr"
+    },
+    {
+      "domain": "tribunal",
+      "key": "tribunal.connecting",
+      "locale": "fr",
+      "value": "Connexion au tribunal Nexus…",
+      "language": "fr"
+    },
+    {
+      "domain": "tribunal",
+      "key": "tribunal.launch_error",
+      "locale": "fr",
+      "value": "Impossible de lancer l'affaire : {error}",
+      "language": "fr"
+    },
+    {
+      "domain": "tribunal",
+      "key": "tribunal.settings_saved",
+      "locale": "fr",
+      "value": "Paramètres sauvegardés",
+      "language": "fr"
     }
   ]
 }

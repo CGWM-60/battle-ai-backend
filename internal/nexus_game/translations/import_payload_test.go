@@ -52,22 +52,14 @@ func TestParseImportPayloadUppercaseRows(t *testing.T) {
 	}
 }
 
-func TestInitialSeedRowsIncludesDefaultFrenchFallback(t *testing.T) {
+func TestInitialSeedRowsKeepsImportRowsOnly(t *testing.T) {
 	rows := initialSeedRows([]models.TranslationImportRow{
 		{Domain: "common", Key: "common.app.title", Locale: "fr", Value: "NEXUS GAMES"},
+		{Domain: "battle", Key: "battle.action.start", Locale: "fr", Value: "Démarrer"},
 	}, "fr")
 
-	var found bool
-	for _, row := range rows {
-		if row.Key == "battle.action.start" && row.Locale == "fr" {
-			found = true
-			if row.Domain != "battle" || row.Value == "" {
-				t.Fatalf("unexpected fallback row: %+v", row)
-			}
-		}
-	}
-	if !found {
-		t.Fatalf("expected fallback key battle.action.start in initial seed rows")
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 }
 
