@@ -30,6 +30,69 @@
       "value": "Aucun fournisseur IA utilisable. Ajoute une clé API et sélectionne un modèle dans Profil > Providers."
     },
     {
+      "domain": "ai",
+      "key": "ai.error.provider_empty_response",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas renvoyé de texte exploitable."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.provider_mock_response",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur {provider} avec le modèle {model} a renvoyé une réponse invalide (mock ou prompt)."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.provider_prompt_leak",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur {provider} avec le modèle {model} a exposé un prompt système."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.provider_invalid_model",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le modèle {model} n’est pas disponible pour {provider}."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.provider_auth_failed",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Authentification refusée pour {provider}. Vérifie ta clé API."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.provider_rate_limited",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur {provider} limite temporairement les requêtes. Réessaie plus tard."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.provider_timeout",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas répondu à temps."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.provider_incompatible_params",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Paramètres incompatibles pour {provider} avec le modèle {model}. Change de modèle."
+    },
+    {
+      "domain": "ai",
+      "key": "ai.error.generic",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas pu répondre."
+    },
+    {
       "domain": "anima",
       "key": "anima.action.create_first",
       "locale": "fr",
@@ -5047,6 +5110,20 @@
       "locale": "fr",
       "language": "fr",
       "value": "Impossible de démarrer la quête : {error}"
+    },
+    {
+      "domain": "errors",
+      "key": "errors.rpg.launch.provider_invalid_response",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Le fournisseur {provider} avec le modèle {model} n’a pas renvoyé une réponse RP valide. Teste ta clé ou choisis un autre modèle."
+    },
+    {
+      "domain": "errors",
+      "key": "errors.rpg.launch.provider_not_healthy",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Aucun fournisseur IA testé et fonctionnel. Va dans Profil pour tester ta clé ou changer de modèle."
     },
     {
       "domain": "common",
@@ -11542,7 +11619,14 @@
       "key": "tribunal.ui.text.affaires_disponibles_backend_affaire_s",
       "language": "fr",
       "locale": "fr",
-      "value": "AFFAIRES DISPONIBLES (BACKEND) — {_availableQuests} affaire(s)"
+      "value": "Affaires disponibles : {count}"
+    },
+    {
+      "domain": "tribunal",
+      "key": "tribunal.cases.available_backend",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Affaires disponibles : {count}"
     },
     {
       "domain": "tribunal",
@@ -11731,7 +11815,14 @@
       "key": "tribunal.ui.text.niv",
       "language": "fr",
       "locale": "fr",
-      "value": "Niv {q}"
+      "value": "Niv {level}"
+    },
+    {
+      "domain": "tribunal",
+      "key": "tribunal.case.level",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Niv {level}"
     },
     {
       "domain": "tribunal",

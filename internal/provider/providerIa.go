@@ -314,13 +314,7 @@ func (p *Provider) chatCompletion(
 		return p.anthropicChatCompletion(ctx, messages, stream, onChunk)
 	}
 
-	request := ProviderChatRequest{
-		Stream:   stream,
-		Messages: messages,
-		Model:    p.model,
-	}
-
-	jsonData, err := json.Marshal(request)
+	jsonData, err := marshalOpenAICompatibleChatRequest(p.model, messages, stream, 0)
 	if err != nil {
 		return providerCallResult{}, err
 	}
@@ -808,4 +802,36 @@ func preview(value []byte, maxLength int) string {
 		return clean
 	}
 	return clean[:maxLength] + "...(truncated)"
+}
+
+func openAIUsesMaxCompletionTokens(model string) bool {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	if slash := strings.LastIndex(lower, "/"); slash >= 0 {
+		lower = lower[slash+1:]
+	}
+	return strings.Contains(lower, "gpt-5") ||
+		strings.HasPrefix(lower, "o1") ||
+		strings.HasPrefix(lower, "o3") ||
+		strings.HasPrefix(lower, "o4")
+}
+
+func marshalOpenAICompatibleChatRequest(
+	model string,
+	messages []ProviderMessage,
+	stream bool,
+	maxOut int,
+) ([]byte, error) {
+	body := map[string]any{
+		"model":    model,
+		"messages": messages,
+		"stream":   stream,
+	}
+	if maxOut > 0 {
+		if openAIUsesMaxCompletionTokens(model) {
+			body["max_completion_tokens"] = maxOut
+		} else {
+			body["max_tokens"] = maxOut
+		}
+	}
+	return json.Marshal(body)
 }

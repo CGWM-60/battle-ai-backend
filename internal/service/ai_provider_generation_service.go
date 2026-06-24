@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -205,8 +206,22 @@ func (s *AIProviderGenerationService) generateOnce(ctx context.Context, input AI
 	}
 
 	generated := strings.TrimSpace(response)
-	if looksLikeAIMockOrPromptLeak(generated) && !usesMockAIProvider() {
-		return nil, fmt.Errorf("ai provider returned mock or prompt leak response")
+	if generated == "" {
+		return nil, fmt.Errorf("ai provider returned empty response")
+	}
+	if looksLikeAIMockOrPromptLeak(generated) {
+		log.Printf(
+			"[AI_PROVIDER_REJECTED] reason=mock_or_prompt_leak provider=%s model=%s feature=%s operation=%s mockMode=%v allowUserFacingMock=%v",
+			providerName,
+			modelName,
+			feature,
+			input.Operation,
+			usesMockAIProvider(),
+			allowMockForUserFacingRoutes(),
+		)
+		if !allowMockForUserFacingRoutes() {
+			return nil, fmt.Errorf("ai provider returned mock or prompt leak response")
+		}
 	}
 	if input.MaxChars > 0 {
 		generated = truncateRunes(generated, input.MaxChars)

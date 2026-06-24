@@ -366,36 +366,42 @@ func generateAIProviderText(database *gorm.DB) gin.HandlerFunc {
 		})
 
 		if err != nil {
-			statusCode := http.StatusBadGateway
-			retryable := false
-			errorMessage := err.Error()
+			detail := service.ClassifyAIProviderErrorForHandler(err, providerName, modelName)
 			if errors.Is(err, context.DeadlineExceeded) || errors.Is(c.Request.Context().Err(), context.DeadlineExceeded) {
-				statusCode = http.StatusGatewayTimeout
-				retryable = true
-				errorMessage = fmt.Sprintf("AI provider generation timed out after %s", aiProviderGenerationTimeout())
+				detail = service.AIProviderErrorDetail{
+					Code:       service.AIErrorProviderTimeout,
+					Message:    fmt.Sprintf("AI provider generation timed out after %s", aiProviderGenerationTimeout()),
+					Provider:   providerName,
+					Model:      modelName,
+					Retryable:  true,
+					StatusCode: http.StatusGatewayTimeout,
+				}
 			} else if billingErr, ok := service.AsBillingError(err); ok {
-				statusCode = billingErr.Status
-			} else if strings.Contains(errorMessage, "required") || strings.Contains(errorMessage, "invalide") {
-				statusCode = http.StatusBadRequest
+				detail.StatusCode = billingErr.Status
+				detail.Message = billingErr.Message
 			}
 			log.Printf(
-				"[aiProviderGenerate] provider call failed provider=%s model=%s timeout_ms=%d latency_ms=%d status=%d retryable=%t err=%v",
+				"[aiProviderGenerate] provider call failed provider=%s model=%s timeout_ms=%d latency_ms=%d status=%d retryable=%t code=%s err=%v",
 				providerName,
 				modelName,
 				aiProviderGenerationTimeout().Milliseconds(),
 				0,
-				statusCode,
-				retryable,
+				detail.StatusCode,
+				detail.Retryable,
+				detail.Code,
 				err,
 			)
-			c.JSON(statusCode, gin.H{
+			c.JSON(detail.StatusCode, gin.H{
 				"ok":           false,
-				"providerName": providerName,
-				"modelName":    modelName,
+				"providerName": detail.Provider,
+				"modelName":    detail.Model,
 				"latencyMs":    0,
 				"timeoutMs":    aiProviderGenerationTimeout().Milliseconds(),
-				"retryable":    retryable,
-				"error":        errorMessage,
+				"retryable":    detail.Retryable,
+				"error":        detail.Message,
+				"code":         detail.Code,
+				"provider":     detail.Provider,
+				"model":        detail.Model,
 			})
 			return
 		}

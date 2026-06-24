@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestLooksLikeAIMockOrPromptLeak(t *testing.T) {
 	cases := []struct {
@@ -33,5 +36,28 @@ func TestGenerateOnceRejectsMockResponseOutsideMockMode(t *testing.T) {
 
 	if !looksLikeAIMockOrPromptLeak("mock: prompt leak") {
 		t.Fatalf("expected mock leak detection")
+	}
+}
+
+func TestGenerateRejectsMockEvenWhenMockModeForUserFacingRoutes(t *testing.T) {
+	t.Setenv("AI_MOCK_ENABLED", "true")
+	t.Setenv("AI_PLATFORM_MODE", "mock")
+	t.Setenv("AI_ALLOW_USER_FACING_MOCK", "false")
+
+	if !usesMockAIProvider() {
+		t.Fatal("expected mock mode")
+	}
+
+	if allowMockForUserFacingRoutes() {
+		t.Fatal("user-facing mock must be disabled by default")
+	}
+
+	detail := classifyAIProviderError(
+		fmt.Errorf("ai provider returned mock or prompt leak response"),
+		"openai",
+		"gpt-5-mini",
+	)
+	if detail.Code != AIErrorProviderMockResponse {
+		t.Fatalf("expected mock code, got %s", detail.Code)
 	}
 }
