@@ -11501,6 +11501,104 @@
       "locale": "fr",
       "value": "Vérifie dans le backend que les generated_cases ont is_playable=true et status=ready ou published.\nLe client utilise /api/nexus-tribunal/generated-cases (auth avec ton token).",
       "language": "fr"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.button.skip",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Passer"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.button.enter_nexus",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Entrer dans le Nexus"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.status.preparing",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Préparation du portail cybernétique…"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.status.portal_ready",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Portail stabilisé. Entrée dans le Nexus autorisée."
+    },
+    {
+      "domain": "launch",
+      "key": "launch.status.audio_locked",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Canal {track} verrouillé. Injection du signal d’ouverture…"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.status.audio_unavailable",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Audio indisponible. Simulation Nexus locale engagée sans canal sonore."
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.net",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Connexion serveur sécurisée vers battle.cgwm.fr"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.sig",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Analyse des signatures neurales et matching des profils IA"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.bia",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Connexion Battle IA, calibration des arènes et des juges live"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.qst",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Récupération des quêtes Battle AI et synchronisation des rotations"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.rpg",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Récupération des quêtes Battle RP et des branches narratives"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.coop",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Stabilisation des salons co-op, du live feed et des spectateurs"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.nxs",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Ouverture du canal Nexus et vérification du root access"
+    },
+    {
+      "domain": "launch",
+      "key": "launch.boot.sys",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Portail stabilisé. Entrée prête pour l’opérateur."
     }
   ]
 }
