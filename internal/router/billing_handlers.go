@@ -5,6 +5,7 @@ import (
 	"cgwm/battle/internal/repository"
 	"cgwm/battle/internal/service"
 	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -212,6 +213,8 @@ func cancelBillingSubscription(database *gorm.DB) gin.HandlerFunc {
 
 func billingPurchase(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		log.Printf("[BILLING_PURCHASE] route=/billing/purchase user=%d", currentUserID(c))
+
 		var req billingPurchaseRequest
 		if err := bindPayload(c, &req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{
@@ -232,6 +235,13 @@ func billingPurchase(database *gorm.DB) gin.HandlerFunc {
 			})
 			return
 		}
+
+		log.Printf(
+			"[BILLING_PURCHASE] product=%s store_verifier=%s gin_mode=%s",
+			productID,
+			getEnv("STORE_VERIFIER", "mock"),
+			getEnv("GIN_MODE", "debug"),
+		)
 
 		if strings.EqualFold(getEnv("STORE_VERIFIER", "mock"), "mock") &&
 			getEnv("GIN_MODE", "debug") != "release" {
@@ -262,6 +272,8 @@ func billingPurchase(database *gorm.DB) gin.HandlerFunc {
 
 func mockBillingPurchase(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		log.Printf("[BILLING_MOCK_PURCHASE] route=/billing/mock/purchase user=%d", currentUserID(c))
+
 		var req billingPurchaseRequest
 		if err := bindPayload(c, &req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid purchase payload"})
@@ -271,6 +283,8 @@ func mockBillingPurchase(database *gorm.DB) gin.HandlerFunc {
 		if productID == "" {
 			productID = strings.TrimSpace(req.ProductSlug)
 		}
+		log.Printf("[BILLING_MOCK_PURCHASE] product=%s", productID)
+
 		result, err := newBillingService(database).MockPurchase(c.Request.Context(), service.MockPurchaseInput{
 			UserID:    currentUserID(c),
 			ProductID: productID,

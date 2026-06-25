@@ -119,3 +119,76 @@ func TestBillingPurchaseAminaCompanionInDevGrantsEntitlement(t *testing.T) {
 	}
 	t.Fatal("dev mock purchase path must be active with STORE_VERIFIER=mock")
 }
+
+func TestBillingPurchaseNeverReturns404(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api/v1")
+	registerBillingRoutes(api, nil)
+
+	for _, route := range []string{
+		"/api/v1/billing/purchase",
+		"/api/v1/billing/mock/purchase",
+	} {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(
+			http.MethodPost,
+			route,
+			strings.NewReader(`{"productId":"anima_companion_premium"}`),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(rec, req)
+
+		if rec.Code == http.StatusNotFound {
+			t.Fatalf("%s must exist, got 404", route)
+		}
+	}
+}
+
+func TestBillingPurchaseRouteLogsAndHandlesAminaCompanion(t *testing.T) {
+	t.Setenv("GIN_MODE", "debug")
+	t.Setenv("STORE_VERIFIER", "mock")
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api/v1")
+	registerBillingRoutes(api, nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/billing/purchase",
+		strings.NewReader(`{"productId":"anima_companion_premium"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("purchase route must not return 404")
+	}
+	if rec.Code == http.StatusNotImplemented {
+		t.Fatalf("dev mock purchase must not return 501, got %d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestMockBillingPurchaseLogsAndHandlesAminaCompanion(t *testing.T) {
+	t.Setenv("GIN_MODE", "debug")
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api/v1")
+	registerBillingRoutes(api, nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/billing/mock/purchase",
+		strings.NewReader(`{"productSlug":"anima_companion_premium"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("mock purchase route must exist in debug mode")
+	}
+}
