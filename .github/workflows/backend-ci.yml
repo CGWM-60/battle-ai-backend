@@ -1,0 +1,113 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  backend:
+    name: Go backend checks
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb:
+        image: mariadb:11
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: battleia_test
+          MYSQL_USER: battleia
+          MYSQL_PASSWORD: battleia
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      APP_ENV: test
+      ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_USER: battleia
+      DB_PASSWORD: battleia
+      DB_NAME: battleia_test
+      JWT_SECRET: github-actions-test-secret
+      AI_MOCK_ENABLED: "false"
+      AI_PLATFORM_MODE: live
+      AI_ALLOW_USER_FACING_MOCK: "false"
+      BILLING_MODE: live
+      STORE_VERIFIER: mock
+      NEXUS_GAME_ENABLED: "true"
+      RUN_TRANSLATION_DB_TESTS: "1"
+      OPENAI_API_KEY: ""
+      OPENROUTER_API_KEY: ""
+      MISTRAL_API_KEY: ""
+      ANTHROPIC_API_KEY: ""
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+          cache: true
+
+      - name: Show Go version
+        run: go version
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Security scan
+        run: bash scripts/security_scan.sh
+
+      - name: Check gofmt
+        run: |
+          files=$(gofmt -l .)
+          if [ -n "$files" ]; then
+            echo "Files not gofmt formatted:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Go vet
+        run: go vet ./...
+
+      - name: Translation tests
+        run: go test ./internal/nexus_game/translations/... -count=1 -v
+
+      - name: Billing tests
+        run: go test ./internal/service/... -run 'Billing|Entitlement|Wallet|Store|Purchase|Subscription' -count=1 -v
+
+      - name: AI provider tests
+        run: go test ./internal/service/... ./internal/provider/... -run 'AI|Provider|Mock|Credit|Usage' -count=1 -v
+
+      - name: Router/auth tests
+        run: go test ./internal/router/... -count=1 -v
+
+      - name: Full backend tests
+        run: go test ./... -count=1 -v
+
+      - name: Build backend
+        run: go build ./...
+
+      - name: Upload backend logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-artifacts
+          path: |
+            **/*_test.go
+            go.mod
+            go.sum
+          if-no-files-found: ignore

@@ -1,6 +1,7 @@
 package translations
 
 import (
+	"encoding/json"
 	"testing"
 
 	"cgwm/battle/internal/models"
@@ -58,5 +59,34 @@ func TestTranslationKeyDefaultsTagsJSON(t *testing.T) {
 
 	if got := normalizeTagsJSON(""); got != "[]" {
 		t.Fatalf("upsert default tags_json = %q, want []", got)
+	}
+}
+
+func TestTagsJSONNeverEmpty(t *testing.T) {
+	inputs := []string{"", " ", "[]", `["launch"]`, "not-json", `{"bad":"shape"}`}
+	for _, input := range inputs {
+		got := normalizeTagsJSON(input)
+		if got == "" {
+			t.Fatalf("normalizeTagsJSON(%q) returned empty string", input)
+		}
+		if !json.Valid([]byte(got)) {
+			t.Fatalf("normalizeTagsJSON(%q) = invalid json %q", input, got)
+		}
+	}
+
+	rows, err := loadInitialSeedRows()
+	if err != nil {
+		t.Fatalf("load initial seed rows: %v", err)
+	}
+	if len(rows) == 0 {
+		t.Fatal("initial seed must not be empty")
+	}
+
+	key := &models.TranslationKey{Key: "launch.button.skip"}
+	if err := key.BeforeCreate(nil); err != nil {
+		t.Fatalf("BeforeCreate: %v", err)
+	}
+	if key.TagsJSON == "" {
+		t.Fatal("new translation key must never persist empty tags_json")
 	}
 }

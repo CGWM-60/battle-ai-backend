@@ -132,6 +132,61 @@ func TestNoCreditsConsumedWhenProviderReturnsMockLeak(t *testing.T) {
 	}
 }
 
+func TestNoCreditsConsumedWhenProviderReturnsEmpty(t *testing.T) {
+	repo := newMemoryWalletRepo()
+	repo.wallets[1] = &models.UserAIWallet{
+		UserID:              1,
+		BalanceCredits:      1000,
+		StarterBonusGranted: true,
+	}
+	wallets := NewWalletService(repo, NewAICreditEstimator())
+	orchestrator := NewAIOrchestrator(wallets, NewAICreditEstimator(), nil)
+	plan := orchestrator.BuildExecutionPlan("platform", "", "openai", "gpt-test", 512, 512, "test")
+
+	usageRef := usageSessionRef{
+		OwnerID:        1,
+		SessionMode:    "roleplay_ia",
+		BillingSource:  billingSourcePlatformKey,
+		ProviderName:   "openai",
+		ModelName:      "gpt-test",
+		Feature:        "roleplay_ia",
+		SettlementPlan: &plan,
+		Orchestrator:   orchestrator,
+	}
+
+	captured := provider.UsageRecord{
+		PromptTokens:     80,
+		CompletionTokens: 0,
+		TotalTokens:      80,
+	}
+	// Empty provider response => validation fails before commit.
+	_ = captured
+
+	if repo.wallets[1].BalanceCredits != 1000 {
+		t.Fatalf("balance=%d want 1000 before commit", repo.wallets[1].BalanceCredits)
+	}
+
+	commitAIUsageRecord(nil, usageRef, captured)
+	if repo.wallets[1].BalanceCredits != 1000 {
+		t.Fatalf("balance=%d want 1000 when provider returns empty", repo.wallets[1].BalanceCredits)
+	}
+
+	detail := classifyAIProviderError(
+		NewAIProviderError(
+			AIErrorProviderEmptyResponse,
+			"openai",
+			"gpt-test",
+			"ai provider returned empty response",
+			true,
+		),
+		"openai",
+		"gpt-test",
+	)
+	if detail.Code != AIErrorProviderEmptyResponse {
+		t.Fatalf("code=%s want %s", detail.Code, AIErrorProviderEmptyResponse)
+	}
+}
+
 func TestAIProviderGenerateReturnsStructuredErrorCode(t *testing.T) {
 	err := NewAIProviderError(
 		AIErrorProviderMockResponse,
