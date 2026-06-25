@@ -698,6 +698,101 @@ func TestBillingPurchaseAlreadyOwnedIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestSubscribeFlowAcceptsAminaOneTimeUnlock(t *testing.T) {
+	billing := newTestBillingStack(t)
+	result, err := billing.Subscribe(context.Background(), SubscribeInput{
+		UserID: 51, ProductID: "anima_companion_premium", ReceiptID: "sub-companion-001", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("subscribe anima companion: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got %+v", result)
+	}
+	if result.Product == nil || result.Product.Slug != "anima_companion_premium" {
+		t.Fatalf("expected anima product, got %+v", result.Product)
+	}
+}
+
+func TestSubscribeFlowAminaGrantsEntitlement(t *testing.T) {
+	billing := newTestBillingStack(t)
+	result, err := billing.Subscribe(context.Background(), SubscribeInput{
+		UserID: 52, ProductID: "anima_companion_premium", ReceiptID: "sub-companion-002", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("subscribe anima companion: %v", err)
+	}
+	if result.Entitlement == nil || result.Entitlement.Key != constants.BillingEntitlementAnimaCompanionPremium {
+		t.Fatalf("expected anima entitlement, got %+v", result.Entitlement)
+	}
+
+	entitlements, err := billing.ListEntitlements(context.Background(), 52)
+	if err != nil {
+		t.Fatalf("list entitlements: %v", err)
+	}
+	found := false
+	for _, item := range entitlements {
+		if item.Key == constants.BillingEntitlementAnimaCompanionPremium && item.Active {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected anima_companion_premium entitlement, got %+v", entitlements)
+	}
+}
+
+func TestSubscribeFlowAminaAlreadyOwnedIsIdempotent(t *testing.T) {
+	billing := newTestBillingStack(t)
+	_, err := billing.Subscribe(context.Background(), SubscribeInput{
+		UserID: 53, ProductID: "anima_companion_premium", ReceiptID: "sub-companion-003", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("first subscribe: %v", err)
+	}
+
+	second, err := billing.Subscribe(context.Background(), SubscribeInput{
+		UserID: 53, ProductID: "anima_companion_premium", ReceiptID: "sub-companion-004", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("second subscribe: %v", err)
+	}
+	if second.Message != "feature already unlocked" {
+		t.Fatalf("expected already unlocked message, got %+v", second)
+	}
+}
+
+func TestSubscribeFlowStillWorksForRealSubscriptions(t *testing.T) {
+	billing := newTestBillingStack(t)
+	result, err := billing.Subscribe(context.Background(), SubscribeInput{
+		UserID: 54, ProductID: "nexus_light_monthly", ReceiptID: "sub-monthly-001", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("subscribe monthly: %v", err)
+	}
+	if result.Subscription == nil ||
+		result.Subscription.Status != models.SubscriptionStatusActive {
+		t.Fatalf("expected active subscription, got %+v", result.Subscription)
+	}
+	if result.Entitlement == nil || result.Entitlement.Key != "tier:uncommon" {
+		t.Fatalf("expected tier entitlement, got %+v", result.Entitlement)
+	}
+}
+
+func TestAminaDoesNotUseMockPurchaseRoute(t *testing.T) {
+	billing := newTestBillingStack(t)
+	result, err := billing.Subscribe(context.Background(), SubscribeInput{
+		UserID: 55, ProductID: "anima_companion_premium", ReceiptID: "sub-companion-005", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("subscribe anima companion: %v", err)
+	}
+	if result.Entitlement == nil ||
+		result.Entitlement.Key != constants.BillingEntitlementAnimaCompanionPremium {
+		t.Fatalf("expected entitlement via subscribe flow, got %+v", result.Entitlement)
+	}
+}
+
 func TestBillingPurchaseStoreNotConfiguredReturnsStructuredError(t *testing.T) {
 	t.Setenv("STORE_VERIFIER", "live")
 	t.Setenv("BILLING_STRIPE_SECRET_KEY", "")

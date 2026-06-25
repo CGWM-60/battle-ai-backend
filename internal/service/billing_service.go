@@ -440,20 +440,6 @@ func (s *BillingService) Subscribe(ctx context.Context, input SubscribeInput) (*
 	if err := s.ensureStoreReady(input.TestMode); err != nil {
 		return nil, err
 	}
-	return s.executeSubscribe(ctx, input)
-}
-
-func (s *BillingService) MockSubscribe(ctx context.Context, input MockSubscribeInput) (*BillingSubscribeResult, error) {
-	return s.Subscribe(ctx, SubscribeInput{
-		UserID:    input.UserID,
-		ProductID: input.ProductID,
-		ReceiptID: input.ReceiptID,
-		Platform:  input.Platform,
-		TestMode:  true,
-	})
-}
-
-func (s *BillingService) executeSubscribe(ctx context.Context, input SubscribeInput) (*BillingSubscribeResult, error) {
 	if err := s.validateBillingDeps(); err != nil {
 		return nil, err
 	}
@@ -473,10 +459,34 @@ func (s *BillingService) executeSubscribe(ctx context.Context, input SubscribeIn
 	if err != nil {
 		return nil, fmt.Errorf("store product not found")
 	}
-	if product.ProductType != constants.BillingProductTypeSubscription {
-		return nil, BillingConflictError("product is not a subscription", nil)
-	}
 
+	switch product.ProductType {
+	case constants.BillingProductTypeSubscription:
+		return s.executeSubscribe(ctx, input, product)
+	case constants.BillingProductTypeOneTimeUnlock:
+		return s.executeOneTimeUnlockAsSubscribeResult(ctx, input, product)
+	default:
+		return nil, BillingConflictError("product type not supported by subscribe flow", map[string]any{
+			"productType": product.ProductType,
+		})
+	}
+}
+
+func (s *BillingService) MockSubscribe(ctx context.Context, input MockSubscribeInput) (*BillingSubscribeResult, error) {
+	return s.Subscribe(ctx, SubscribeInput{
+		UserID:    input.UserID,
+		ProductID: input.ProductID,
+		ReceiptID: input.ReceiptID,
+		Platform:  input.Platform,
+		TestMode:  true,
+	})
+}
+
+func (s *BillingService) executeSubscribe(
+	ctx context.Context,
+	input SubscribeInput,
+	product *models.StoreProduct,
+) (*BillingSubscribeResult, error) {
 	platform := defaultString(strings.TrimSpace(input.Platform), models.StoreProviderMock)
 	receiptID := strings.TrimSpace(input.ReceiptID)
 	if receiptID == "" {
@@ -573,6 +583,116 @@ func (s *BillingService) executeSubscribe(ctx context.Context, input SubscribeIn
 		Subscription: subscription,
 		Entitlement:  entitlement,
 		Product:      product,
+	}, nil
+}
+
+func (s *BillingService) executeOneTimeUnlockAsSubscribeResult(
+	ctx context.Context,
+	input SubscribeInput,
+	product *models.StoreProduct,
+) (*BillingSubscribeResult, error) {
+	featureKey := strings.TrimSpace(product.FeatureEntitlementKey)
+	if featureKey == "" {
+		return nil, BillingConflictError("missing feature entitlement key", map[string]any{
+			"product": product.Slug,
+		})
+	}
+
+	hasActive, err := s.entitlements.HasActive(ctx, input.UserID, featureKey)
+	if err != nil {
+		return nil, err
+	}
+	if hasActive {
+		wallet, walletErr := s.wallets.GetOrCreateWithStarterBonus(ctx, input.UserID)
+		if walletErr != nil {
+			return nil, walletErr
+		}
+		return &BillingSubscribeResult{
+			Success: true,
+			Message: "feature already unlocked",
+			Wallet:  wallet,
+			Product: product,
+		}, nil
+	}
+
+	platform := defaultString(strings.TrimSpace(input.Platform), models.StoreProviderMock)
+	receiptID := strings.TrimSpace(input.ReceiptID)
+	if receiptID == "" {
+		receiptID = randomCode()
+	}
+
+	providerRef := purchaseIdempotencyKey(input.UserID, receiptID)
+	if _, err := s.transactions.GetByProviderRef(ctx, platform, providerRef); err == nil {
+		wallet, walletErr := s.wallets.GetOrCreateWithStarterBonus(ctx, input.UserID)
+		if walletErr != nil {
+			return nil, walletErr
+		}
+		return &BillingSubscribeResult{
+			Success: true,
+			Message: "purchase already processed",
+			Wallet:  wallet,
+			Product: product,
+		}, nil
+	} else if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	verification, err := s.verifier.VerifyPurchase(ctx, StoreVerificationInput{
+		Platform:       platform,
+		ReceiptID:      receiptID,
+		StoreProductID: product.SKU(),
+		UserID:         input.UserID,
+	})
+	if err != nil || !verification.Valid {
+		return nil, BillingForbiddenError("purchase verification failed", nil)
+	}
+
+	now := time.Now()
+	rawReceipt, _ := json.Marshal(verification)
+	verifiedPlatform := defaultString(strings.TrimSpace(verification.Platform), platform)
+	verifiedReceipt := defaultString(strings.TrimSpace(verification.ReceiptID), receiptID)
+	transaction := &models.StoreTransaction{
+		UserID:         input.UserID,
+		StoreProductID: product.Id,
+		ProductSKU:     product.Slug,
+		Platform:       verifiedPlatform,
+		Provider:       verifiedPlatform,
+		ProviderRef:    providerRef,
+		StoreReceiptID: verifiedReceipt,
+		IdempotencyKey: providerRef,
+		Status:         models.StoreTransactionStatusCompleted,
+		AmountCents:    product.PriceCents,
+		VerifiedAt:     &now,
+		CompletedAt:    &now,
+		RawReceipt:     datatypes.JSON(rawReceipt),
+	}
+	if err := s.transactions.Create(ctx, transaction); err != nil {
+		return nil, err
+	}
+
+	entitlement, err := s.entitlements.Grant(
+		ctx,
+		input.UserID,
+		featureKey,
+		models.EntitlementSourcePurchase,
+		providerRef+":feature",
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	wallet, err := s.wallets.GetOrCreateWithStarterBonus(ctx, input.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &BillingSubscribeResult{
+		Success:     true,
+		Message:     "purchase completed",
+		Wallet:      wallet,
+		Entitlement: entitlement,
+		Product:     product,
 	}, nil
 }
 
