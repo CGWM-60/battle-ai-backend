@@ -198,6 +198,42 @@ func TestBillingPurchaseRouteLogsAndHandlesAminaCompanion(t *testing.T) {
 	}
 }
 
+func TestBillingSubscribeRouteExists(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api/v1")
+	registerBillingRoutes(api, nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/billing/subscribe",
+		strings.NewReader(`{"productId":"nexus_light_monthly"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("subscribe route must exist, got 404")
+	}
+}
+
+func TestBillingRestoreRouteExists(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api/v1")
+	registerBillingRoutes(api, nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/billing/restore", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("restore route must exist, got 404")
+	}
+}
+
 func TestMockBillingPurchaseLogsAndHandlesAminaCompanion(t *testing.T) {
 	t.Setenv("GIN_MODE", "debug")
 

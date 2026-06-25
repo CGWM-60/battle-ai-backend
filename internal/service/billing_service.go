@@ -29,6 +29,21 @@ type MockPurchaseInput struct {
 	Platform  string
 }
 
+type SubscribeInput struct {
+	UserID    uint
+	ProductID string
+	ReceiptID string
+	Platform  string
+	TestMode  bool
+}
+
+type RestoreInput struct {
+	UserID    uint
+	ReceiptID string
+	Platform  string
+	TestMode  bool
+}
+
 type MockSubscribeInput struct {
 	UserID    uint
 	ProductID string
@@ -421,15 +436,34 @@ func (s *BillingService) executePurchase(ctx context.Context, input PurchaseInpu
 	}, nil
 }
 
+func (s *BillingService) Subscribe(ctx context.Context, input SubscribeInput) (*BillingSubscribeResult, error) {
+	if err := s.ensureStoreReady(input.TestMode); err != nil {
+		return nil, err
+	}
+	return s.executeSubscribe(ctx, input)
+}
+
 func (s *BillingService) MockSubscribe(ctx context.Context, input MockSubscribeInput) (*BillingSubscribeResult, error) {
+	return s.Subscribe(ctx, SubscribeInput{
+		UserID:    input.UserID,
+		ProductID: input.ProductID,
+		ReceiptID: input.ReceiptID,
+		Platform:  input.Platform,
+		TestMode:  true,
+	})
+}
+
+func (s *BillingService) executeSubscribe(ctx context.Context, input SubscribeInput) (*BillingSubscribeResult, error) {
 	if err := s.validateBillingDeps(); err != nil {
 		return nil, err
 	}
 	if input.UserID == 0 {
 		return nil, fmt.Errorf("user id is required")
 	}
-	if err := s.products.EnsureDefaultMockProducts(ctx); err != nil {
-		return nil, err
+	if input.TestMode {
+		if err := s.products.EnsureDefaultMockProducts(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := s.wallets.GetOrCreateWithStarterBonus(ctx, input.UserID); err != nil {
 		return nil, err
@@ -542,7 +576,20 @@ func (s *BillingService) MockSubscribe(ctx context.Context, input MockSubscribeI
 	}, nil
 }
 
+func (s *BillingService) Restore(ctx context.Context, input RestoreInput) (*BillingRestoreResult, error) {
+	return s.executeRestore(ctx, input)
+}
+
 func (s *BillingService) MockRestore(ctx context.Context, input MockRestoreInput) (*BillingRestoreResult, error) {
+	return s.Restore(ctx, RestoreInput{
+		UserID:    input.UserID,
+		ReceiptID: input.ReceiptID,
+		Platform:  input.Platform,
+		TestMode:  true,
+	})
+}
+
+func (s *BillingService) executeRestore(ctx context.Context, input RestoreInput) (*BillingRestoreResult, error) {
 	if err := s.validateBillingDeps(); err != nil {
 		return nil, err
 	}

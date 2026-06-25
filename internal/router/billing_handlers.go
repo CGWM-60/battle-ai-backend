@@ -36,11 +36,13 @@ type billingSubscribeRequest struct {
 	ProductSlug string `json:"productSlug"`
 	ReceiptID   string `json:"receiptId"`
 	Platform    string `json:"platform"`
+	TestMode    bool   `json:"testMode"`
 }
 
 type billingRestoreRequest struct {
 	ReceiptID string `json:"receiptId"`
 	Platform  string `json:"platform"`
+	TestMode  bool   `json:"testMode"`
 }
 
 type billingModeRequest struct {
@@ -60,6 +62,8 @@ func registerBillingRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	billing.GET("/subscription", getBillingSubscription(database))
 	billing.POST("/subscription/cancel", cancelBillingSubscription(database))
 	billing.POST("/purchase", billingPurchase(database))
+	billing.POST("/subscribe", billingSubscribe(database))
+	billing.POST("/restore", billingRestore(database))
 	billing.GET("/access/:tier", getBillingTierAccess(database))
 	if mockBillingEnabled() {
 		billing.POST("/mock/purchase", mockBillingPurchase(database))
@@ -280,12 +284,88 @@ func mockBillingPurchase(database *gorm.DB) gin.HandlerFunc {
 		}
 		log.Printf("[BILLING_MOCK_PURCHASE] product=%s", productID)
 
-		result, err := newBillingService(database).MockPurchase(c.Request.Context(), service.MockPurchaseInput{
+		result, err := newBillingService(database).Purchase(c.Request.Context(), service.PurchaseInput{
 			UserID:    currentUserID(c),
 			ProductID: productID,
 			ReceiptID: req.ReceiptID,
 			Platform:  req.Platform,
+			TestMode:  true,
 		})
+		if err != nil {
+			writeBillingError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	}
+}
+
+func billingSubscribe(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		log.Printf("[BILLING_SUBSCRIBE] route=/billing/subscribe user=%d", currentUserID(c))
+
+		var req billingSubscribeRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "invalid subscribe payload",
+				"code":  "billing.error.invalid_subscribe_payload",
+			})
+			return
+		}
+
+		productID := strings.TrimSpace(req.ProductID)
+		if productID == "" {
+			productID = strings.TrimSpace(req.ProductSlug)
+		}
+		if productID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "productId is required",
+				"code":  "billing.error.product_required",
+			})
+			return
+		}
+
+		log.Printf(
+			"[BILLING_SUBSCRIBE] product=%s user=%d store_verifier=%s test_mode=%t",
+			productID,
+			currentUserID(c),
+			getEnv("STORE_VERIFIER", "live"),
+			req.TestMode,
+		)
+
+		result, err := newBillingService(database).Subscribe(
+			c.Request.Context(),
+			service.SubscribeInput{
+				UserID:    currentUserID(c),
+				ProductID: productID,
+				ReceiptID: req.ReceiptID,
+				Platform:  req.Platform,
+				TestMode:  req.TestMode,
+			},
+		)
+		if err != nil {
+			writeBillingError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, result)
+	}
+}
+
+func billingRestore(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		log.Printf("[BILLING_RESTORE] route=/billing/restore user=%d", currentUserID(c))
+
+		var req billingRestoreRequest
+		_ = bindPayload(c, &req)
+
+		result, err := newBillingService(database).Restore(
+			c.Request.Context(),
+			service.RestoreInput{
+				UserID:    currentUserID(c),
+				ReceiptID: req.ReceiptID,
+				Platform:  req.Platform,
+				TestMode:  req.TestMode,
+			},
+		)
 		if err != nil {
 			writeBillingError(c, err)
 			return
@@ -305,11 +385,12 @@ func mockBillingSubscribe(database *gorm.DB) gin.HandlerFunc {
 		if productID == "" {
 			productID = strings.TrimSpace(req.ProductSlug)
 		}
-		result, err := newBillingService(database).MockSubscribe(c.Request.Context(), service.MockSubscribeInput{
+		result, err := newBillingService(database).Subscribe(c.Request.Context(), service.SubscribeInput{
 			UserID:    currentUserID(c),
 			ProductID: productID,
 			ReceiptID: req.ReceiptID,
 			Platform:  req.Platform,
+			TestMode:  true,
 		})
 		if err != nil {
 			writeBillingError(c, err)
@@ -323,10 +404,11 @@ func mockBillingRestore(database *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var req billingRestoreRequest
 		_ = bindPayload(c, &req)
-		result, err := newBillingService(database).MockRestore(c.Request.Context(), service.MockRestoreInput{
+		result, err := newBillingService(database).Restore(c.Request.Context(), service.RestoreInput{
 			UserID:    currentUserID(c),
 			ReceiptID: req.ReceiptID,
 			Platform:  req.Platform,
+			TestMode:  true,
 		})
 		if err != nil {
 			writeBillingError(c, err)
