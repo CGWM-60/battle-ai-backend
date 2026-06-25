@@ -206,6 +206,202 @@
     },
     {
       "domain": "anima",
+      "key": "anima.companion.enable_everywhere",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Activer Amina partout"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.enabled_everywhere",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Amina te suit partout"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.requires_living_anima",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Tu dois d’abord créer ou réveiller Amina dans le module ANIMA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.go_to_anima",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Aller au module ANIMA"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.chat_title",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Parler avec Amina"
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.home",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur explore le hub principal Battle IA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.shell",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur navigue dans le module {module}."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.shop",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur consulte la boutique et ses crédits."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.profile",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur gère son profil et ses paramètres."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.battle",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur prépare une battle IA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.battle_config",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur configure une battle IA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.battle_live",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur est en battle IA en direct."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.battle_judgement",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur attend le verdict de la battle IA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.sandbox",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur expérimente dans le sandbox IA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.anima",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur gère ses Amina dans le module ANIMA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.anima_birth",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur crée ou réveille une Amina."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.anima_main",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur interagit avec {name} dans le module ANIMA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.anima_park",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur accompagne {name} dans le parc ANIMA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.tribunal",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur consulte les affaires du Tribunal IA."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.tribunal_case",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur mène l’affaire « {title} » (niveau {difficulty})."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.quests",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur parcourt le catalogue des quêtes RP."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.quests_session",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur joue une session de quête RP."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.quests_session_detail",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur avance dans la quête « {quest} »."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.mmo",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur explore le hub coop / MMO."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.mmo_mission",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur participe à une mission coop en direct."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.ia_chat",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur utilise le module IA Chat."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.auth",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur n’est pas encore dans l’expérience principale."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.context.generic",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le joueur navigue vers {route}."
+    },
+    {
+      "domain": "anima",
       "key": "anima.companion.enabled",
       "language": "fr",
       "locale": "fr",
@@ -4732,6 +4928,13 @@
       "language": "fr",
       "locale": "fr",
       "value": "Achat enregistré. Crédits mis à jour."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.shop.companion_section",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Compagnon premium"
     },
     {
       "domain": "billing",

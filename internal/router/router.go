@@ -100,6 +100,7 @@ func RouterApp(database *gorm.DB) {
 	private.POST("/ai/providers/test", testAIProvider())
 	private.POST("/ai/providers/generate", generateAIProviderText(database))
 	registerBillingRoutes(private, database)
+	private.GET("/anima/current", animaCurrent(database))
 	nexustribunal.RegisterRoutes(router, database, jwtAuth(), adminAPIAuth())
 	translations.RegisterRoutes(router, database, jwtAuth())
 	if features.NexusGameEnabled() {
