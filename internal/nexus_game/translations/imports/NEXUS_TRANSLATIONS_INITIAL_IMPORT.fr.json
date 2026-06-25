@@ -4602,6 +4602,69 @@
     },
     {
       "domain": "billing",
+      "key": "billing.mode.own_key",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Mes clés IA"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.mode.own_key_desc",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Utilise tes propres fournisseurs IA configurés dans ton profil."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.purchase_route_missing",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le service d’achat n’est pas disponible sur ce serveur."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.real_purchase_not_configured",
+      "language": "fr",
+      "locale": "fr",
+      "value": "L’achat réel n’est pas encore configuré. Active le mode test ou configure le store."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.network",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Erreur réseau pendant l’achat."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.auth_required",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Tu dois être connecté pour acheter cette option."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.purchase_forbidden",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Tu n’as pas l’autorisation d’effectuer cet achat."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.product_required",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Produit d’achat manquant."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.error.invalid_purchase_payload",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Requête d’achat invalide."
+    },
+    {
+      "domain": "billing",
       "key": "billing.mode.subtitle",
       "language": "fr",
       "locale": "fr",

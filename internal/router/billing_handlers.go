@@ -57,6 +57,7 @@ func registerBillingRoutes(private *gin.RouterGroup, database *gorm.DB) {
 	billing.GET("/entitlements", getBillingEntitlements(database))
 	billing.GET("/subscription", getBillingSubscription(database))
 	billing.POST("/subscription/cancel", cancelBillingSubscription(database))
+	billing.POST("/purchase", billingPurchase(database))
 	billing.GET("/access/:tier", getBillingTierAccess(database))
 	if mockBillingEnabled() {
 		billing.POST("/mock/purchase", mockBillingPurchase(database))
@@ -206,6 +207,56 @@ func cancelBillingSubscription(database *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, result)
+	}
+}
+
+func billingPurchase(database *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req billingPurchaseRequest
+		if err := bindPayload(c, &req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "invalid purchase payload",
+				"code":  "billing.error.invalid_purchase_payload",
+			})
+			return
+		}
+
+		productID := strings.TrimSpace(req.ProductID)
+		if productID == "" {
+			productID = strings.TrimSpace(req.ProductSlug)
+		}
+		if productID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "productId is required",
+				"code":  "billing.error.product_required",
+			})
+			return
+		}
+
+		if strings.EqualFold(getEnv("STORE_VERIFIER", "mock"), "mock") &&
+			getEnv("GIN_MODE", "debug") != "release" {
+			result, err := newBillingService(database).MockPurchase(
+				c.Request.Context(),
+				service.MockPurchaseInput{
+					UserID:    currentUserID(c),
+					ProductID: productID,
+					ReceiptID: req.ReceiptID,
+					Platform:  req.Platform,
+				},
+			)
+			if err != nil {
+				writeBillingError(c, err)
+				return
+			}
+			c.JSON(http.StatusOK, result)
+			return
+		}
+
+		c.JSON(http.StatusNotImplemented, gin.H{
+			"ok":    false,
+			"code":  "billing.error.real_purchase_not_configured",
+			"error": "real purchase verification is not configured",
+		})
 	}
 }
 
