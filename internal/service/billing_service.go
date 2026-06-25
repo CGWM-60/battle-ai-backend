@@ -351,20 +351,13 @@ func (s *BillingService) MockPurchase(ctx context.Context, input MockPurchaseInp
 		}
 	}
 
-	if s.entitlements != nil {
-		featureKey := strings.TrimSpace(product.FeatureEntitlementKey)
-		if featureKey != "" {
-			if _, err := s.entitlements.Grant(
-				ctx,
-				input.UserID,
-				featureKey,
-				models.EntitlementSourcePurchase,
-				providerRef+":feature",
-				nil,
-			); err != nil {
-				return nil, err
-			}
-		}
+	if err := s.grantFeatureEntitlementFromProduct(
+		ctx,
+		input.UserID,
+		product,
+		providerRef+":feature",
+	); err != nil {
+		return nil, err
 	}
 
 	wallet, err := s.wallets.GetOrCreateWithStarterBonus(ctx, input.UserID)
@@ -639,6 +632,32 @@ func (s *BillingService) UpdateBillingMode(ctx context.Context, userID uint, mod
 		return nil, fmt.Errorf("billing service unavailable")
 	}
 	return s.wallets.UpdateBillingMode(ctx, userID, mode)
+}
+
+// grantFeatureEntitlementFromProduct grants permanent feature unlock entitlements.
+// Production blocker: real store verification for one_time_unlock must grant FeatureEntitlementKey.
+func (s *BillingService) grantFeatureEntitlementFromProduct(
+	ctx context.Context,
+	userID uint,
+	product *models.StoreProduct,
+	sourceRef string,
+) error {
+	if s == nil || s.entitlements == nil || product == nil {
+		return nil
+	}
+	featureKey := strings.TrimSpace(product.FeatureEntitlementKey)
+	if featureKey == "" {
+		return nil
+	}
+	_, err := s.entitlements.Grant(
+		ctx,
+		userID,
+		featureKey,
+		models.EntitlementSourcePurchase,
+		sourceRef,
+		nil,
+	)
+	return err
 }
 
 func (s *BillingService) validateBillingDeps() error {

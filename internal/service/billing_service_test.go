@@ -496,6 +496,31 @@ func TestBillingServiceAnimaCompanionPurchaseIsIdempotentWhenAlreadyOwned(t *tes
 	}
 }
 
+func TestBillingServiceListEntitlementsReturnsAnimaCompanion(t *testing.T) {
+	billing := newTestBillingStack(t)
+	_, err := billing.MockPurchase(context.Background(), MockPurchaseInput{
+		UserID: 31, ProductID: "anima_companion_premium", ReceiptID: "companion-list-001",
+	})
+	if err != nil {
+		t.Fatalf("mock purchase companion: %v", err)
+	}
+
+	entitlements, err := billing.ListEntitlements(context.Background(), 31)
+	if err != nil {
+		t.Fatalf("list entitlements: %v", err)
+	}
+	found := false
+	for _, item := range entitlements {
+		if item.Key == constants.BillingEntitlementAnimaCompanionPremium && item.Active {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected anima_companion_premium in entitlements, got %+v", entitlements)
+	}
+}
+
 func TestBillingServiceMockSubscribeGrantsEntitlement(t *testing.T) {
 	billing := newTestBillingStack(t)
 	result, err := billing.MockSubscribe(context.Background(), MockSubscribeInput{
