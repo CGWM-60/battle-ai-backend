@@ -239,8 +239,31 @@ func (s *BillingService) MockPurchase(ctx context.Context, input MockPurchaseInp
 	if err != nil {
 		return nil, fmt.Errorf("store product not found")
 	}
-	if product.ProductType != constants.BillingProductTypeConsumable {
-		return nil, BillingConflictError("product is not consumable", nil)
+	if product.ProductType != constants.BillingProductTypeConsumable &&
+		product.ProductType != constants.BillingProductTypeOneTimeUnlock {
+		return nil, BillingConflictError("product is not purchasable", nil)
+	}
+
+	if product.ProductType == constants.BillingProductTypeOneTimeUnlock {
+		featureKey := strings.TrimSpace(product.FeatureEntitlementKey)
+		if featureKey != "" && s.entitlements != nil {
+			hasActive, err := s.entitlements.HasActive(ctx, input.UserID, featureKey)
+			if err != nil {
+				return nil, err
+			}
+			if hasActive {
+				wallet, walletErr := s.wallets.GetOrCreateWithStarterBonus(ctx, input.UserID)
+				if walletErr != nil {
+					return nil, walletErr
+				}
+				return &BillingPurchaseResult{
+					Success: true,
+					Message: "feature already unlocked",
+					Wallet:  wallet,
+					Product: product,
+				}, nil
+			}
+		}
 	}
 
 	platform := defaultString(strings.TrimSpace(input.Platform), models.StoreProviderMock)
@@ -325,6 +348,22 @@ func (s *BillingService) MockPurchase(ctx context.Context, input MockPurchaseInp
 			&expiresAt,
 		); err != nil {
 			return nil, err
+		}
+	}
+
+	if s.entitlements != nil {
+		featureKey := strings.TrimSpace(product.FeatureEntitlementKey)
+		if featureKey != "" {
+			if _, err := s.entitlements.Grant(
+				ctx,
+				input.UserID,
+				featureKey,
+				models.EntitlementSourcePurchase,
+				providerRef+":feature",
+				nil,
+			); err != nil {
+				return nil, err
+			}
 		}
 	}
 

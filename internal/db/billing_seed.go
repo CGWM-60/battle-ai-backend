@@ -147,6 +147,23 @@ func defaultMockStoreProducts(currency string) []models.StoreProduct {
 			SubscriptionPeriodDays:     30,
 		},
 		{
+			Slug:                  "anima_companion_premium",
+			StoreProductID:        "mock.anima_companion_premium",
+			Platform:              constants.BillingPlatformMock,
+			ProductType:           constants.BillingProductTypeOneTimeUnlock,
+			Name:                  "Amina Compagnon Global",
+			Description:           "Debloque Amina dans toute l'application avec des interactions contextuelles.",
+			Status:                constants.BillingProductStatusActive,
+			NexusCoinsGrant:       0,
+			PriceCents:            499,
+			Currency:              currency,
+			Badge:                 "PREMIUM",
+			Popular:               true,
+			Tier:                  constants.TierLegendary,
+			Position:              60,
+			FeatureEntitlementKey: constants.BillingEntitlementAnimaCompanionPremium,
+		},
+		{
 			Slug:                       "nexus_pro_monthly",
 			StoreProductID:             "mock.nexus_pro_monthly",
 			Platform:                   constants.BillingPlatformMock,
@@ -195,6 +212,7 @@ func upsertStoreProduct(db *gorm.DB, seed models.StoreProduct) error {
 		"position":                     seed.Position,
 		"subscription_entitlement_key": seed.SubscriptionEntitlementKey,
 		"subscription_period_days":     seed.SubscriptionPeriodDays,
+		"feature_entitlement_key":      seed.FeatureEntitlementKey,
 		"deleted_at":                   nil,
 	}
 	return db.Unscoped().Model(&existing).Updates(updates).Error

@@ -112,6 +112,7 @@ type StoreProduct struct {
 
 	SubscriptionEntitlementKey string         `gorm:"size:80" json:"subscriptionEntitlementKey,omitempty"`
 	SubscriptionPeriodDays     int            `json:"subscriptionPeriodDays,omitempty"`
+	FeatureEntitlementKey      string         `gorm:"size:80" json:"featureEntitlementKey,omitempty"`
 	Metadata                   datatypes.JSON `gorm:"type:json" json:"metadata,omitempty"`
 }
 

@@ -241,6 +241,55 @@
     },
     {
       "domain": "anima",
+      "key": "anima.companion.bubble.roleplay_hint",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Je peux t'aider à choisir une action sans casser ton immersion."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.bubble.tribunal_hint",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Je peux chercher les contradictions dans ce dossier."
+    },
+    {
+      "domain": "anima",
+      "key": "anima.companion.bubble.ai_chat_provider_error",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Ce modèle IA semble instable. Tu veux que je t'aide à en choisir un autre ?"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.product.anima_companion.title",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Amina Compagnon Global"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.product.anima_companion.description",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Débloque Amina dans toute l'application avec des interactions contextuelles."
+    },
+    {
+      "domain": "billing",
+      "key": "billing.product.anima_companion.unlocked",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Amina Compagnon est débloquée"
+    },
+    {
+      "domain": "billing",
+      "key": "billing.product.anima_companion.activate",
+      "locale": "fr",
+      "language": "fr",
+      "value": "Activer Amina partout"
+    },
+    {
+      "domain": "anima",
       "key": "anima.conversation.title",
       "language": "fr",
       "locale": "fr",

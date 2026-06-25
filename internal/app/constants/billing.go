@@ -8,8 +8,9 @@ const (
 	BillingPlatformAndroid = "android"
 	BillingPlatformAll     = "all"
 
-	BillingProductTypeConsumable    = "consumable"
-	BillingProductTypeSubscription  = "subscription"
+	BillingProductTypeConsumable     = "consumable"
+	BillingProductTypeSubscription   = "subscription"
+	BillingProductTypeOneTimeUnlock  = "one_time_unlock"
 	BillingProductStatusActive      = "active"
 	BillingProductStatusInactive    = "inactive"
 
@@ -51,5 +52,6 @@ const (
 	BillingSourceMock          = "mock"
 	BillingSourceClientKey     = "client_key"
 
-	BillingEntitlementPremiumMonthly = "premium_monthly"
+	BillingEntitlementPremiumMonthly       = "premium_monthly"
+	BillingEntitlementAnimaCompanionPremium = "anima_companion_premium"
 )

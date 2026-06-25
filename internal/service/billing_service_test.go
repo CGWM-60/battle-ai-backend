@@ -177,6 +177,12 @@ func newMemoryProductRepo() *memoryProductRepo {
 		SubscriptionEntitlementKey: constants.TierUncommon,
 		SubscriptionPeriodDays:     30,
 	}
+	repo.products["anima_companion_premium"] = &models.StoreProduct{
+		Id: 3, Slug: "anima_companion_premium", StoreProductID: "mock.anima_companion_premium",
+		ProductType: constants.BillingProductTypeOneTimeUnlock, Status: models.StoreProductStatusActive,
+		PriceCents: 499, Currency: "EUR", Tier: constants.TierLegendary,
+		FeatureEntitlementKey: constants.BillingEntitlementAnimaCompanionPremium,
+	}
 	return repo
 }
 
@@ -419,6 +425,74 @@ func TestBillingServiceMockPurchaseCreditsWallet(t *testing.T) {
 	}
 	if result.Wallet.BalanceCredits != 1700 {
 		t.Fatalf("expected 1700, got %d", result.Wallet.BalanceCredits)
+	}
+}
+
+func TestBillingServiceMockPurchaseAnimaCompanionGrantsEntitlement(t *testing.T) {
+	billing := newTestBillingStack(t)
+	result, err := billing.MockPurchase(context.Background(), MockPurchaseInput{
+		UserID: 21, ProductID: "anima_companion_premium", ReceiptID: "companion-001",
+	})
+	if err != nil {
+		t.Fatalf("mock purchase companion: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got %+v", result)
+	}
+
+	entitlements, err := billing.ListEntitlements(context.Background(), 21)
+	if err != nil {
+		t.Fatalf("list entitlements: %v", err)
+	}
+	found := false
+	for _, item := range entitlements {
+		if item.Key == constants.BillingEntitlementAnimaCompanionPremium && item.Active {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected anima_companion_premium entitlement, got %+v", entitlements)
+	}
+}
+
+func TestBillingServiceAnimaCompanionEntitlementIsolatedPerUser(t *testing.T) {
+	billing := newTestBillingStack(t)
+	_, err := billing.MockPurchase(context.Background(), MockPurchaseInput{
+		UserID: 22, ProductID: "anima_companion_premium", ReceiptID: "companion-002",
+	})
+	if err != nil {
+		t.Fatalf("mock purchase companion: %v", err)
+	}
+
+	otherEntitlements, err := billing.ListEntitlements(context.Background(), 23)
+	if err != nil {
+		t.Fatalf("list entitlements other user: %v", err)
+	}
+	for _, item := range otherEntitlements {
+		if item.Key == constants.BillingEntitlementAnimaCompanionPremium {
+			t.Fatalf("other user should not have companion entitlement: %+v", item)
+		}
+	}
+}
+
+func TestBillingServiceAnimaCompanionPurchaseIsIdempotentWhenAlreadyOwned(t *testing.T) {
+	billing := newTestBillingStack(t)
+	_, err := billing.MockPurchase(context.Background(), MockPurchaseInput{
+		UserID: 24, ProductID: "anima_companion_premium", ReceiptID: "companion-003",
+	})
+	if err != nil {
+		t.Fatalf("first purchase: %v", err)
+	}
+
+	second, err := billing.MockPurchase(context.Background(), MockPurchaseInput{
+		UserID: 24, ProductID: "anima_companion_premium", ReceiptID: "companion-004",
+	})
+	if err != nil {
+		t.Fatalf("second purchase: %v", err)
+	}
+	if second.Message != "feature already unlocked" {
+		t.Fatalf("expected already unlocked message, got %+v", second)
 	}
 }
 
