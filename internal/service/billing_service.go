@@ -14,6 +14,14 @@ import (
 	"gorm.io/gorm"
 )
 
+type PurchaseInput struct {
+	UserID    uint
+	ProductID string
+	ReceiptID string
+	Platform  string
+	TestMode  bool
+}
+
 type MockPurchaseInput struct {
 	UserID    uint
 	ProductID string
@@ -221,15 +229,48 @@ func (s *BillingService) EstimateUsage(
 	}, nil
 }
 
+func (s *BillingService) Purchase(ctx context.Context, input PurchaseInput) (*BillingPurchaseResult, error) {
+	if err := s.ensureStoreReady(input.TestMode); err != nil {
+		return nil, err
+	}
+	return s.executePurchase(ctx, input)
+}
+
 func (s *BillingService) MockPurchase(ctx context.Context, input MockPurchaseInput) (*BillingPurchaseResult, error) {
+	return s.Purchase(ctx, PurchaseInput{
+		UserID:    input.UserID,
+		ProductID: input.ProductID,
+		ReceiptID: input.ReceiptID,
+		Platform:  input.Platform,
+		TestMode:  true,
+	})
+}
+
+func (s *BillingService) ensureStoreReady(testMode bool) error {
+	if testMode {
+		return nil
+	}
+	mode := StoreVerifierMode()
+	if mode == "mock" || mode == "" {
+		return nil
+	}
+	if !IsStoreVerifierConfigured() {
+		return BillingStoreNotConfiguredError("store verifier is not configured", nil)
+	}
+	return nil
+}
+
+func (s *BillingService) executePurchase(ctx context.Context, input PurchaseInput) (*BillingPurchaseResult, error) {
 	if err := s.validateBillingDeps(); err != nil {
 		return nil, err
 	}
 	if input.UserID == 0 {
 		return nil, fmt.Errorf("user id is required")
 	}
-	if err := s.products.EnsureDefaultMockProducts(ctx); err != nil {
-		return nil, err
+	if input.TestMode {
+		if err := s.products.EnsureDefaultMockProducts(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := s.wallets.GetOrCreateWithStarterBonus(ctx, input.UserID); err != nil {
 		return nil, err
@@ -239,9 +280,17 @@ func (s *BillingService) MockPurchase(ctx context.Context, input MockPurchaseInp
 	if err != nil {
 		return nil, fmt.Errorf("store product not found")
 	}
-	if product.ProductType != constants.BillingProductTypeConsumable &&
-		product.ProductType != constants.BillingProductTypeOneTimeUnlock {
-		return nil, BillingConflictError("product is not purchasable", nil)
+	switch product.ProductType {
+	case constants.BillingProductTypeConsumable, constants.BillingProductTypeOneTimeUnlock:
+	default:
+		if product.ProductType == constants.BillingProductTypeSubscription {
+			return nil, BillingConflictError("subscription products must use subscribe flow", map[string]any{
+				"productType": product.ProductType,
+			})
+		}
+		return nil, BillingConflictError("product is not purchasable", map[string]any{
+			"productType": product.ProductType,
+		})
 	}
 
 	if product.ProductType == constants.BillingProductTypeOneTimeUnlock {

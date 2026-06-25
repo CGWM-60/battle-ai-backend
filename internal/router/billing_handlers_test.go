@@ -74,9 +74,10 @@ func TestBillingPurchaseWithoutProductReturnsStructuredError(t *testing.T) {
 	}
 }
 
-func TestBillingPurchaseRealStoreNotConfiguredReturns501Not404(t *testing.T) {
+func TestBillingPurchaseStoreNotConfiguredReturnsStructuredError(t *testing.T) {
 	t.Setenv("GIN_MODE", "release")
-	t.Setenv("STORE_VERIFIER", "apple")
+	t.Setenv("STORE_VERIFIER", "live")
+	t.Setenv("BILLING_STRIPE_SECRET_KEY", "")
 
 	gin.SetMode(gin.TestMode)
 	rec := httptest.NewRecorder()
@@ -94,16 +95,42 @@ func TestBillingPurchaseRealStoreNotConfiguredReturns501Not404(t *testing.T) {
 	if rec.Code == http.StatusNotFound {
 		t.Fatal("purchase route must not return 404")
 	}
-	if rec.Code != http.StatusNotImplemented {
-		t.Fatalf("code=%d want 501", rec.Code)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("code=%d want 503", rec.Code)
 	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("invalid json: %v", err)
 	}
-	if payload["code"] != "billing.error.real_purchase_not_configured" {
+	if payload["code"] != "billing.error.store_not_configured" {
 		t.Fatalf("code=%v", payload["code"])
+	}
+}
+
+func TestBillingPurchaseAminaCompanionUsesLivePurchaseService(t *testing.T) {
+	t.Setenv("GIN_MODE", "debug")
+	t.Setenv("STORE_VERIFIER", "mock")
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	api := router.Group("/api/v1")
+	registerBillingRoutes(api, nil)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/billing/purchase",
+		strings.NewReader(`{"productId":"anima_companion_premium","testMode":true}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("purchase route must exist")
+	}
+	if rec.Code == http.StatusServiceUnavailable {
+		t.Fatalf("testMode purchase must not fail as store_not_configured, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

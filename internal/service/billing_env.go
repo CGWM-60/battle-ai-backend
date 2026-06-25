@@ -73,11 +73,27 @@ func DefaultFreeDailyCredits() int64 {
 	return envInt64("DEFAULT_FREE_DAILY_CREDITS", "", 100)
 }
 
+func IsStoreVerifierConfigured() bool {
+	if value := strings.TrimSpace(os.Getenv("BILLING_STRIPE_SECRET_KEY")); value != "" {
+		return true
+	}
+	if value := strings.TrimSpace(os.Getenv("BILLING_APPLE_SHARED_SECRET")); value != "" {
+		return true
+	}
+	if value := strings.TrimSpace(os.Getenv("BILLING_GOOGLE_SERVICE_ACCOUNT_JSON")); value != "" {
+		return true
+	}
+	return false
+}
+
 func NewStoreVerifierFromEnv() StoreVerifier {
 	switch StoreVerifierMode() {
 	case "mock", "":
 		return NewMockStoreVerifier()
 	default:
+		if IsStoreVerifierConfigured() {
+			return NewMockStoreVerifier()
+		}
 		return NewMockStoreVerifier()
 	}
 }

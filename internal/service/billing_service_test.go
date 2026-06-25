@@ -649,3 +649,68 @@ func TestMapBillingErrorPaymentRequired(t *testing.T) {
 		t.Fatalf("unexpected mapped error: %+v", mapped)
 	}
 }
+
+func TestBillingPurchaseAminaCompanionGrantsEntitlement(t *testing.T) {
+	billing := newTestBillingStack(t)
+	result, err := billing.Purchase(context.Background(), PurchaseInput{
+		UserID: 41, ProductID: "anima_companion_premium", ReceiptID: "live-companion-001", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("purchase companion: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success, got %+v", result)
+	}
+
+	entitlements, err := billing.ListEntitlements(context.Background(), 41)
+	if err != nil {
+		t.Fatalf("list entitlements: %v", err)
+	}
+	found := false
+	for _, item := range entitlements {
+		if item.Key == constants.BillingEntitlementAnimaCompanionPremium && item.Active {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected anima_companion_premium entitlement, got %+v", entitlements)
+	}
+}
+
+func TestBillingPurchaseAlreadyOwnedIsIdempotent(t *testing.T) {
+	billing := newTestBillingStack(t)
+	_, err := billing.Purchase(context.Background(), PurchaseInput{
+		UserID: 42, ProductID: "anima_companion_premium", ReceiptID: "live-companion-002", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("first purchase: %v", err)
+	}
+
+	second, err := billing.Purchase(context.Background(), PurchaseInput{
+		UserID: 42, ProductID: "anima_companion_premium", ReceiptID: "live-companion-003", TestMode: true,
+	})
+	if err != nil {
+		t.Fatalf("second purchase: %v", err)
+	}
+	if second.Message != "feature already unlocked" {
+		t.Fatalf("expected already unlocked message, got %+v", second)
+	}
+}
+
+func TestBillingPurchaseStoreNotConfiguredReturnsStructuredError(t *testing.T) {
+	t.Setenv("STORE_VERIFIER", "live")
+	t.Setenv("BILLING_STRIPE_SECRET_KEY", "")
+
+	billing := newTestBillingStack(t)
+	_, err := billing.Purchase(context.Background(), PurchaseInput{
+		UserID: 43, ProductID: "anima_companion_premium", ReceiptID: "live-companion-004",
+	})
+	if err == nil {
+		t.Fatal("expected store not configured error")
+	}
+	billingErr, ok := AsBillingError(err)
+	if !ok || billingErr.Code != "billing.error.store_not_configured" {
+		t.Fatalf("unexpected error: %+v", err)
+	}
+}

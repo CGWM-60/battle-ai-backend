@@ -63,6 +63,13 @@ func BillingConflictError(message string, details map[string]any) *BillingError 
 	return NewBillingError(http.StatusConflict, BillingErrorConflict, message, details)
 }
 
+func BillingStoreNotConfiguredError(message string, details map[string]any) *BillingError {
+	if message == "" {
+		message = "store verifier is not configured"
+	}
+	return NewBillingError(http.StatusServiceUnavailable, "billing.error.store_not_configured", message, details)
+}
+
 func AsBillingError(err error) (*BillingError, bool) {
 	if err == nil {
 		return nil, false

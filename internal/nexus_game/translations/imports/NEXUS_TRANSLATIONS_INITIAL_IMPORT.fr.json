@@ -4630,6 +4630,13 @@
     },
     {
       "domain": "billing",
+      "key": "billing.error.store_not_configured",
+      "language": "fr",
+      "locale": "fr",
+      "value": "Le système d’achat réel n’est pas configuré sur ce serveur."
+    },
+    {
+      "domain": "billing",
       "key": "billing.error.network",
       "language": "fr",
       "locale": "fr",

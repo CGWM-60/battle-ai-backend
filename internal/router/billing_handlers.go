@@ -28,6 +28,7 @@ type billingPurchaseRequest struct {
 	ProductSlug string `json:"productSlug"`
 	ReceiptID   string `json:"receiptId"`
 	Platform    string `json:"platform"`
+	TestMode    bool   `json:"testMode"`
 }
 
 type billingSubscribeRequest struct {
@@ -237,36 +238,30 @@ func billingPurchase(database *gorm.DB) gin.HandlerFunc {
 		}
 
 		log.Printf(
-			"[BILLING_PURCHASE] product=%s store_verifier=%s gin_mode=%s",
+			"[BILLING_PURCHASE] product=%s user=%d store_verifier=%s gin_mode=%s test_mode=%t",
 			productID,
-			getEnv("STORE_VERIFIER", "mock"),
+			currentUserID(c),
+			getEnv("STORE_VERIFIER", "live"),
 			getEnv("GIN_MODE", "debug"),
+			req.TestMode,
 		)
 
-		if strings.EqualFold(getEnv("STORE_VERIFIER", "mock"), "mock") &&
-			getEnv("GIN_MODE", "debug") != "release" {
-			result, err := newBillingService(database).MockPurchase(
-				c.Request.Context(),
-				service.MockPurchaseInput{
-					UserID:    currentUserID(c),
-					ProductID: productID,
-					ReceiptID: req.ReceiptID,
-					Platform:  req.Platform,
-				},
-			)
-			if err != nil {
-				writeBillingError(c, err)
-				return
-			}
-			c.JSON(http.StatusOK, result)
+		result, err := newBillingService(database).Purchase(
+			c.Request.Context(),
+			service.PurchaseInput{
+				UserID:    currentUserID(c),
+				ProductID: productID,
+				ReceiptID: req.ReceiptID,
+				Platform:  req.Platform,
+				TestMode:  req.TestMode,
+			},
+		)
+		if err != nil {
+			writeBillingError(c, err)
 			return
 		}
 
-		c.JSON(http.StatusNotImplemented, gin.H{
-			"ok":    false,
-			"code":  "billing.error.real_purchase_not_configured",
-			"error": "real purchase verification is not configured",
-		})
+		c.JSON(http.StatusOK, result)
 	}
 }
 
@@ -388,11 +383,16 @@ func writeBillingError(c *gin.Context, err error) {
 	}
 	mapped := service.MapBillingError(err)
 	if billingErr, ok := service.AsBillingError(mapped); ok {
-		c.JSON(billingErr.Status, gin.H{
+		payload := gin.H{
 			"error":   billingErr.Code,
 			"message": billingErr.Message,
 			"details": billingErr.Details,
-		})
+		}
+		if strings.Contains(billingErr.Code, ".") {
+			payload["code"] = billingErr.Code
+			payload["ok"] = false
+		}
+		c.JSON(billingErr.Status, payload)
 		return
 	}
 	status := http.StatusBadRequest
